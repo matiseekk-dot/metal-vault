@@ -124,7 +124,7 @@ function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,o
           )}
         </div>
         <div style={{fontSize:10,color:C.dim,...MONO,marginTop:5}}>
-          {isPreorder?`🗓 Premiera: ${album.releaseDate}`:album.releaseDate}
+          {isPreorder?`🗓 Release: ${album.releaseDate}`:album.releaseDate}
         </div>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>

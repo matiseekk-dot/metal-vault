@@ -3,11 +3,12 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = process.env.FROM_EMAIL || 'Metal Vault <alerts@metal-vault.app>';
+// Resend initialized lazily inside handler
 
 // Called daily at 09:00 UTC by Vercel Cron
 export async function GET(request) {
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const FROM = process.env.FROM_EMAIL || 'Metal Vault <alerts@metal-vault.app>';
   // Verify cron secret
   const auth = request.headers.get('authorization');
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
