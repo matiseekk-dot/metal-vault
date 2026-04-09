@@ -7,7 +7,7 @@ import { Resend } from 'resend';
 
 // Called weekly on Monday 10:00 UTC by Vercel Cron
 export async function GET(request) {
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
   const FROM = process.env.FROM_EMAIL || 'Metal Vault <releases@metal-vault.app>';
   const auth = request.headers.get('authorization');
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {

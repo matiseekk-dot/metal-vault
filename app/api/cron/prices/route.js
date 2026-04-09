@@ -7,7 +7,7 @@ import { Resend } from 'resend';
 
 // Called daily at 09:00 UTC by Vercel Cron
 export async function GET(request) {
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
   const FROM = process.env.FROM_EMAIL || 'Metal Vault <alerts@metal-vault.app>';
   // Verify cron secret
   const auth = request.headers.get('authorization');
@@ -78,7 +78,7 @@ export async function GET(request) {
               html: `
                 <div style="font-family: monospace; background: #0a0a0a; color: #f0f0f0; padding: 24px; border-radius: 8px;">
                   <h1 style="color: #dc2626; font-size: 28px; margin: 0 0 8px;">METAL VAULT</h1>
-                  <p style="color: #888; font-size: 12px; margin: 0 0 24px;">ALERT CENOWY</p>
+                  <p style="color: #888; font-size: 12px; margin: 0 0 24px;">PRICE ALERT</p>
 
                   <div style="background: #141414; border: 1px solid #2a2a2a; border-left: 4px solid #f5c842; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
                     <div style="font-size: 20px; color: #f0f0f0; margin-bottom: 4px;">${alert.artist}</div>
