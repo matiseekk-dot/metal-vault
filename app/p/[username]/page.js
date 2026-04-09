@@ -1,25 +1,23 @@
-import { createClient } from '@supabase/supabase-js';
+import { getAdminClient } from '@/lib/supabase-server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 const C = { bg: '#0a0a0a', bg2: '#141414', bg3: '#1e1e1e', border: '#2a2a2a', accent: '#dc2626', text: '#f0f0f0', muted: '#888' };
 const BEBAS = { fontFamily: "'Bebas Neue', sans-serif" };
 const MONO  = { fontFamily: "'Space Mono', monospace" };
 
 export async function generateMetadata({ params }) {
-  const { data: profile } = await supabase
-    .from('profiles').select('display_name, username').eq('username', params.username).single();
+  const { username } = await params;
+  const { data: profile } = await getAdminClient()
+    .from('profiles').select('display_name, username').eq('username', username).single();
   return { title: profile ? `${profile.display_name} · Metal Vault` : 'Metal Vault' };
 }
 
 export default async function PublicProfile({ params }) {
-  const { data: profile } = await supabase
+  const { username } = await params;
+  const { data: profile } = await getAdminClient()
     .from('profiles')
     .select('*')
-    .eq('username', params.username)
+    .eq('username', username)
     .eq('is_public', true)
     .single();
 
@@ -34,7 +32,7 @@ export default async function PublicProfile({ params }) {
     );
   }
 
-  const { data: collection } = await supabase
+  const { data: collection } = await getAdminClient()
     .from('collection').select('*')
     .eq('user_id', profile.id)
     .order('added_at', { ascending: false });
