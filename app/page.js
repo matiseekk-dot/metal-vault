@@ -81,12 +81,12 @@ function StatsBar({releases}){
   const today=new Date();
   const newCount = releases.filter(r=>{
     const d=new Date(r.releaseDate);
-    return !isNaN(d)&&(today-d)/(1000*60*60*24)<30&&d<=today;
+    return !isNaN(d)&&(today-d)/(1000*60*60*24)<60&&d<=today;
   }).length;
   const preorders = releases.filter(r=>new Date(r.releaseDate)>today).length;
   return(
     <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,background:C.bg2}}>
-      {[{icon:'🔥',val:releases.length,label:'in db'},{icon:'🆕',val:newCount,label:'← 30 days'},{icon:'⏳',val:preorders,label:'pre-order'}].map(s=>(
+      {[{icon:'💿',val:releases.length,label:'releases'},{icon:'🆕',val:newCount,label:'← 60 days'},{icon:'⏳',val:preorders,label:'pre-order'}].map(s=>(
         <div key={s.label} style={{flex:1,textAlign:'center',padding:'10px 4px'}}>
           <div style={{fontSize:11,...MONO,color:C.dim}}>{s.icon}</div>
           <div style={{...BEBAS,fontSize:22,color:C.accent,lineHeight:1}}>{s.val}</div>
@@ -672,7 +672,8 @@ function BottomNav({tab,onChange,watchCount,user}){
 
 // ── Main App ──────────────────────────────────────────────────
 const FILTERS=[
-  {id:'new',     label:'🔥 New ← 45d'},
+  {id:'all',     label:'⚡ All'},
+  {id:'new',     label:'🔥 New'},
   {id:'preorder',label:'⏳ Pre-order'},
   {id:'limited', label:'💎 Limited'},
   {id:'vinyl',   label:'💿 Has Vinyl'},
@@ -698,7 +699,7 @@ export default function MetalVault(){
 
   // Filters
   const [tab,setTab]=useState('feed');
-  const [filter,setFilter]=useState('new');
+  const [filter,setFilter]=useState('all');
   const [sort,setSort]=useState('date_desc');
   const [search,setSearch]=useState('');
 
