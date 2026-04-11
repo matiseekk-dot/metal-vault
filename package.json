@@ -14,6 +14,6 @@
     "@supabase/supabase-js": "^2.45.4",
     "@supabase/ssr": "^0.5.1",
     "@zxing/browser": "^0.1.4",
-    "@zxing/library": "^0.20.0"
+    "@zxing/library": "^0.21.0"
   }
 }
