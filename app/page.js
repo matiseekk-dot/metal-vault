@@ -698,7 +698,8 @@ export default function MetalVault(){
 
   // Filters
   const [tab,setTab]=useState('feed');
-  const [filter,setFilter]=useState('all');
+  const [filter,setFilter]=useState('new');
+  const [sort,setSort]=useState('date_desc');
   const [search,setSearch]=useState('');
 
   // Watchlist + Collection
@@ -904,8 +905,15 @@ export default function MetalVault(){
                 </button>
               ))}
             </div>
-            <div style={{padding:'10px 16px 0'}}>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search artist, album…" style={inputSt}/>
+            <div style={{padding:'10px 16px 0',display:'flex',gap:8}}>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search artist, album…" style={{...inputSt,flex:1}}/>
+              <select value={sort} onChange={e=>setSort(e.target.value)}
+                style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:8,color:C.muted,
+                  padding:'0 10px',fontSize:13,...MONO,cursor:'pointer',outline:'none',flexShrink:0}}>
+                <option value="date_desc">Newest</option>
+                <option value="date_asc">Oldest</option>
+                <option value="artist">A–Z</option>
+              </select>
             </div>
             {!feedLoading&&<div style={{padding:'8px 16px 4px',fontSize:10,color:C.dim,...MONO}}>{filtered.length} album{filtered.length!==1?'s':''}</div>}
             {feedLoading&&<div style={{textAlign:'center',padding:'80px 24px',color:C.dim,...MONO}}><div style={{fontSize:32,marginBottom:12}}>⟳</div>Loading…</div>}
