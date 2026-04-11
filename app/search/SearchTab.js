@@ -88,14 +88,14 @@ function ResultCard({ item, onWatch, onAddCollection, isWatched, inCollection })
         <div style={{ display:'flex', flexDirection:'column', gap:4, flexShrink:0 }}>
           <button onClick={() => onWatch(item)}
             style={{ background:'none', border:'none', cursor:'pointer', fontSize:20,
-              color:isWatched?'#f5c842':C.ultra, padding:'2px' }}
-            title="Add to Watchlist">
+              color:isWatched?'#f5c842':'#444', padding:'2px' }}
+            title={isWatched?'In watchlist':'Add to Watchlist'}>
             {isWatched ? '★' : '☆'}
           </button>
           <button onClick={loadVinyl}
             style={{ background:'none', border:'none', cursor:'pointer', fontSize:16,
-              color:expanded?C.accent:C.dim, padding:'2px' }}
-            title="View vinyl variants">
+              color:expanded?C.accent:'#444', padding:'2px' }}
+            title="View vinyl details & prices">
             💿
           </button>
         </div>
@@ -186,28 +186,24 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
     if (!q.trim()) { setResults([]); setSearched(false); return; }
     setLoading(true); setError(''); setSearched(true);
     try {
-      // Search Discogs
-      const params = new URLSearchParams({ artist: q, album: q });
-      const r = await fetch(`/api/discogs?${params}`);
-      const d = await r.json();
-
-      if (d.variants) {
-        // Extract unique artist/album combos from variants
-        const items = d.variants.map(v => {
-          const parts = v.title.split(' - ');
-          return {
-            id:      v.id,
-            artist:  parts[0] || v.title,
-            album:   parts[1] || '',
-            cover:   v.thumb,
-            year:    v.year,
-            source:  'discogs',
-          };
-        });
-        setResults(items);
-      } else {
-        setResults([]);
-      }
+      // Search Discogs directly
+      const res = await fetch(
+        `https://api.discogs.com/database/search?q=${encodeURIComponent(q)}&type=release&format=vinyl&per_page=15`
+      );
+      if (!res.ok) throw new Error('Search failed');
+      const d = await res.json();
+      const items = (d.results || []).map(r => {
+        const parts = (r.title || '').split(' - ');
+        return {
+          id:     r.id,
+          artist: parts[0]?.trim() || r.title,
+          album:  parts.slice(1).join(' - ').trim() || '',
+          cover:  r.thumb || null,
+          year:   r.year,
+          source: 'discogs',
+        };
+      });
+      setResults(items);
     } catch (e) {
       setError(e.message);
     }

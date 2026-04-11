@@ -560,6 +560,7 @@ function BottomNav({tab,onChange,watchCount,user}){
     {id:'watchlist', icon:'★',  label:'Watch', badge: watchCount>0?watchCount:null, color:'#f5c842'},
     {id:'collection',icon:'📦', label:'Vault'},
     {id:'scan',      icon:'📷', label:'Scan'},
+    {id:'import',    icon:'⬇',  label:'Import'},
     {id:'profile',   icon:'👤', label:user?'Me':'Login'},
   ];
   return(
@@ -569,7 +570,7 @@ function BottomNav({tab,onChange,watchCount,user}){
       boxShadow:'0 -4px 20px #00000088'}}>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>onChange(t.id)}
-          style={{flex:1,padding:'8px 2px 6px',background:'none',border:'none',cursor:'pointer',
+          style={{flex:1,padding:'6px 1px 5px',background:'none',border:'none',cursor:'pointer',
             display:'flex',flexDirection:'column',alignItems:'center',gap:1,position:'relative',
             borderTop:tab===t.id?`2px solid ${C.accent}`:'2px solid transparent'}}>
           {t.badge&&(
@@ -579,9 +580,9 @@ function BottomNav({tab,onChange,watchCount,user}){
               {t.badge}
             </div>
           )}
-          <span style={{fontSize:tab===t.id?22:19,color:t.id==='watchlist'?'#f5c842':tab===t.id?'#fff':'#666',
+          <span style={{fontSize:tab===t.id?20:17,color:t.id==='watchlist'?'#f5c842':tab===t.id?'#fff':'#666',
             transition:'all 0.15s'}}>{t.icon}</span>
-          <span style={{fontSize:9,color:tab===t.id?C.accent:'#444',...MONO,letterSpacing:'0.03em',
+          <span style={{fontSize:8,color:tab===t.id?C.accent:'#444',...MONO,letterSpacing:'0.02em',
             fontWeight:tab===t.id?'700':'400'}}>{t.label}</span>
         </button>
       ))}
@@ -794,7 +795,7 @@ export default function MetalVault(){
         {source==='mock'&&<div style={{fontSize:9,color:'#555',...MONO,marginTop:2}}>⚠ Demo mode — configure SPOTIFY_CLIENT_ID</div>}
       </div>
 
-      <div style={{paddingBottom:80}}>
+      <div style={{paddingBottom:100}}>
         {/* FEED TAB */}
         {tab==='feed'&&(
           <>

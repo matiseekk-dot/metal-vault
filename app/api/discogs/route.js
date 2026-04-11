@@ -116,9 +116,10 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const artist = (searchParams.get('artist') || '').trim();
   const album  = (searchParams.get('album')  || '').trim();
+  const rawQ   = (searchParams.get('q')      || '').trim();
 
-  if (!artist && !album) {
-    return NextResponse.json({ error: 'Provide artist and/or album' }, { status: 400 });
+  if (!artist && !album && !rawQ) {
+    return NextResponse.json({ error: 'Provide artist, album, or q' }, { status: 400 });
   }
 
   // Support both DISCOGS_KEY+SECRET and legacy DISCOGS_TOKEN
@@ -137,7 +138,9 @@ export async function GET(request) {
     ? `Discogs key=${key}, secret=${secret}`
     : `Discogs token=${token}`;
 
-  const cacheKey = `${artist.toLowerCase()}::${album.toLowerCase()}`;
+  const cacheKey = rawQ
+    ? `search::${rawQ.toLowerCase()}`
+    : `${artist.toLowerCase()}::${album.toLowerCase()}`;
 
   // ── 1. Try cache first ────────────────────────────────────
   const cached = await cacheGet(cacheKey);
@@ -147,7 +150,7 @@ export async function GET(request) {
 
   // ── 2. Fetch from Discogs ─────────────────────────────────
   try {
-    const query = `${artist} ${album}`.trim();
+    const query = rawQ || `${artist} ${album}`.trim();
     const res = await fetch(
       `https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=release&format=vinyl&per_page=15`,
       {
