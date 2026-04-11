@@ -281,6 +281,7 @@ function PortfolioChart({snapshots}){
 
 // ── Collection Tab ────────────────────────────────────────────
 function CollectionTab({user,collection,onRemove,onUpdate,portfolio}){
+  if(!onUpdate)onUpdate=()=>{}; // safety
   const [showAlertForm,setShowAlertForm]=useState(null);
   const [targetPrice,setTargetPrice]=useState('');
   const [saving,setSaving]=useState(false);
@@ -340,8 +341,28 @@ function CollectionTab({user,collection,onRemove,onUpdate,portfolio}){
 
       {/* Items */}
       <div style={{padding:'16px'}}>
-        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:12}}>
-          My vinyl ({collection.length})
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO}}>
+            My vinyl ({collection.length})
+          </div>
+          <select onChange={e=>{
+            const s=e.target.value;
+            const sorted=[...collection].sort((a,b)=>{
+              if(s==='artist')return(a.artist||'').localeCompare(b.artist||'');
+              if(s==='price_asc') return(Number(a.purchase_price)||0)-(Number(b.purchase_price)||0);
+              if(s==='price_desc')return(Number(b.purchase_price)||0)-(Number(a.purchase_price)||0);
+              if(s==='added')return new Date(b.added_at||0)-new Date(a.added_at||0);
+              return 0;
+            });
+            onUpdate(sorted);
+          }}
+            style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:6,color:C.muted,
+              padding:'5px 8px',fontSize:11,...MONO,cursor:'pointer',outline:'none'}}>
+            <option value="added">Added order</option>
+            <option value="artist">Artist A–Z</option>
+            <option value="price_desc">Price ↓</option>
+            <option value="price_asc">Price ↑</option>
+          </select>
         </div>
         {collection.length===0?(
           <div style={{textAlign:'center',padding:'40px 0',color:C.dim,...MONO,fontSize:12}}>
@@ -514,6 +535,32 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile}){
 
 // ── Watchlist Tab ─────────────────────────────────────────────
 function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
+  const [sort,setSort]=useState('added');
+  const [alertItem,setAlertItem]=useState(null);
+  const [alertPrice,setAlertPrice]=useState('');
+  const [alertSaving,setAlertSaving]=useState(false);
+  const [alertDone,setAlertDone]=useState({});
+
+  const sorted=[...watchlist].sort((a,b)=>{
+    if(sort==='artist')return(a.artist||'').localeCompare(b.artist||'');
+    if(sort==='year')  return(b.release_date||'0').localeCompare(a.release_date||'0');
+    return 0; // added = original order
+  });
+
+  const saveAlert=async(album)=>{
+    if(!alertPrice||isNaN(alertPrice))return;
+    setAlertSaving(true);
+    await fetch('/api/alerts',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        discogs_id:album.album_id||album.id,
+        artist:album.artist, album:album.album,
+        target_price:parseFloat(alertPrice),
+      })
+    });
+    setAlertDone(d=>({...d,[album.album_id||album.id]:parseFloat(alertPrice)}));
+    setAlertSaving(false);setAlertItem(null);setAlertPrice('');
+  };
+
   if(watchlist.length===0)return(
     <div style={{textAlign:'center',padding:'80px 24px',color:C.dim,...MONO}}>
       <div style={{fontSize:48,marginBottom:16}}>☆</div>
@@ -526,27 +573,60 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
   );
   return(
     <div style={{padding:'16px'}}>
-      <div style={{fontSize:10,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>
-        {watchlist.length} {watchlist.length===1?'album':'albums'}
-        {user&&<span style={{color:'#4ade80'}}> · cloud sync ✓</span>}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontSize:10,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase'}}>
+          {watchlist.length} {watchlist.length===1?'album':'albums'}
+          {user&&<span style={{color:'#4ade80'}}> · synced ✓</span>}
+        </div>
+        <select value={sort} onChange={e=>setSort(e.target.value)}
+          style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:6,color:C.muted,
+            padding:'5px 8px',fontSize:11,...MONO,cursor:'pointer',outline:'none'}}>
+          <option value="added">Added order</option>
+          <option value="artist">Artist A–Z</option>
+          <option value="year">Year</option>
+        </select>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
-        {watchlist.map(album=>(
-          <div key={album.id||album.album_id} style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',gap:12,alignItems:'center'}}>
-            <div onClick={()=>onAlbumClick(album)} style={{display:'flex',gap:12,flex:1,alignItems:'center',cursor:'pointer'}}>
-              <AlbumCover src={album.cover} artist={album.artist} size={52}/>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{...BEBAS,fontSize:17,color:C.text,lineHeight:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.artist}</div>
-                <div style={{fontSize:11,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.album}</div>
-                <div style={{fontSize:10,color:C.dim,...MONO,marginTop:3}}>{album.release_date||album.releaseDate}</div>
+        {sorted.map(album=>{
+          const id=album.id||album.album_id;
+          const hasAlert=alertDone[id];
+          return(
+          <div key={id} style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+            <div style={{padding:'12px 14px',display:'flex',gap:12,alignItems:'center'}}>
+              <div onClick={()=>onAlbumClick(album)} style={{display:'flex',gap:12,flex:1,alignItems:'center',cursor:'pointer'}}>
+                <AlbumCover src={album.cover} artist={album.artist} size={52}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{...BEBAS,fontSize:17,color:C.text,lineHeight:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.artist}</div>
+                  <div style={{fontSize:11,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.album}</div>
+                  <div style={{fontSize:10,color:C.dim,...MONO,marginTop:3}}>{album.release_date||album.releaseDate}</div>
+                  {hasAlert&&<div style={{fontSize:10,color:'#f5c842',...MONO,marginTop:2}}>🔔 Alert: ≤${hasAlert}</div>}
+                </div>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
+                <button onClick={()=>{setAlertItem(alertItem===id?null:id);setAlertPrice('');}}
+                  style={{background:'none',border:'none',color:alertItem===id||hasAlert?'#f5c842':'#444',cursor:'pointer',fontSize:16,padding:'2px'}}
+                  title="Set price alert">🔔</button>
+                <button onClick={()=>onRemove(id)}
+                  style={{background:'none',border:'none',color:'#333',cursor:'pointer',fontSize:18,padding:'2px'}}
+                  onMouseEnter={e=>e.currentTarget.style.color=C.accent}
+                  onMouseLeave={e=>e.currentTarget.style.color='#333'}>×</button>
               </div>
             </div>
-            <button onClick={()=>onRemove(album.id||album.album_id||album.albumId)}
-              style={{background:'none',border:'none',color:C.ultra,cursor:'pointer',fontSize:20,padding:'2px 4px'}}
-              onMouseEnter={e=>e.currentTarget.style.color=C.accent}
-              onMouseLeave={e=>e.currentTarget.style.color=C.ultra}>×</button>
+            {alertItem===id&&(
+              <div style={{borderTop:`1px solid ${C.border}`,padding:'10px 14px',display:'flex',gap:8,alignItems:'center'}}>
+                <span style={{fontSize:11,color:C.dim,...MONO,flexShrink:0}}>Alert when price ≤ $</span>
+                <input type="number" value={alertPrice} onChange={e=>setAlertPrice(e.target.value)}
+                  placeholder="e.g. 25" style={{flex:1,background:C.bg3,border:`1px solid ${C.border}`,
+                    borderRadius:6,color:C.text,padding:'7px 10px',fontSize:16,...MONO,outline:'none'}}/>
+                <button onClick={()=>saveAlert(album)} disabled={alertSaving}
+                  style={{background:C.accent,border:'none',borderRadius:6,color:'#fff',
+                    padding:'7px 14px',cursor:'pointer',...BEBAS,fontSize:15}}>
+                  {alertSaving?'…':'SET'}
+                </button>
+              </div>
+            )}
           </div>
-        ))}
+        )})}
       </div>
     </div>
   );
@@ -592,10 +672,15 @@ function BottomNav({tab,onChange,watchCount,user}){
 
 // ── Main App ──────────────────────────────────────────────────
 const FILTERS=[
-  {id:'all',label:'⚡ All'},
-  {id:'new',label:'🔥 New'},
+  {id:'new',     label:'🔥 New ← 45d'},
   {id:'preorder',label:'⏳ Pre-order'},
-  {id:'limited',label:'💎 Limited'},
+  {id:'limited', label:'💎 Limited'},
+  {id:'vinyl',   label:'💿 Has Vinyl'},
+];
+const SORT_OPTIONS=[
+  {id:'date_desc', label:'Newest first'},
+  {id:'date_asc',  label:'Oldest first'},
+  {id:'artist',    label:'Artist A–Z'},
 ];
 
 export default function MetalVault(){
@@ -769,11 +854,18 @@ export default function MetalVault(){
     const isPreorder=rd>today;
     const isNew=(today-rd)/(1000*60*60*24)<45&&!isPreorder;
     const vinyl=vinylCache[r.id];
+    if(filter==='new')     return isNew;
     if(filter==='preorder')return isPreorder;
-    if(filter==='new')return isNew;
-    if(filter==='limited')return vinyl?.hasLimited===true;
+    if(filter==='limited') return vinyl?.hasLimited===true;
+    if(filter==='vinyl')   return vinyl?.hasVinyl===true;
     return true;
-  }).filter(r=>!search||r.artist.toLowerCase().includes(search.toLowerCase())||r.album.toLowerCase().includes(search.toLowerCase()));
+  }).filter(r=>!search||r.artist.toLowerCase().includes(search.toLowerCase())||r.album.toLowerCase().includes(search.toLowerCase()))
+  .sort((a,b)=>{
+    if(sort==='date_desc')return new Date(b.releaseDate)-new Date(a.releaseDate);
+    if(sort==='date_asc') return new Date(a.releaseDate)-new Date(b.releaseDate);
+    if(sort==='artist')   return a.artist.localeCompare(b.artist);
+    return 0;
+  });
 
   const isWatched=id=>watchlist.some(w=>(w.id||w.album_id)===id);
   const isFollowed=name=>followedArtists.some(a=>a.artist_name===name);
@@ -845,7 +937,7 @@ export default function MetalVault(){
 
         {/* COLLECTION TAB */}
         {tab==='collection'&&(
-          <CollectionTab user={user} collection={collection} onRemove={removeFromCollection} portfolio={portfolio}/>
+          <CollectionTab user={user} collection={collection} onRemove={removeFromCollection} onUpdate={setCollection} portfolio={portfolio}/>
         )}
 
         {/* SEARCH TAB */}
