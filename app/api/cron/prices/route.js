@@ -37,8 +37,7 @@ export async function GET(request) {
       return NextResponse.json({ ...results, message: 'No active alerts' });
     }
 
-    const key    = process.env.DISCOGS_KEY;
-    const secret = process.env.DISCOGS_SECRET;
+    const token = process.env.DISCOGS_TOKEN;
 
     for (const alert of alerts) {
       results.checked++;
@@ -47,7 +46,7 @@ export async function GET(request) {
         const q = encodeURIComponent(`${alert.artist} ${alert.album}`);
         const res = await fetch(
           `https://api.discogs.com/database/search?q=${q}&type=release&format=vinyl&per_page=5`,
-          { headers: { Authorization: `Discogs key=${key}, secret=${secret}`, 'User-Agent': 'MetalVault/1.0' } }
+          { headers: { Authorization: `Discogs token=${token}`, 'User-Agent': 'MetalVault/1.0' } }
         );
         const data = await res.json();
         const releases = data.results || [];

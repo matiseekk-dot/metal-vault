@@ -180,7 +180,7 @@ function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vin
           </div>
           {loading&&<div style={{textAlign:'center',padding:'30px 0',color:C.dim,...MONO,fontSize:12}}>⟳ Searching releases…</div>}
           {error&&<div style={{background:'#1a0000',border:`1px solid ${C.accent}44`,borderRadius:8,padding:'12px 14px',color:'#f87171',fontSize:12,...MONO}}>
-            {error.includes('not configured')?'⚙ Configure DISCOGS_KEY in Vercel → Environment Variables':`⚠ ${error}`}
+            {error.includes('not configured')?'⚙ Configure DISCOGS_TOKEN in Vercel → Environment Variables':`⚠ ${error}`}
           </div>}
           {!loading&&!error&&vinylData?.variants?.length===0&&(
             <div style={{textAlign:'center',padding:'24px 0',color:C.dim,...MONO,fontSize:12}}>No vinyl releases found on Discogs</div>
