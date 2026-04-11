@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import dynamic from 'next/dynamic';
-const ScannerTab = dynamic(() => import('@/app/scanner/ScannerTab'), { ssr: false });
+const ScannerTab    = dynamic(() => import('@/app/scanner/ScannerTab'),    { ssr: false });
+const DiscogsImport = dynamic(() => import('@/app/import/DiscogsImport'),  { ssr: false });
 
 // ── Design tokens ─────────────────────────────────────────────
 const C = {
@@ -557,6 +558,7 @@ function BottomNav({tab,onChange,watchCount,user}){
     {id:'watchlist',icon:'★',label:`Watchlist${watchCount>0?` (${watchCount})`:''}`,color:'#f5c842'},
     {id:'collection',icon:'📦',label:'Collection'},
     {id:'scan',icon:'📷',label:'Scan'},
+    {id:'import',icon:'⬇',label:'Import'},
     {id:'profile',icon:'👤',label:user?'Profile':'Login'},
   ];
   return(
@@ -812,6 +814,20 @@ export default function MetalVault(){
         {/* COLLECTION TAB */}
         {tab==='collection'&&(
           <CollectionTab user={user} collection={collection} onRemove={removeFromCollection} portfolio={portfolio}/>
+        )}
+
+        {/* IMPORT TAB */}
+        {tab==='import'&&(
+          <DiscogsImport
+            user={user}
+            onImportCollection={addToCollection}
+            onImportWatchlist={async (item) => {
+              if(!user)return;
+              const r=await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});
+              const d=await r.json();
+              if(d.item)setWatchlist(w=>[d.item,...w]);
+            }}
+          />
         )}
 
         {/* SCANNER TAB */}
