@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
+import dynamic from 'next/dynamic';
+const ScannerTab = dynamic(() => import('@/app/scanner/ScannerTab'), { ssr: false });
 
 // ── Design tokens ─────────────────────────────────────────────
 const C = {
@@ -554,6 +556,7 @@ function BottomNav({tab,onChange,watchCount,user}){
     {id:'feed',icon:'🔥',label:'Feed'},
     {id:'watchlist',icon:'★',label:`Watchlist${watchCount>0?` (${watchCount})`:''}`,color:'#f5c842'},
     {id:'collection',icon:'📦',label:'Collection'},
+    {id:'scan',icon:'📷',label:'Scan'},
     {id:'profile',icon:'👤',label:user?'Profile':'Login'},
   ];
   return(
@@ -809,6 +812,16 @@ export default function MetalVault(){
         {/* COLLECTION TAB */}
         {tab==='collection'&&(
           <CollectionTab user={user} collection={collection} onRemove={removeFromCollection} portfolio={portfolio}/>
+        )}
+
+        {/* SCANNER TAB */}
+        {tab==='scan'&&(
+          <ScannerTab
+            onAddToCollection={addToCollection}
+            onAddToWatchlist={toggleWatch}
+            collection={collection}
+            watchlist={watchlist}
+          />
         )}
 
         {/* PROFILE TAB */}
