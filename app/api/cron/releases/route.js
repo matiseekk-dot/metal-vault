@@ -1,14 +1,23 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
-import { Resend } from 'resend';
 
-// Resend initialized lazily inside handler
+// Send email via Resend REST API — no SDK constructor, build-safe
+async function sendEmail({ to, subject, html }) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return;
+  const from = process.env.FROM_EMAIL || 'Metal Vault <onboarding@resend.dev>';
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ from, to, subject, html }),
+  });
+}
+
+
 
 // Called weekly on Monday 10:00 UTC by Vercel Cron
 export async function GET(request) {
-  const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-  const FROM = process.env.FROM_EMAIL || 'Metal Vault <releases@metal-vault.app>';
   const auth = request.headers.get('authorization');
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -103,9 +112,8 @@ export async function GET(request) {
             </tr>
           `).join('');
 
-          await resend.emails.send({
-            from: FROM,
-            to: userData.email,
+          await sendEmail({
+                  to: userData.email,
             subject: `🔥 ${newReleases.length} nowych premier w tym tygodniu`,
             html: `
               <div style="font-family: monospace; background: #0a0a0a; color: #f0f0f0; padding: 24px; border-radius: 8px; max-width: 500px;">
