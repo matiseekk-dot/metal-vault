@@ -554,23 +554,34 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
 // ── Bottom Nav ────────────────────────────────────────────────
 function BottomNav({tab,onChange,watchCount,user}){
   const tabs=[
-    {id:'feed',icon:'🔥',label:'Feed'},
-    {id:'watchlist',icon:'★',label:`Watchlist${watchCount>0?` (${watchCount})`:''}`,color:'#f5c842'},
-    {id:'collection',icon:'📦',label:'Collection'},
-    {id:'scan',icon:'📷',label:'Scan'},
-    {id:'import',icon:'⬇',label:'Import'},
-    {id:'profile',icon:'👤',label:user?'Profile':'Login'},
+    {id:'feed',      icon:'🔥', label:'Feed'},
+    {id:'watchlist', icon:'★',  label:'Watch', badge: watchCount>0?watchCount:null, color:'#f5c842'},
+    {id:'collection',icon:'📦', label:'Vault'},
+    {id:'scan',      icon:'📷', label:'Scan'},
+    {id:'import',    icon:'⬇',  label:'Import'},
+    {id:'profile',   icon:'👤', label:user?'Me':'Login'},
   ];
   return(
-    <div style={{position:'fixed',bottom:0,left:0,right:0,background:C.bg,borderTop:`1px solid ${C.border}`,
-      display:'flex',zIndex:100,paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
+    <div style={{position:'fixed',bottom:0,left:0,right:0,background:'#0d0d0d',
+      borderTop:`1px solid ${C.border}`,display:'flex',zIndex:100,
+      paddingBottom:'env(safe-area-inset-bottom,0px)',
+      boxShadow:'0 -4px 20px #00000088'}}>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>onChange(t.id)}
-          style={{flex:1,padding:'10px 4px 8px',background:'none',border:'none',cursor:'pointer',
-            display:'flex',flexDirection:'column',alignItems:'center',gap:2,
+          style={{flex:1,padding:'8px 2px 6px',background:'none',border:'none',cursor:'pointer',
+            display:'flex',flexDirection:'column',alignItems:'center',gap:1,position:'relative',
             borderTop:tab===t.id?`2px solid ${C.accent}`:'2px solid transparent'}}>
-          <span style={{fontSize:20,color:t.color||undefined}}>{t.icon}</span>
-          <span style={{fontSize:9,color:tab===t.id?C.accent:C.dim,...MONO,letterSpacing:'0.04em'}}>{t.label}</span>
+          {t.badge&&(
+            <div style={{position:'absolute',top:4,right:'18%',background:C.accent,borderRadius:10,
+              minWidth:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',
+              fontSize:9,...MONO,color:'#fff',padding:'0 4px'}}>
+              {t.badge}
+            </div>
+          )}
+          <span style={{fontSize:tab===t.id?22:19,color:t.id==='watchlist'?'#f5c842':tab===t.id?'#fff':'#666',
+            transition:'all 0.15s'}}>{t.icon}</span>
+          <span style={{fontSize:9,color:tab===t.id?C.accent:'#444',...MONO,letterSpacing:'0.03em',
+            fontWeight:tab===t.id?'700':'400'}}>{t.label}</span>
         </button>
       ))}
     </div>
@@ -707,6 +718,25 @@ export default function MetalVault(){
     if(d.item){setCollection(c=>[d.item,...c]);const port=await fetch('/api/portfolio').then(r=>r.json());setPortfolio(port);}
     setSelected(null);
   };
+  // Batch import - no portfolio refresh per item, refresh once at end
+  const batchImportCollection=async(item)=>{
+    if(!user)return;
+    const r=await fetch('/api/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});
+    const d=await r.json();
+    if(d.item)setCollection(c=>{
+      if(c.some(x=>x.discogs_id===item.discogs_id))return c;
+      return [d.item,...c];
+    });
+  };
+  const batchImportWatchlist=async(item)=>{
+    if(!user)return;
+    const r=await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});
+    const d=await r.json();
+    if(d.item)setWatchlist(w=>{
+      if(w.some(x=>(x.album_id||x.id)===item.album_id))return w;
+      return [d.item,...w];
+    });
+  };
   const removeFromCollection=async(id)=>{
     await fetch(`/api/collection?id=${id}`,{method:'DELETE'});
     setCollection(c=>c.filter(x=>x.id!==id));
@@ -820,13 +850,8 @@ export default function MetalVault(){
         {tab==='import'&&(
           <DiscogsImport
             user={user}
-            onImportCollection={addToCollection}
-            onImportWatchlist={async (item) => {
-              if(!user)return;
-              const r=await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});
-              const d=await r.json();
-              if(d.item)setWatchlist(w=>[d.item,...w]);
-            }}
+            onImportCollection={batchImportCollection}
+            onImportWatchlist={batchImportWatchlist}
           />
         )}
 

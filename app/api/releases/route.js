@@ -72,40 +72,44 @@ function normalise(album) {
 }
 
 export async function GET() {
-  // ── Try Spotify ──────────────────────────────────────────────
   try {
     const token = await getSpotifyToken();
 
-    // Multiple genre queries, deduplicated
-    const queries = [
-      'genre:"death metal"',
-      'genre:"black metal"',
-      'genre:"heavy metal"',
-      'genre:"thrash metal"',
-      'genre:"doom metal"',
-      'genre:"sludge metal"',
+    // Search by well-known metal artists — more reliable than genre filters
+    // which vary by Spotify market
+    const artists = [
+      'Opeth','Blood Incantation','Cannibal Corpse','Darkthrone','Mayhem',
+      'Enslaved','Cattle Decapitation','Tomb Mold','Imperial Triumphant',
+      'Gatecreeper','Obituary','Morbid Angel','Immolation','Autopsy',
+      'Incantation','Yob','Sleep','Electric Wizard','Pallbearer','Thou',
+      'Mastodon','Gojira','Trivium','Lamb of God','Sepultura',
+      'Kreator','Sodom','Destruction','Overkill','Testament',
+      'Napalm Death','Brutal Truth','Full of Hell','Converge','Neurosis',
     ];
 
-    const seen = new Set();
+    const seen    = new Set();
     const results = [];
 
-    for (const q of queries) {
-      const items = await fetchGenre(token, q, 15);
-      for (const item of items) {
-        if (!seen.has(item.id)) {
-          seen.add(item.id);
-          results.push(normalise(item));
+    for (const artist of artists) {
+      try {
+        const url = `https://api.spotify.com/v1/search?q=artist:${encodeURIComponent(artist)}&type=album&limit=3&market=US`;
+        const r   = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const d   = await r.json();
+        for (const item of (d.albums?.items || [])) {
+          if (!seen.has(item.id) && item.album_type === 'album') {
+            seen.add(item.id);
+            results.push(normalise(item));
+          }
         }
-      }
+      } catch {}
     }
 
-    // Sort newest first
-    results.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
+    if (results.length === 0) throw new Error('No Spotify results');
 
+    results.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
     return NextResponse.json({ releases: results.slice(0, 60), source: 'spotify' });
+
   } catch (e) {
-    console.error('Spotify error, using mock data:', e.message);
-    // ── Fall back to mock ──────────────────────────────────────
     return NextResponse.json({ releases: MOCK, source: 'mock', notice: e.message });
   }
 }
