@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase';
 import dynamic from 'next/dynamic';
 const ScannerTab    = dynamic(() => import('@/app/scanner/ScannerTab'),    { ssr: false });
 const DiscogsImport = dynamic(() => import('@/app/import/DiscogsImport'),  { ssr: false });
+const SearchTab     = dynamic(() => import('@/app/search/SearchTab'),       { ssr: false });
 
 // ── Design tokens ─────────────────────────────────────────────
 const C = {
@@ -555,10 +556,10 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
 function BottomNav({tab,onChange,watchCount,user}){
   const tabs=[
     {id:'feed',      icon:'🔥', label:'Feed'},
+    {id:'search',    icon:'🔍', label:'Search'},
     {id:'watchlist', icon:'★',  label:'Watch', badge: watchCount>0?watchCount:null, color:'#f5c842'},
     {id:'collection',icon:'📦', label:'Vault'},
     {id:'scan',      icon:'📷', label:'Scan'},
-    {id:'import',    icon:'⬇',  label:'Import'},
     {id:'profile',   icon:'👤', label:user?'Me':'Login'},
   ];
   return(
@@ -844,6 +845,16 @@ export default function MetalVault(){
         {/* COLLECTION TAB */}
         {tab==='collection'&&(
           <CollectionTab user={user} collection={collection} onRemove={removeFromCollection} portfolio={portfolio}/>
+        )}
+
+        {/* SEARCH TAB */}
+        {tab==='search'&&(
+          <SearchTab
+            onWatch={toggleWatch}
+            onAddCollection={addToCollection}
+            watchlist={watchlist}
+            collection={collection}
+          />
         )}
 
         {/* IMPORT TAB */}
