@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic';
 const ScannerTab    = dynamic(() => import('@/app/scanner/ScannerTab'),    { ssr: false });
 const DiscogsImport = dynamic(() => import('@/app/import/DiscogsImport'),  { ssr: false });
 const SearchTab     = dynamic(() => import('@/app/search/SearchTab'),       { ssr: false });
+const StatsTab      = dynamic(() => import('@/app/stats/StatsTab'),         { ssr: false });
+const ConcertsTab   = dynamic(() => import('@/app/concerts/ConcertsTab'),   { ssr: false });
 
 // ── Design tokens ─────────────────────────────────────────────
 const C = {
@@ -280,7 +282,8 @@ function PortfolioChart({snapshots}){
 }
 
 // ── Collection Tab ────────────────────────────────────────────
-function CollectionTab({user,collection,onRemove,onUpdate,portfolio}){
+function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUpdate,portfolio,onAlbumClick}){
+  const [view,setView]=useState('vinyl');
   if(!onUpdate)onUpdate=()=>{}; // safety
   const [showAlertForm,setShowAlertForm]=useState(null);
   const [targetPrice,setTargetPrice]=useState('');
@@ -339,7 +342,48 @@ function CollectionTab({user,collection,onRemove,onUpdate,portfolio}){
         </div>
       )}
 
-      {/* Items */}
+      {/* Subtabs */}
+      <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,padding:'0 16px',flexShrink:0}}>
+        {[['vinyl',`💿 Vinyl (${collection.length})`],['watchlist',`★ Watchlist (${watchlist.length})`]].map(([k,l])=>(
+          <button key={k} onClick={()=>setView(k)}
+            style={{padding:'10px 14px',background:'none',border:'none',cursor:'pointer',
+              borderBottom:view===k?`2px solid ${C.accent}`:'2px solid transparent',
+              color:view===k?C.text:C.dim,...MONO,fontSize:11,marginBottom:-1}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {view==='watchlist'&&(
+        watchlist.length===0
+          ?<div style={{textAlign:'center',padding:'50px 24px',color:C.dim,...MONO}}>
+             <div style={{fontSize:40,marginBottom:10}}>☆</div>
+             <div style={{fontSize:13}}>No watched albums yet.<br/><span style={{color:C.accent}}>Click ☆</span> on any album in Feed.</div>
+           </div>
+          :<div style={{padding:'16px',display:'flex',flexDirection:'column',gap:8}}>
+             {watchlist.map(album=>{
+               const id=album.id||album.album_id;
+               return(
+                 <div key={id} style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',gap:12,alignItems:'center'}}>
+                   <div onClick={()=>onAlbumClick&&onAlbumClick(album)} style={{display:'flex',gap:12,flex:1,alignItems:'center',cursor:'pointer'}}>
+                     <AlbumCover src={album.cover} artist={album.artist} size={48}/>
+                     <div style={{flex:1,minWidth:0}}>
+                       <div style={{...BEBAS,fontSize:17,color:C.text,lineHeight:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.artist}</div>
+                       <div style={{fontSize:11,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.album}</div>
+                       <div style={{fontSize:10,color:C.dim,...MONO,marginTop:3}}>{album.release_date||album.releaseDate}</div>
+                     </div>
+                   </div>
+                   <button onClick={()=>onRemoveWatch&&onRemoveWatch(id)}
+                     style={{background:'none',border:'none',color:'#333',cursor:'pointer',fontSize:20,padding:'2px'}}
+                     onMouseEnter={e=>e.currentTarget.style.color=C.accent}
+                     onMouseLeave={e=>e.currentTarget.style.color='#333'}>×</button>
+                 </div>
+               );
+             })}
+           </div>
+      )}
+
+      {view==='vinyl'&&(
       <div style={{padding:'16px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO}}>
@@ -421,7 +465,7 @@ function CollectionTab({user,collection,onRemove,onUpdate,portfolio}){
 }
 
 // ── Profile Tab ───────────────────────────────────────────────
-function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile}){
+function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onShowImport}){
   const [username,setUsername]=useState(profile?.username||'');
   const [isPublic,setIsPublic]=useState(profile?.is_public||false);
   const [saving,setSaving]=useState(false);
@@ -524,6 +568,20 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile}){
       )}
 
       {/* Sign out */}
+      {/* Import from Discogs */}
+      <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:'16px',marginBottom:16}}>
+        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:10}}>Import from Discogs</div>
+        <div style={{fontSize:11,color:C.dim,...MONO,lineHeight:1.6,marginBottom:10}}>
+          Migrate your Discogs collection & wantlist.<br/>
+          <span style={{color:'#60a5fa'}}>Collection must be public</span> on Discogs.
+        </div>
+        <button onClick={onShowImport}
+          style={{width:'100%',padding:'11px',background:`${C.accent}22`,border:`1px solid ${C.accent}44`,
+            borderRadius:8,color:C.accent,cursor:'pointer',...MONO,fontSize:12}}>
+          ⬇ Open Discogs Import
+        </button>
+      </div>
+
       <button onClick={onSignOut}
         style={{width:'100%',padding:'12px',background:'none',border:`1px solid ${C.border}`,
           borderRadius:10,color:C.dim,cursor:'pointer',...MONO,fontSize:12}}>
@@ -549,6 +607,7 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
 
   const saveAlert=async(album)=>{
     if(!alertPrice||isNaN(alertPrice))return;
+    if(!window.confirm('Set price alert for $'+parseFloat(alertPrice).toFixed(2)+'?'))return;
     setAlertSaving(true);
     await fetch('/api/alerts',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -637,10 +696,10 @@ function BottomNav({tab,onChange,watchCount,user}){
   const tabs=[
     {id:'feed',      icon:'🔥', label:'Feed'},
     {id:'search',    icon:'🔍', label:'Search'},
-    {id:'watchlist', icon:'★',  label:'Watch', badge: watchCount>0?watchCount:null, color:'#f5c842'},
     {id:'collection',icon:'📦', label:'Vault'},
+    {id:'concerts',  icon:'🎸', label:'Live'},
     {id:'scan',      icon:'📷', label:'Scan'},
-    {id:'import',    icon:'⬇',  label:'Import'},
+    {id:'stats',     icon:'📊', label:'Stats'},
     {id:'profile',   icon:'👤', label:user?'Me':'Login'},
   ];
   return(
@@ -708,6 +767,8 @@ export default function MetalVault(){
   const [collection,setCollection]=useState([]);
   const [followedArtists,setFollowedArtists]=useState([]);
   const [portfolio,setPortfolio]=useState(null);
+
+  const [showImportModal,setShowImportModal]=useState(false);
 
   // Vinyl data
   const [vinylCache,setVinylCache]=useState({});
@@ -946,7 +1007,7 @@ export default function MetalVault(){
 
         {/* COLLECTION TAB */}
         {tab==='collection'&&(
-          <CollectionTab user={user} collection={collection} onRemove={removeFromCollection} onUpdate={setCollection} portfolio={portfolio}/>
+          <CollectionTab user={user} collection={collection} watchlist={watchlist} onRemoveWatch={async id=>{if(user)await fetch(`/api/watchlist?album_id=${id}`,{method:'DELETE'});setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id));}} onAlbumClick={openAlbum} onRemove={removeFromCollection} onUpdate={setCollection} portfolio={portfolio}/>
         )}
 
         {/* SEARCH TAB */}
@@ -959,12 +1020,17 @@ export default function MetalVault(){
           />
         )}
 
-        {/* IMPORT TAB */}
-        {tab==='import'&&(
-          <DiscogsImport
-            user={user}
-            onImportCollection={batchImportCollection}
-            onImportWatchlist={batchImportWatchlist}
+        {/* CONCERTS TAB */}
+        {tab==='concerts'&&(
+          <ConcertsTab/>
+        )}
+
+        {/* STATS TAB */}
+        {tab==='stats'&&(
+          <StatsTab
+            collection={collection}
+            watchlist={watchlist}
+            concerts={[]}
           />
         )}
 
@@ -982,7 +1048,7 @@ export default function MetalVault(){
         {tab==='profile'&&(
           user?(
             <ProfileTab user={user} profile={profile} followedArtists={followedArtists}
-              onSignOut={signOut} onUpdateProfile={setProfile}/>
+              onSignOut={signOut} onUpdateProfile={setProfile} onShowImport={()=>setShowImportModal(true)}/>
           ):(
             <div style={{textAlign:'center',padding:'80px 24px'}}>
               <div style={{...BEBAS,fontSize:40,color:C.text,marginBottom:8,lineHeight:1}}>METAL VAULT</div>
@@ -1000,6 +1066,16 @@ export default function MetalVault(){
       </div>
 
       <BottomNav tab={tab} onChange={setTab} watchCount={watchlist.length} user={user}/>
+
+      {showImportModal&&(
+        <div style={{position:'fixed',inset:0,background:'#000000cc',zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}
+          onClick={e=>e.target===e.currentTarget&&setShowImportModal(false)}>
+          <div style={{background:C.bg2,borderRadius:'16px 16px 0 0',maxHeight:'92vh',overflow:'auto',paddingBottom:'env(safe-area-inset-bottom,24px)'}}>
+            <div style={{width:40,height:4,background:'#333',borderRadius:2,margin:'12px auto 0'}}/>
+            <DiscogsImport user={user} onImportCollection={batchImportCollection} onImportWatchlist={batchImportWatchlist}/>
+          </div>
+        </div>
+      )}
 
       {selected&&(
         <VinylModal album={selected}
