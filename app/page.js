@@ -460,6 +460,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -998,16 +999,21 @@ export default function MetalVault(){
         )}
 
         {/* WATCHLIST TAB */}
-        {tab==='watchlist'&&(
-          <WatchlistTab watchlist={watchlist} onRemove={async id=>{
-            if(user)await fetch(`/api/watchlist?album_id=${id}`,{method:'DELETE'});
+        {tab==='watchlist'&&( /* legacy - now in Vault */
+          <WatchlistTab watchlist={watchlist} onRemove={async(id)=>{
+            if(user)await fetch('/api/watchlist?album_id='+id,{method:'DELETE'});
             setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id));
           }} onAlbumClick={openAlbum} user={user}/>
         )}
 
         {/* COLLECTION TAB */}
         {tab==='collection'&&(
-          <CollectionTab user={user} collection={collection} watchlist={watchlist} onRemoveWatch={async id=>{if(user)await fetch(`/api/watchlist?album_id=${id}`,{method:'DELETE'});setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id));}} onAlbumClick={openAlbum} onRemove={removeFromCollection} onUpdate={setCollection} portfolio={portfolio}/>
+          <CollectionTab user={user} collection={collection} watchlist={watchlist}
+            onRemoveWatch={async(id)=>{
+              if(user)await fetch('/api/watchlist?album_id='+id,{method:'DELETE'});
+              setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id));
+            }}
+            onAlbumClick={openAlbum} onRemove={removeFromCollection} onUpdate={setCollection} portfolio={portfolio}/>
         )}
 
         {/* SEARCH TAB */}
