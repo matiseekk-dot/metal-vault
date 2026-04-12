@@ -37,7 +37,7 @@ const GENRE_COLOR = (g='') => {
 };
 
 const inputSt = {
-  width:'100%',background:C.bg3,border:`1px solid ${C.border}`,
+  width:'100%',background:C.bg3,border:'1px solid '+C.border,
   borderRadius:8,color:C.text,padding:'11px 14px',fontSize:16,
   ...MONO,outline:'none',
 };
@@ -54,7 +54,7 @@ function Badge({type,small}){
   return(
     <span style={{display:'inline-flex',alignItems:'center',gap:3,padding:small?'2px 6px':'3px 8px',
       borderRadius:20,whiteSpace:'nowrap',fontSize:small?9:10,
-      background:s.bg,color:s.color,border:`1px solid ${s.border}`,...MONO,letterSpacing:'0.05em'}}>
+      background:s.bg,color:s.color,border:'1px solid '+s.border,...MONO,letterSpacing:'0.05em'}}>
       {s.icon} {type}
     </span>
   );
@@ -65,13 +65,13 @@ function AlbumCover({src,artist='',size=64}){
   const bg=GENRE_COLOR(artist);
   if(!src||err)return(
     <div style={{width:size,height:size,borderRadius:6,flexShrink:0,
-      background:`linear-gradient(135deg,${bg},#0a0a0a)`,
-      display:'flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`}}>
+      background:'linear-gradient(135deg,'+bg+',#0a0a0a)',
+      display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid '+C.border}}>
       <span style={{...BEBAS,fontSize:Math.round(size*0.45),color:'#ffffff55'}}>{(artist[0]||'?').toUpperCase()}</span>
     </div>
   );
   return(
-    <div style={{width:size,height:size,borderRadius:6,flexShrink:0,overflow:'hidden',border:`1px solid ${C.border}`}}>
+    <div style={{width:size,height:size,borderRadius:6,flexShrink:0,overflow:'hidden',border:'1px solid '+C.border}}>
       <img src={src} alt={artist} loading="lazy" onError={()=>setErr(true)}
         style={{width:'100%',height:'100%',objectFit:'cover'}}/>
     </div>
@@ -87,7 +87,7 @@ function StatsBar({releases}){
   }).length;
   const preorders = releases.filter(r=>new Date(r.releaseDate)>today).length;
   return(
-    <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,background:C.bg2}}>
+    <div style={{display:'flex',borderBottom:'1px solid '+C.border,background:C.bg2}}>
       {[{icon:'💿',val:releases.length,label:'releases'},{icon:'🆕',val:newCount,label:'← 60 days'},{icon:'⏳',val:preorders,label:'pre-order'}].map(s=>(
         <div key={s.label} style={{flex:1,textAlign:'center',padding:'10px 4px'}}>
           <div style={{fontSize:11,...MONO,color:C.dim}}>{s.icon}</div>
@@ -107,7 +107,7 @@ function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,o
   const isNew=(today-rd)/(1000*60*60*24)<45&&!isPreorder;
   const badges=[vinylData?.hasVinyl!==false&&'VINYL',vinylData?.hasLimited&&'LIMITED',isPreorder&&'PREORDER',isNew&&'NEW'].filter(Boolean);
   return(
-    <div onClick={onClick} style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,
+    <div onClick={onClick} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,
       padding:'12px 14px',display:'flex',gap:12,alignItems:'flex-start',cursor:'pointer',WebkitTapHighlightColor:'transparent'}}
       onMouseEnter={e=>e.currentTarget.style.borderColor=C.border2}
       onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
@@ -124,7 +124,7 @@ function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,o
         <div style={{display:'flex',gap:4,marginTop:6,flexWrap:'wrap'}}>
           {badges.map(b=><Badge key={b} type={b} small/>)}
           {vinylData?.count>0&&(
-            <span style={{fontSize:9,padding:'2px 6px',borderRadius:10,background:C.bg3,color:C.dim,border:`1px solid ${C.border}`,...MONO}}>
+            <span style={{fontSize:9,padding:'2px 6px',borderRadius:10,background:C.bg3,color:C.dim,border:'1px solid '+C.border,...MONO}}>
               {vinylData.count} variant{vinylData.count!==1?'s':''}
             </span>
           )}
@@ -168,7 +168,7 @@ function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vin
             <div style={{fontSize:11,color:C.dim,...MONO,marginTop:3}}>{album.releaseDate}</div>
           </div>
           <button onClick={()=>onWatchToggle(album)}
-            style={{background:isWatched?'#2a2200':'none',border:`1px solid ${isWatched?'#92400e':C.border}`,
+            style={{background:isWatched?'#2a2200':'none',border:'1px solid '+(isWatched?'#92400e':C.border),
               borderRadius:8,color:isWatched?'#f5c842':C.dim,cursor:'pointer',padding:'8px 10px',fontSize:18,flexShrink:0}}>
             {isWatched?'★':'☆'}
           </button>
@@ -179,13 +179,13 @@ function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vin
               style={{fontSize:11,color:'#1db954',...MONO,textDecoration:'none'}}>▶ Listen on Spotify</a>
           </div>
         )}
-        <div style={{margin:'14px 16px 0',borderTop:`1px solid ${C.border}`}}/>
+        <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
         <div style={{padding:'14px 16px 16px'}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:12}}>
             Vinyl releases · Discogs
           </div>
           {loading&&<div style={{textAlign:'center',padding:'30px 0',color:C.dim,...MONO,fontSize:12}}>⟳ Searching releases…</div>}
-          {error&&<div style={{background:'#1a0000',border:`1px solid ${C.accent}44`,borderRadius:8,padding:'12px 14px',color:'#f87171',fontSize:12,...MONO}}>
+          {error&&<div style={{background:'#1a0000',border:'1px solid '+C.accent+'44',borderRadius:8,padding:'12px 14px',color:'#f87171',fontSize:12,...MONO}}>
             {error.includes('not configured')?'⚙ Configure DISCOGS_TOKEN in Vercel → Environment Variables':`⚠ ${error}`}
           </div>}
           {!loading&&!error&&vinylData?.variants?.length===0&&(
@@ -194,7 +194,7 @@ function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vin
           {!loading&&!error&&vinylData?.variants?.length>0&&(
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               {vinylData.variants.map(v=>(
-                <div key={v.id} style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px'}}>
+                <div key={v.id} style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:10,padding:'12px 14px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:8}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,color:C.text,...MONO,lineHeight:1.3,marginBottom:4}}>{v.title}</div>
@@ -215,7 +215,7 @@ function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vin
                   <div style={{display:'flex',gap:8}}>
                     <a href={v.discogsUrl} target="_blank" rel="noopener noreferrer"
                       onClick={e=>e.stopPropagation()}
-                      style={{flex:1,display:'block',background:C.bg4,border:`1px solid ${C.border}`,
+                      style={{flex:1,display:'block',background:C.bg4,border:'1px solid '+C.border,
                         borderRadius:7,padding:'7px',fontSize:11,color:C.muted,...MONO,textDecoration:'none',textAlign:'center'}}>
                       🔗 Discogs
                     </a>
@@ -255,7 +255,7 @@ function PortfolioChart({snapshots}){
   }).join(' ');
   const area=`${PL},${H-PB} ${pts} ${W-PR},${H-PB}`;
   return(
-    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto'}}>
+    <svg viewBox={'0 0 '+W+' '+H} style={{width:'100%',height:'auto'}}>
       <defs>
         <linearGradient id="cg" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor={C.accent} stopOpacity="0.25"/>
@@ -317,14 +317,14 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
     <div style={{padding:'0 0 16px'}}>
       {/* Summary */}
       {summary&&summary.itemCount>0&&(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:0,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:0,borderBottom:'1px solid '+C.border}}>
           {[
             {l:'Records',v:summary.itemCount},
             {l:'Paid',v:summary.totalPurchased>0?`${summary.totalPurchased.toFixed(0)} PLN`:'—'},
             {l:'Gain',v:summary.gain!==0?`${summary.gain>0?'+':''}${summary.gain.toFixed(0)} PLN`:'—',
               color:summary.gain>0?'#4ade80':summary.gain<0?'#f87171':C.muted},
           ].map(s=>(
-            <div key={s.l} style={{textAlign:'center',padding:'14px 8px',borderRight:`1px solid ${C.border}`}}>
+            <div key={s.l} style={{textAlign:'center',padding:'14px 8px',borderRight:'1px solid '+C.border}}>
               <div style={{...BEBAS,fontSize:20,color:s.color||C.accent,lineHeight:1}}>{s.v}</div>
               <div style={{fontSize:9,color:C.dim,...MONO,letterSpacing:'0.1em',textTransform:'uppercase',marginTop:3}}>{s.l}</div>
             </div>
@@ -334,7 +334,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
 
       {/* Portfolio chart */}
       {portfolio?.snapshots?.length>=2&&(
-        <div style={{padding:'16px',borderBottom:`1px solid ${C.border}`}}>
+        <div style={{padding:'16px',borderBottom:'1px solid '+C.border}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:10}}>
             Collection value over time
           </div>
@@ -343,11 +343,11 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
       )}
 
       {/* Subtabs */}
-      <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,padding:'0 16px',flexShrink:0}}>
+      <div style={{display:'flex',borderBottom:'1px solid '+C.border,padding:'0 16px',flexShrink:0}}>
         {[['vinyl',`💿 Vinyl (${collection.length})`],['watchlist',`★ Watchlist (${watchlist.length})`]].map(([k,l])=>(
           <button key={k} onClick={()=>setView(k)}
             style={{padding:'10px 14px',background:'none',border:'none',cursor:'pointer',
-              borderBottom:view===k?`2px solid ${C.accent}`:'2px solid transparent',
+              borderBottom:view===k?'2px solid '+C.accent:'2px solid transparent',
               color:view===k?C.text:C.dim,...MONO,fontSize:11,marginBottom:-1}}>
             {l}
           </button>
@@ -364,7 +364,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
              {watchlist.map(album=>{
                const id=album.id||album.album_id;
                return(
-                 <div key={id} style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',gap:12,alignItems:'center'}}>
+                 <div key={id} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'12px 14px',display:'flex',gap:12,alignItems:'center'}}>
                    <div onClick={()=>onAlbumClick&&onAlbumClick(album)} style={{display:'flex',gap:12,flex:1,alignItems:'center',cursor:'pointer'}}>
                      <AlbumCover src={album.cover} artist={album.artist} size={48}/>
                      <div style={{flex:1,minWidth:0}}>
@@ -400,7 +400,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
             });
             onUpdate(sorted);
           }}
-            style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:6,color:C.muted,
+            style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:6,color:C.muted,
               padding:'5px 8px',fontSize:11,...MONO,cursor:'pointer',outline:'none'}}>
             <option value="added">Added order</option>
             <option value="artist">Artist A–Z</option>
@@ -416,7 +416,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
             {collection.map(item=>(
-              <div key={item.id} style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px'}}>
+              <div key={item.id} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:10,padding:'12px 14px'}}>
                 <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
                   <AlbumCover src={item.cover} artist={item.artist} size={48}/>
                   <div style={{flex:1,minWidth:0}}>
@@ -445,11 +445,11 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
                         {saving?'…':'OK'}
                       </button>
                       <button onClick={()=>setShowAlertForm(null)}
-                        style={{background:'none',border:`1px solid ${C.border}`,borderRadius:6,color:C.dim,padding:'7px 10px',cursor:'pointer',...MONO,fontSize:10}}>✕</button>
+                        style={{background:'none',border:'1px solid '+C.border,borderRadius:6,color:C.dim,padding:'7px 10px',cursor:'pointer',...MONO,fontSize:10}}>✕</button>
                     </div>
                   ):(
                     <button onClick={()=>setShowAlertForm(item.id)}
-                      style={{marginTop:8,background:'none',border:`1px solid ${C.border}`,borderRadius:6,
+                      style={{marginTop:8,background:'none',border:'1px solid '+C.border,borderRadius:6,
                         color:C.dim,padding:'5px 10px',cursor:'pointer',...MONO,fontSize:10,width:'100%'}}>
                       🔔 Set price alert
                     </button>
@@ -490,7 +490,7 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
       <div style={{fontSize:40,marginBottom:12}}>👤</div>
       <div style={{fontSize:13,marginBottom:20,lineHeight:1.7}}>Sign in to manage your profile</div>
       <button onClick={()=>window.location.href='/login'}
-        style={{background:`linear-gradient(135deg,${C.accent},${C.accent2})`,border:'none',borderRadius:10,
+        style={{background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')',border:'none',borderRadius:10,
           color:'#fff',padding:'13px 24px',...BEBAS,fontSize:18,letterSpacing:'0.1em',cursor:'pointer'}}>
         SIGN IN
       </button>
@@ -501,8 +501,8 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
     <div style={{padding:'16px'}}>
       {/* User info */}
       <div style={{display:'flex',gap:14,alignItems:'center',marginBottom:24,padding:'16px',
-        background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12}}>
-        <div style={{width:52,height:52,borderRadius:'50%',background:`linear-gradient(135deg,${C.accent},#450a0a)`,
+        background:C.bg2,border:'1px solid '+C.border,borderRadius:12}}>
+        <div style={{width:52,height:52,borderRadius:'50%',background:'linear-gradient(135deg,'+C.accent+',#450a0a)',
           display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,overflow:'hidden',flexShrink:0}}>
           {user.user_metadata?.avatar_url
             ?<img src={user.user_metadata.avatar_url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
@@ -516,7 +516,7 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
       </div>
 
       {/* Profile settings */}
-      <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:'16px',marginBottom:16}}>
+      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
         <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:12}}>Profile settings</div>
 
         <label style={{fontSize:10,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',display:'block',marginBottom:4}}>
@@ -544,7 +544,7 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
         )}
 
         <button onClick={saveProfile} disabled={saving}
-          style={{width:'100%',padding:'11px',background:`linear-gradient(135deg,${C.accent},${C.accent2})`,
+          style={{width:'100%',padding:'11px',background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')',
             border:'none',borderRadius:8,color:'#fff',cursor:'pointer',...BEBAS,fontSize:16,letterSpacing:'0.08em'}}>
           {saving?'SAVING…':'SAVE PROFILE'}
         </button>
@@ -553,14 +553,14 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
 
       {/* Followed artists */}
       {followedArtists.length>0&&(
-        <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:'16px',marginBottom:16}}>
+        <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:10}}>
             Followed artists ({followedArtists.length})
           </div>
           <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
             {followedArtists.map(a=>(
               <span key={a.id} style={{fontSize:11,padding:'5px 10px',borderRadius:20,
-                background:C.bg3,color:C.muted,border:`1px solid ${C.border}`,...MONO}}>
+                background:C.bg3,color:C.muted,border:'1px solid '+C.border,...MONO}}>
                 {a.artist_name} 🔔
               </span>
             ))}
@@ -570,21 +570,21 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
 
       {/* Sign out */}
       {/* Import from Discogs */}
-      <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:'16px',marginBottom:16}}>
+      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
         <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:10}}>Import from Discogs</div>
         <div style={{fontSize:11,color:C.dim,...MONO,lineHeight:1.6,marginBottom:10}}>
           Migrate your Discogs collection & wantlist.<br/>
           <span style={{color:'#60a5fa'}}>Collection must be public</span> on Discogs.
         </div>
         <button onClick={onShowImport}
-          style={{width:'100%',padding:'11px',background:`${C.accent}22`,border:`1px solid ${C.accent}44`,
+          style={{width:'100%',padding:'11px',background:C.accent+'22',border:'1px solid '+C.accent+'44',
             borderRadius:8,color:C.accent,cursor:'pointer',...MONO,fontSize:12}}>
           ⬇ Open Discogs Import
         </button>
       </div>
 
       <button onClick={onSignOut}
-        style={{width:'100%',padding:'12px',background:'none',border:`1px solid ${C.border}`,
+        style={{width:'100%',padding:'12px',background:'none',border:'1px solid '+C.border,
           borderRadius:10,color:C.dim,cursor:'pointer',...MONO,fontSize:12}}>
         Sign out
       </button>
@@ -639,7 +639,7 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
           {user&&<span style={{color:'#4ade80'}}> · synced ✓</span>}
         </div>
         <select value={sort} onChange={e=>setSort(e.target.value)}
-          style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:6,color:C.muted,
+          style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:6,color:C.muted,
             padding:'5px 8px',fontSize:11,...MONO,cursor:'pointer',outline:'none'}}>
           <option value="added">Added order</option>
           <option value="artist">Artist A–Z</option>
@@ -651,7 +651,7 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
           const id=album.id||album.album_id;
           const hasAlert=alertDone[id];
           return(
-          <div key={id} style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          <div key={id} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,overflow:'hidden'}}>
             <div style={{padding:'12px 14px',display:'flex',gap:12,alignItems:'center'}}>
               <div onClick={()=>onAlbumClick(album)} style={{display:'flex',gap:12,flex:1,alignItems:'center',cursor:'pointer'}}>
                 <AlbumCover src={album.cover} artist={album.artist} size={52}/>
@@ -673,10 +673,10 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
               </div>
             </div>
             {alertItem===id&&(
-              <div style={{borderTop:`1px solid ${C.border}`,padding:'10px 14px',display:'flex',gap:8,alignItems:'center'}}>
+              <div style={{borderTop:'1px solid '+C.border,padding:'10px 14px',display:'flex',gap:8,alignItems:'center'}}>
                 <span style={{fontSize:11,color:C.dim,...MONO,flexShrink:0}}>Alert when price ≤ $</span>
                 <input type="number" value={alertPrice} onChange={e=>setAlertPrice(e.target.value)}
-                  placeholder="e.g. 25" style={{flex:1,background:C.bg3,border:`1px solid ${C.border}`,
+                  placeholder="e.g. 25" style={{flex:1,background:C.bg3,border:'1px solid '+C.border,
                     borderRadius:6,color:C.text,padding:'7px 10px',fontSize:16,...MONO,outline:'none'}}/>
                 <button onClick={()=>saveAlert(album)} disabled={alertSaving}
                   style={{background:C.accent,border:'none',borderRadius:6,color:'#fff',
@@ -705,14 +705,14 @@ function BottomNav({tab,onChange,watchCount,user}){
   ];
   return(
     <div style={{position:'fixed',bottom:0,left:0,right:0,background:'#0d0d0d',
-      borderTop:`1px solid ${C.border}`,display:'flex',zIndex:100,
+      borderTop:'1px solid '+C.border,display:'flex',zIndex:100,
       paddingBottom:'env(safe-area-inset-bottom,0px)',
       boxShadow:'0 -4px 20px #00000088'}}>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>onChange(t.id)}
           style={{flex:1,padding:'6px 1px 5px',background:'none',border:'none',cursor:'pointer',
             display:'flex',flexDirection:'column',alignItems:'center',gap:1,position:'relative',
-            borderTop:tab===t.id?`2px solid ${C.accent}`:'2px solid transparent'}}>
+            borderTop:tab===t.id?'2px solid '+C.accent:'2px solid transparent'}}>
           {t.badge&&(
             <div style={{position:'absolute',top:4,right:'18%',background:C.accent,borderRadius:10,
               minWidth:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',
@@ -938,7 +938,7 @@ export default function MetalVault(){
     <div style={{minHeight:'100vh',background:C.bg,maxWidth:600,margin:'0 auto'}}>
 
       {/* Header */}
-      <div style={{background:C.bg,borderBottom:`1px solid ${C.border}`,padding:'14px 16px 12px',position:'sticky',top:0,zIndex:50}}>
+      <div style={{background:C.bg,borderBottom:'1px solid '+C.border,padding:'14px 16px 12px',position:'sticky',top:0,zIndex:50}}>
         <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between'}}>
           <div>
             <div style={{...BEBAS,fontSize:30,letterSpacing:'0.08em',color:C.text,lineHeight:1}}>METAL VAULT</div>
@@ -956,13 +956,13 @@ export default function MetalVault(){
         {tab==='feed'&&(
           <>
             {!feedLoading&&releases.length>0&&<StatsBar releases={releases}/>}
-            <div style={{display:'flex',gap:6,padding:'10px 16px',overflow:'auto',borderBottom:`1px solid ${C.border}`}}>
+            <div style={{display:'flex',gap:6,padding:'10px 16px',overflow:'auto',borderBottom:'1px solid '+C.border}}>
               {FILTERS.map(f=>(
                 <button key={f.id} onClick={()=>setFilter(f.id)}
                   style={{padding:'6px 12px',borderRadius:20,whiteSpace:'nowrap',
-                    background:filter===f.id?`${C.accent}22`:C.bg3,
+                    background:filter===f.id?C.accent+'22':C.bg3,
                     color:filter===f.id?C.accent:C.dim,
-                    border:`1px solid ${filter===f.id?C.accent+'66':C.border}`,
+                    border:'1px solid '+(filter===f.id?C.accent+'66':C.border),
                     cursor:'pointer',fontSize:11,...MONO}}>
                   {f.label}
                 </button>
@@ -971,7 +971,7 @@ export default function MetalVault(){
             <div style={{padding:'10px 16px 0',display:'flex',gap:8}}>
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search artist, album…" style={{...inputSt,flex:1}}/>
               <select value={sort} onChange={e=>setSort(e.target.value)}
-                style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:8,color:C.muted,
+                style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:8,color:C.muted,
                   padding:'0 10px',fontSize:13,...MONO,cursor:'pointer',outline:'none',flexShrink:0}}>
                 <option value="date_desc">Newest</option>
                 <option value="date_asc">Oldest</option>
@@ -980,7 +980,7 @@ export default function MetalVault(){
             </div>
             {!feedLoading&&<div style={{padding:'8px 16px 4px',fontSize:10,color:C.dim,...MONO}}>{filtered.length} album{filtered.length!==1?'s':''}</div>}
             {feedLoading&&<div style={{textAlign:'center',padding:'80px 24px',color:C.dim,...MONO}}><div style={{fontSize:32,marginBottom:12}}>⟳</div>Loading…</div>}
-            {feedError&&<div style={{margin:'16px',background:'#1a0000',border:`1px solid ${C.accent}44`,borderRadius:8,padding:'12px 14px',color:'#f87171',fontSize:12,...MONO}}>⚠ {feedError}</div>}
+            {feedError&&<div style={{margin:'16px',background:'#1a0000',border:'1px solid '+C.accent+'44',borderRadius:8,padding:'12px 14px',color:'#f87171',fontSize:12,...MONO}}>⚠ {feedError}</div>}
             {!feedLoading&&!feedError&&(
               <div style={{display:'flex',flexDirection:'column',gap:8,padding:'10px 16px 16px'}}>
                 {filtered.map(album=>(
@@ -1062,7 +1062,7 @@ export default function MetalVault(){
                 Sign in to sync your watchlist,<br/>manage your collection and get price alerts.
               </div>
               <button onClick={()=>window.location.href='/login'}
-                style={{background:`linear-gradient(135deg,${C.accent},${C.accent2})`,border:'none',borderRadius:12,
+                style={{background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')',border:'none',borderRadius:12,
                   color:'#fff',padding:'15px 32px',...BEBAS,fontSize:22,letterSpacing:'0.1em',cursor:'pointer'}}>
                 SIGN IN
               </button>
