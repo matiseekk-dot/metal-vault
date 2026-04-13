@@ -417,7 +417,9 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
                 const key=(i.discogs_id||'')+'::'+i.artist+'::'+i.album;
                 if(seen.has(key))toDelete.push(i.id);else seen.add(key);
               });
-              for(const id of toDelete)await fetch('/api/collection?id='+id,{method:'DELETE'});
+              if(toDelete.length===0)return;
+              // Batch delete — single request
+              await fetch('/api/collection/batch',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:toDelete})});
               const fresh=await fetch('/api/collection').then(r=>r.json());
               if(fresh.items)onUpdate(fresh.items);
             }} style={{flex:1,padding:'7px',background:'#1a0a00',border:'1px solid #92400e',borderRadius:7,color:'#f97316',cursor:'pointer',fontSize:10,...MONO}}>
@@ -425,7 +427,9 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
             </button>
             <button onClick={async()=>{
               if(!window.confirm('Delete ALL records from collection? This cannot be undone.'))return;
-              for(const i of collection)await fetch('/api/collection?id='+i.id,{method:'DELETE'});
+              const ids=collection.map(i=>i.id);
+              // Batch delete — single request
+              await fetch('/api/collection/batch',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
               onUpdate([]);
             }} style={{flex:1,padding:'7px',background:'#1a0000',border:'1px solid #7f1d1d',borderRadius:7,color:'#f87171',cursor:'pointer',fontSize:10,...MONO}}>
               🗑 Clear all
