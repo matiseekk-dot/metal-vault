@@ -55,18 +55,15 @@ function ResultCard({ release, onAddToCollection, onAddToWatchlist, inCollection
       </div>
 
       {/* Price stats */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr',
-        gap: 1, background: C.border, margin: '0 16px',
-        borderRadius: 8, overflow: 'hidden',
-      }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: C.border, margin: '0 16px', borderRadius: 8, overflow: 'hidden' }}>
         {[
-          { label: 'Lowest price',  value: release.lowestPrice ? `$${release.lowestPrice.toFixed(0)}` : '—', color: '#4ade80' },
-          { label: 'For sale',      value: release.numForSale || '—', color: C.muted },
+          { label: 'Lowest',  value: release.lowestPrice ? '$'+release.lowestPrice.toFixed(0) : '—', color: '#4ade80' },
+          { label: 'For sale', value: release.numForSale || '—', color: C.muted },
+          { label: 'Have',    value: release.community?.have || '—', color: C.dim },
         ].map(s => (
-          <div key={s.label} style={{ background: C.bg3, padding: '10px 8px', textAlign: 'center' }}>
-            <div style={{ ...BEBAS, fontSize: 22, color: s.color, lineHeight: 1 }}>{s.value}</div>
-            <div style={{ fontSize: 9, color: C.dim, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>{s.label}</div>
+          <div key={s.label} style={{ background: C.bg3, padding: '10px 6px', textAlign: 'center' }}>
+            <div style={{ ...BEBAS, fontSize: 20, color: s.color, lineHeight: 1 }}>{s.value}</div>
+            <div style={{ fontSize: 8, color: C.dim, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>{s.label}</div>
           </div>
         ))}
       </div>

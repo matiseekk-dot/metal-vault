@@ -770,6 +770,7 @@ export default function MetalVault(){
   const [portfolio,setPortfolio]=useState(null);
 
   const [showImportModal,setShowImportModal]=useState(false);
+  const [collectionSummary,setCollectionSummary]=useState(null);
 
   // Vinyl data
   const [vinylCache,setVinylCache]=useState({});
@@ -817,6 +818,7 @@ export default function MetalVault(){
       ]);
       if(wl.items)setWatchlist(wl.items);
       if(coll.items)setCollection(coll.items);
+      if(coll.summary)setCollectionSummary(coll.summary);
       if(arts.artists)setFollowedArtists(arts.artists);
       if(port.snapshots)setPortfolio(port);
       if(prof.data)setProfile(prof.data);
@@ -866,7 +868,17 @@ export default function MetalVault(){
     if(!user){alert('Sign in to manage your collection');return;}
     const r=await fetch('/api/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});
     const d=await r.json();
-    if(d.item){setCollection(c=>[d.item,...c]);const port=await fetch('/api/portfolio').then(r=>r.json());setPortfolio(port);}
+    if(d.item){
+      setCollection(c=>[d.item,...c]);
+      // Refresh portfolio and collection to get updated prices
+      const [port,coll]=await Promise.all([
+        fetch('/api/portfolio').then(r=>r.json()),
+        fetch('/api/collection').then(r=>r.json()),
+      ]);
+      setPortfolio(port);
+      if(coll.items)setCollection(coll.items);
+      if(coll.summary)setCollectionSummary(coll.summary);
+    }
     setSelected(null);
   };
   // Batch import - no portfolio refresh per item, refresh once at end
@@ -1036,7 +1048,7 @@ export default function MetalVault(){
           <StatsTab
             collection={collection}
             watchlist={watchlist}
-            concerts={[]}
+            collectionSummary={collectionSummary}
           />
         )}
 
