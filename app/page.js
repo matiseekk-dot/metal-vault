@@ -7,6 +7,7 @@ const DiscogsImport = dynamic(() => import('@/app/import/DiscogsImport'),  { ssr
 const SearchTab     = dynamic(() => import('@/app/search/SearchTab'),       { ssr: false });
 const StatsTab      = dynamic(() => import('@/app/stats/StatsTab'),         { ssr: false });
 const ConcertsTab   = dynamic(() => import('@/app/concerts/ConcertsTab'),   { ssr: false });
+const CalendarTab   = dynamic(() => import('@/app/calendar/CalendarTab'),   { ssr: false });
 
 // ── Design tokens ─────────────────────────────────────────────
 const C = {
@@ -35,6 +36,9 @@ const GENRE_COLOR = (g='') => {
   if(s.includes('grind'))  return '#0d2a0d';
   return '#1a0000';
 };
+
+const VINYL_GRADES = ['M','NM','VG+','VG','G+','G','F','P'];
+const GRADE_COLOR = {'M':'#4ade80','NM':'#4ade80','VG+':'#f5c842','VG':'#f5c842','G+':'#f97316','G':'#f87171','F':'#f87171','P':'#888'};
 
 const inputSt = {
   width:'100%',background:C.bg3,border:'1px solid '+C.border,
@@ -355,33 +359,13 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
       </div>
 
       {view==='watchlist'&&(
-        watchlist.length===0
-          ?<div style={{textAlign:'center',padding:'50px 24px',color:C.dim,...MONO}}>
-             <div style={{fontSize:40,marginBottom:10}}>☆</div>
-             <div style={{fontSize:13}}>No watched albums yet.<br/><span style={{color:C.accent}}>Click ☆</span> on any album in Feed.</div>
-           </div>
-          :<div style={{padding:'16px',display:'flex',flexDirection:'column',gap:8}}>
-             {watchlist.map(album=>{
-               const id=album.id||album.album_id;
-               return(
-                 <div key={id} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'12px 14px',display:'flex',gap:12,alignItems:'center'}}>
-                   <div onClick={()=>onAlbumClick&&onAlbumClick(album)} style={{display:'flex',gap:12,flex:1,alignItems:'center',cursor:'pointer'}}>
-                     <AlbumCover src={album.cover} artist={album.artist} size={48}/>
-                     <div style={{flex:1,minWidth:0}}>
-                       <div style={{...BEBAS,fontSize:17,color:C.text,lineHeight:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.artist}</div>
-                       <div style={{fontSize:11,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.album}</div>
-                       <div style={{fontSize:10,color:C.dim,...MONO,marginTop:3}}>{album.release_date||album.releaseDate}</div>
-                     </div>
-                   </div>
-                   <button onClick={()=>onRemoveWatch&&onRemoveWatch(id)}
-                     style={{background:'none',border:'none',color:'#333',cursor:'pointer',fontSize:20,padding:'2px'}}
-                     onMouseEnter={e=>e.currentTarget.style.color=C.accent}
-                     onMouseLeave={e=>e.currentTarget.style.color='#333'}>×</button>
-                 </div>
-               );
-             })}
-           </div>
-      )}
+        <WatchlistTab
+          watchlist={watchlist}
+          user={user}
+          onRemove={onRemoveWatch}
+          onAlbumClick={onAlbumClick}
+        />
+      )}}
 
       {view==='vinyl'&&(
       <div style={{padding:'16px'}}>
@@ -451,6 +435,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
                     <div style={{...BEBAS,fontSize:17,color:C.text,lineHeight:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.artist}</div>
                     <div style={{fontSize:11,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.album}</div>
                     <div style={{display:'flex',gap:6,marginTop:5,flexWrap:'wrap',alignItems:'center'}}>
+                      {item.grade&&item.grade!=='NM'&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:4,background:GRADE_COLOR[item.grade]+'22',color:GRADE_COLOR[item.grade],...MONO}}>{item.grade}</span>}
                       {item.format&&item.format!=='Vinyl'&&<span style={{fontSize:9,color:C.dim,...MONO,padding:'1px 5px',background:C.bg3,borderRadius:4}}>{item.format}</span>}
                       {item.purchase_price>0&&<span style={{fontSize:10,color:'#f5c842',...MONO}}>💰 ${Number(item.purchase_price).toFixed(0)}</span>}
                       {item.median_price>0&&<span style={{fontSize:10,color:'#4ade80',...MONO}}>📈 ${Number(item.median_price).toFixed(0)}</span>}
@@ -480,6 +465,21 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
                         </button>
                       )
                     )}
+                    {/* Grade selector */}
+                    <div style={{display:'flex',gap:4,marginTop:6,flexWrap:'wrap'}}>
+                      {VINYL_GRADES.map(g=>(
+                        <button key={g} onClick={async()=>{
+                          await fetch('/api/collection?id='+item.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({grade:g})});
+                          const fresh=await fetch('/api/collection').then(r=>r.json());
+                          if(fresh.items)onUpdate(fresh.items);
+                        }}
+                          style={{fontSize:9,padding:'2px 6px',borderRadius:4,cursor:'pointer',border:'1px solid '+(item.grade===g?GRADE_COLOR[g]:C.border),
+                            background:item.grade===g?GRADE_COLOR[g]+'22':C.bg3,color:item.grade===g?GRADE_COLOR[g]:C.dim,...MONO}}>
+                          {g}
+                        </button>
+                      ))}
+                      <span style={{fontSize:9,color:C.dim,...MONO,alignSelf:'center',marginLeft:2}}>grade</span>
+                    </div>
                   </div>
                   <button onClick={()=>onRemove(item.id)}
                     style={{background:'none',border:'none',color:C.ultra,cursor:'pointer',fontSize:18,padding:'0 2px'}}
@@ -519,7 +519,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
 }
 
 // ── Profile Tab ───────────────────────────────────────────────
-function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onShowImport}){
+function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onShowImport,pushEnabled,pushLoading,onTogglePush,discogsConnected,onConnectDiscogs,shareToken,onGetShareToken}){
   const [username,setUsername]=useState(profile?.username||'');
   const [isPublic,setIsPublic]=useState(profile?.is_public||false);
   const [saving,setSaving]=useState(false);
@@ -621,21 +621,82 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
         </div>
       )}
 
-      {/* Sign out */}
-      {/* Import from Discogs */}
-      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:10}}>Import from Discogs</div>
-        <div style={{fontSize:11,color:C.dim,...MONO,lineHeight:1.6,marginBottom:10}}>
-          Migrate your Discogs collection & wantlist.<br/>
-          <span style={{color:'#60a5fa'}}>Collection must be public</span> on Discogs.
+      {/* Push notifications */}
+      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:4}}>Push Notifications</div>
+            <div style={{fontSize:11,color:C.dim,...MONO}}>Price alerts on your phone</div>
+          </div>
+          <button onClick={onTogglePush} disabled={pushLoading}
+            style={{width:52,height:28,borderRadius:14,border:'none',cursor:'pointer',flexShrink:0,
+              background:pushEnabled?C.accent:'#333',position:'relative',transition:'background 0.2s',opacity:pushLoading?0.6:1}}>
+            <span style={{position:'absolute',top:3,width:22,height:22,borderRadius:'50%',background:'#fff',
+              transition:'left 0.2s',left:pushEnabled?'calc(100% - 25px)':'3px'}}/>
+          </button>
         </div>
+        {pushEnabled&&<div style={{fontSize:10,color:'#4ade80',...MONO,marginTop:6}}>✓ Enabled — you will receive price alerts</div>}
+      </div>
+
+      {/* Discogs OAuth */}
+      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
+        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Discogs Account</div>
+        {discogsConnected?(
+          <div style={{fontSize:12,color:'#4ade80',...MONO}}>✓ Connected to Discogs</div>
+        ):(
+          <button onClick={onConnectDiscogs}
+            style={{width:'100%',padding:'10px',background:'#1a1a00',border:'1px solid #555500',borderRadius:8,color:'#f5c842',cursor:'pointer',...MONO,fontSize:12}}>
+            🔗 Connect Discogs (one-click import)
+          </button>
+        )}
+      </div>
+
+      {/* Import */}
+      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
+        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Import from Discogs</div>
         <button onClick={onShowImport}
-          style={{width:'100%',padding:'11px',background:C.accent+'22',border:'1px solid '+C.accent+'44',
-            borderRadius:8,color:C.accent,cursor:'pointer',...MONO,fontSize:12}}>
+          style={{width:'100%',padding:'10px',background:C.accent+'22',border:'1px solid '+C.accent+'44',borderRadius:8,color:C.accent,cursor:'pointer',...MONO,fontSize:12}}>
           ⬇ Open Discogs Import
         </button>
       </div>
 
+      {/* Export */}
+      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
+        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Export Collection</div>
+        <div style={{display:'flex',gap:8}}>
+          <a href="/api/collection/export?format=csv" download
+            style={{flex:1,padding:'9px',background:C.bg3,border:'1px solid '+C.border,borderRadius:7,color:C.muted,textDecoration:'none',textAlign:'center',fontSize:11,...MONO}}>
+            📊 CSV / Excel
+          </a>
+          <a href="/api/collection/export?format=json" download
+            style={{flex:1,padding:'9px',background:C.bg3,border:'1px solid '+C.border,borderRadius:7,color:C.muted,textDecoration:'none',textAlign:'center',fontSize:11,...MONO}}>
+            {'{ }' } JSON
+          </a>
+        </div>
+      </div>
+
+      {/* Share */}
+      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
+        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Share Collection</div>
+        {shareToken?(
+          <div>
+            <div style={{fontSize:10,color:'#60a5fa',...MONO,wordBreak:'break-all',marginBottom:8,lineHeight:1.5}}>
+              {typeof window!=='undefined'?window.location.origin:''}/share/{shareToken}
+            </div>
+            <button onClick={()=>navigator.clipboard?.writeText((typeof window!=='undefined'?window.location.origin:'')+'/share/'+shareToken).then(()=>alert('Copied!'))}
+              style={{width:'100%',padding:'8px',background:C.bg3,border:'1px solid '+C.border,borderRadius:7,color:C.muted,cursor:'pointer',fontSize:11,...MONO}}>
+              📋 Copy share link
+            </button>
+          </div>
+        ):(
+          <button onClick={onGetShareToken}
+            style={{width:'100%',padding:'10px',background:C.bg3,border:'1px solid '+C.border,borderRadius:8,color:C.muted,cursor:'pointer',...MONO,fontSize:12}}>
+            🔗 Generate share link
+          </button>
+        )}
+      </div>
+
+      {/* Sign out */}
       <button onClick={onSignOut}
         style={{width:'100%',padding:'12px',background:'none',border:'1px solid '+C.border,
           borderRadius:10,color:C.dim,cursor:'pointer',...MONO,fontSize:12}}>
@@ -725,16 +786,23 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
               </div>
             </div>
             {alertItem===id&&(
-              <div style={{borderTop:'1px solid '+C.border,padding:'10px 14px',display:'flex',gap:8,alignItems:'center'}}>
-                <span style={{fontSize:11,color:C.dim,...MONO,flexShrink:0}}>Alert when price ≤ $</span>
-                <input type="number" value={alertPrice} onChange={e=>setAlertPrice(e.target.value)}
-                  placeholder="e.g. 25" style={{flex:1,background:C.bg3,border:'1px solid '+C.border,
-                    borderRadius:6,color:C.text,padding:'7px 10px',fontSize:16,...MONO,outline:'none'}}/>
-                <button onClick={()=>saveAlert(album)} disabled={alertSaving}
-                  style={{background:C.accent,border:'none',borderRadius:6,color:'#fff',
-                    padding:'7px 14px',cursor:'pointer',...BEBAS,fontSize:15}}>
-                  {alertSaving?'…':'SET'}
-                </button>
+              <div style={{borderTop:'1px solid '+C.border,padding:'10px 14px',background:'#1a0a00',borderRadius:'0 0 10px 10px'}}>
+                <div style={{fontSize:10,color:'#f5c842',...MONO,marginBottom:6}}>
+                  🔔 Email alert when Discogs price drops below:
+                </div>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <span style={{fontSize:13,color:C.dim,...MONO,flexShrink:0}}>$</span>
+                  <input type="number" value={alertPrice} onChange={e=>setAlertPrice(e.target.value)}
+                    onKeyDown={e=>e.key==='Enter'&&saveAlert(album)}
+                    placeholder="target price" style={{flex:1,background:C.bg3,border:'1px solid '+C.border,
+                      borderRadius:6,color:C.text,padding:'8px 10px',fontSize:16,...MONO,outline:'none'}}/>
+                  <button onClick={()=>saveAlert(album)} disabled={alertSaving||!user}
+                    style={{background:alertSaving?C.bg3:C.accent,border:'none',borderRadius:6,color:'#fff',
+                      padding:'8px 16px',cursor:'pointer',...BEBAS,fontSize:15,flexShrink:0}}>
+                    {alertSaving?'…':'SET'}
+                  </button>
+                </div>
+                {!user&&<div style={{fontSize:10,color:'#f87171',...MONO,marginTop:6}}>Sign in to set alerts</div>}
               </div>
             )}
           </div>
@@ -750,7 +818,7 @@ function BottomNav({tab,onChange,watchCount,user}){
     {id:'feed',      icon:'🔥', label:'Feed'},
     {id:'search',    icon:'🔍', label:'Search'},
     {id:'collection',icon:'📦', label:'Vault'},
-    {id:'concerts',  icon:'🎸', label:'Live'},
+    {id:'calendar',  icon:'📅', label:'Calendar'},
     {id:'scan',      icon:'📷', label:'Scan'},
     {id:'stats',     icon:'📊', label:'Stats'},
     {id:'profile',   icon:'👤', label:user?'Me':'Login'},
@@ -823,6 +891,10 @@ export default function MetalVault(){
 
   const [showImportModal,setShowImportModal]=useState(false);
   const [collectionSummary,setCollectionSummary]=useState(null);
+  const [pushEnabled,setPushEnabled]=useState(false);
+  const [pushLoading,setPushLoading]=useState(false);
+  const [shareToken,setShareToken]=useState(null);
+  const [discogsConnected,setDiscogsConnected]=useState(false);
 
   // Vinyl data
   const [vinylCache,setVinylCache]=useState({});
@@ -847,6 +919,13 @@ export default function MetalVault(){
   // ── Load offline cache ───────────────────────────────────────
   useEffect(()=>{
     setVinylCache(loadLS(LS_VC,{}));
+    // Check push subscription status
+    if('serviceWorker' in navigator&&'PushManager' in window){
+      navigator.serviceWorker.ready.then(reg=>reg.pushManager.getSubscription()).then(sub=>setPushEnabled(!!sub)).catch(()=>{});
+    }
+    // Check URL params for OAuth callbacks
+    const params=new URLSearchParams(window.location.search);
+    if(params.get('discogs_connected')){setDiscogsConnected(true);window.history.replaceState({},'','/');} 
     if(!user)setWatchlist(loadLS(LS_WL,[]));
   },[]);
 
@@ -973,6 +1052,44 @@ export default function MetalVault(){
   };
 
   // ── Sign out ─────────────────────────────────────────────────
+  const togglePush=async()=>{
+    if(!user){alert('Sign in first');return;}
+    setPushLoading(true);
+    try{
+      if(pushEnabled){
+        const reg=await navigator.serviceWorker.ready;
+        const sub=await reg.pushManager.getSubscription();
+        if(sub){await sub.unsubscribe();await fetch('/api/push/subscribe',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:sub.endpoint})});}
+        setPushEnabled(false);
+      }else{
+        const reg=await navigator.serviceWorker.ready;
+        const {publicKey}=await fetch('/api/push/subscribe').then(r=>r.json());
+        if(!publicKey){alert('Push not configured — add VAPID keys to Vercel');setPushLoading(false);return;}
+        const perm=await Notification.requestPermission();
+        if(perm!=='granted'){setPushLoading(false);return;}
+        const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:publicKey});
+        await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subscription:sub})});
+        setPushEnabled(true);
+      }
+    }catch(e){console.error('Push error',e);}
+    setPushLoading(false);
+  };
+
+  const getShareToken=async()=>{
+    if(!user)return;
+    const r=await fetch('/api/share');
+    const d=await r.json();
+    if(d.token)setShareToken(d.token);
+    else{const cr=await fetch('/api/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label:'My Collection'})});const cd=await cr.json();setShareToken(cd.token);}
+  };
+
+  const connectDiscogs=async()=>{
+    const r=await fetch('/api/discogs/oauth');
+    const d=await r.json();
+    if(d.authorizeUrl)window.location.href=d.authorizeUrl;
+    else alert(d.error||'Failed to connect Discogs');
+  };
+
   const signOut=async()=>{await supabase.auth.signOut();setUser(null);setWatchlist([]);setCollection([]);setFollowedArtists([]);setPortfolio(null);};
 
   // ── Filtered feed ────────────────────────────────────────────
@@ -1090,9 +1207,9 @@ export default function MetalVault(){
           />
         )}
 
-        {/* CONCERTS TAB */}
-        {tab==='concerts'&&(
-          <ConcertsTab/>
+        {/* CALENDAR TAB */}
+        {tab==='calendar'&&(
+          <CalendarTab releases={releases} followedArtists={followedArtists}/>
         )}
 
         {/* STATS TAB */}
@@ -1118,7 +1235,10 @@ export default function MetalVault(){
         {tab==='profile'&&(
           user?(
             <ProfileTab user={user} profile={profile} followedArtists={followedArtists}
-              onSignOut={signOut} onUpdateProfile={setProfile} onShowImport={()=>setShowImportModal(true)}/>
+              onSignOut={signOut} onUpdateProfile={setProfile} onShowImport={()=>setShowImportModal(true)}
+              pushEnabled={pushEnabled} pushLoading={pushLoading} onTogglePush={togglePush}
+              discogsConnected={discogsConnected} onConnectDiscogs={connectDiscogs}
+              shareToken={shareToken} onGetShareToken={getShareToken}/>
           ):(
             <div style={{textAlign:'center',padding:'80px 24px'}}>
               <div style={{...BEBAS,fontSize:40,color:C.text,marginBottom:8,lineHeight:1}}>METAL VAULT</div>
