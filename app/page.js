@@ -320,8 +320,8 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:0,borderBottom:'1px solid '+C.border}}>
           {[
             {l:'Records',v:summary.itemCount},
-            {l:'Paid',v:summary.totalPurchased>0?`${summary.totalPurchased.toFixed(0)} PLN`:'—'},
-            {l:'Gain',v:summary.gain!==0?`${summary.gain>0?'+':''}${summary.gain.toFixed(0)} PLN`:'—',
+            {l:'Paid',v:summary.totalPurchased>0?`${summary.totalPurchased.toFixed(0)} `:'—'},
+            {l:'Gain',v:summary.gain!==0?`${summary.gain>0?'+':''}${summary.gain.toFixed(0)}`:'—',
               color:summary.gain>0?'#4ade80':summary.gain<0?'#f87171':C.muted},
           ].map(s=>(
             <div key={s.l} style={{textAlign:'center',padding:'14px 8px',borderRight:'1px solid '+C.border}}>
@@ -387,7 +387,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
       <div style={{padding:'16px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO}}>
-            My vinyl ({collection.length})
+            My records ({collection.length})
           </div>
           <select onChange={e=>{
             const s=e.target.value;
@@ -408,6 +408,30 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
             <option value="price_asc">Price ↑</option>
           </select>
         </div>
+        {collection.length>0&&(
+          <div style={{display:'flex',gap:6,marginBottom:12}}>
+            <button onClick={async()=>{
+              if(!window.confirm('Remove duplicate entries? (keeps newest)'))return;
+              const seen=new Set();const toDelete=[];
+              [...collection].sort((a,b)=>new Date(b.added_at)-new Date(a.added_at)).forEach(i=>{
+                const key=(i.discogs_id||'')+'::'+i.artist+'::'+i.album;
+                if(seen.has(key))toDelete.push(i.id);else seen.add(key);
+              });
+              for(const id of toDelete)await fetch('/api/collection?id='+id,{method:'DELETE'});
+              const fresh=await fetch('/api/collection').then(r=>r.json());
+              if(fresh.items)onUpdate(fresh.items);
+            }} style={{flex:1,padding:'7px',background:'#1a0a00',border:'1px solid #92400e',borderRadius:7,color:'#f97316',cursor:'pointer',fontSize:10,...MONO}}>
+              🗑 Remove duplicates
+            </button>
+            <button onClick={async()=>{
+              if(!window.confirm('Delete ALL records from collection? This cannot be undone.'))return;
+              for(const i of collection)await fetch('/api/collection?id='+i.id,{method:'DELETE'});
+              onUpdate([]);
+            }} style={{flex:1,padding:'7px',background:'#1a0000',border:'1px solid #7f1d1d',borderRadius:7,color:'#f87171',cursor:'pointer',fontSize:10,...MONO}}>
+              🗑 Clear all
+            </button>
+          </div>
+        )}
         {collection.length===0?(
           <div style={{textAlign:'center',padding:'40px 0',color:C.dim,...MONO,fontSize:12}}>
             <div style={{fontSize:40,marginBottom:10}}>📦</div>
@@ -422,11 +446,36 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{...BEBAS,fontSize:17,color:C.text,lineHeight:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.artist}</div>
                     <div style={{fontSize:11,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.album}</div>
-                    <div style={{display:'flex',gap:8,marginTop:5,flexWrap:'wrap',alignItems:'center'}}>
-                      {item.format&&<span style={{fontSize:9,color:C.dim,...MONO}}>{item.format}</span>}
-                      {item.color&&<span style={{fontSize:9,color:'#aaa',...MONO}}>🎨 {item.color}</span>}
-                      {item.purchase_price&&<span style={{fontSize:11,color:'#f5c842',...MONO}}>💰 {Number(item.purchase_price).toFixed(0)} PLN</span>}
+                    <div style={{display:'flex',gap:6,marginTop:5,flexWrap:'wrap',alignItems:'center'}}>
+                      {item.format&&item.format!=='Vinyl'&&<span style={{fontSize:9,color:C.dim,...MONO,padding:'1px 5px',background:C.bg3,borderRadius:4}}>{item.format}</span>}
+                      {item.purchase_price>0&&<span style={{fontSize:10,color:'#f5c842',...MONO}}>💰 ${Number(item.purchase_price).toFixed(0)}</span>}
+                      {item.median_price>0&&<span style={{fontSize:10,color:'#4ade80',...MONO}}>📈 ${Number(item.median_price).toFixed(0)}</span>}
+                      {item.current_price>0&&!item.median_price&&<span style={{fontSize:10,color:'#60a5fa',...MONO}}>🏷 ${Number(item.current_price).toFixed(0)}</span>}
                     </div>
+                    {/* Purchase price edit */}
+                    {showAlertForm===item.id+'_price'?(
+                      <div style={{marginTop:8,display:'flex',gap:6,alignItems:'center'}}>
+                        <span style={{fontSize:10,color:C.dim,...MONO,flexShrink:0}}>Paid ($)</span>
+                        <input type="number" defaultValue={item.purchase_price||''} id={'pp_'+item.id}
+                          placeholder="0.00" style={{flex:1,background:C.bg3,border:'1px solid '+C.border,borderRadius:6,color:C.text,padding:'6px 10px',fontSize:14,...MONO,outline:'none'}}/>
+                        <button onClick={async()=>{
+                          const val=document.getElementById('pp_'+item.id)?.value;
+                          if(!val)return;
+                          await fetch('/api/collection?id='+item.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({purchase_price:parseFloat(val)})});
+                          const fresh=await fetch('/api/collection').then(r=>r.json());
+                          if(fresh.items)onUpdate(fresh.items);
+                          setShowAlertForm(null);
+                        }} style={{background:C.accent,border:'none',borderRadius:6,color:'#fff',padding:'6px 12px',cursor:'pointer',...BEBAS,fontSize:14}}>OK</button>
+                        <button onClick={()=>setShowAlertForm(null)} style={{background:'none',border:'1px solid '+C.border,borderRadius:6,color:C.dim,padding:'6px 8px',cursor:'pointer',...MONO,fontSize:10}}>✕</button>
+                      </div>
+                    ):(
+                      !item.purchase_price&&(
+                        <button onClick={()=>setShowAlertForm(item.id+'_price')}
+                          style={{marginTop:6,background:'none',border:'1px solid '+C.border,borderRadius:6,color:C.dim,padding:'4px 10px',cursor:'pointer',...MONO,fontSize:9}}>
+                          + Set purchase price
+                        </button>
+                      )
+                    )}
                   </div>
                   <button onClick={()=>onRemove(item.id)}
                     style={{background:'none',border:'none',color:C.ultra,cursor:'pointer',fontSize:18,padding:'0 2px'}}
@@ -607,8 +656,7 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
   });
 
   const saveAlert=async(album)=>{
-    if(!alertPrice||isNaN(alertPrice))return;
-    if(!window.confirm('Set price alert for $'+parseFloat(alertPrice).toFixed(2)+'?'))return;
+    if(!alertPrice||isNaN(alertPrice)||!user)return;
     setAlertSaving(true);
     await fetch('/api/alerts',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({

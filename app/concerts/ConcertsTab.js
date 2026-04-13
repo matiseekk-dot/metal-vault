@@ -10,17 +10,32 @@ const MONO  = { fontFamily:"'Space Mono',monospace" };
 const BEBAS = { fontFamily:"'Bebas Neue',sans-serif" };
 
 const VENUES = [
-  {id:1,name:"Spodek",city:"Katowice",cat:"Arena"},{id:2,name:"Tauron Arena",city:"Kraków",cat:"Arena"},
-  {id:3,name:"Atlas Arena",city:"Łódź",cat:"Arena"},{id:4,name:"PGE Narodowy",city:"Warszawa",cat:"Arena"},
-  {id:5,name:"Torwar",city:"Warszawa",cat:"Hala"},{id:6,name:"Hala Stulecia",city:"Wrocław",cat:"Hala"},
-  {id:7,name:"Progresja",city:"Warszawa",cat:"Klub"},{id:8,name:"Stodoła",city:"Warszawa",cat:"Klub"},
-  {id:9,name:"Proxima",city:"Warszawa",cat:"Klub"},{id:10,name:"Klub Studio",city:"Kraków",cat:"Klub"},
-  {id:11,name:"Kwadrat",city:"Kraków",cat:"Klub"},{id:12,name:"B90",city:"Gdańsk",cat:"Klub"},
-  {id:13,name:"PolandRock",city:"Kostrzyn",cat:"Festival"},{id:14,name:"Opener",city:"Gdynia",cat:"Festival"},
-  {id:15,name:"Mystic Festival",city:"Gdańsk",cat:"Festival"},{id:16,name:"OFF Festival",city:"Katowice",cat:"Festival"},
+  // Arenas
+  {id:1,name:"Madison Square Garden",city:"New York",cat:"Arena"},
+  {id:2,name:"O2 Arena",city:"London",cat:"Arena"},
+  {id:3,name:"Accor Arena",city:"Paris",cat:"Arena"},
+  {id:4,name:"Mercedes-Benz Arena",city:"Berlin",cat:"Arena"},
+  {id:5,name:"Ziggo Dome",city:"Amsterdam",cat:"Arena"},
+  {id:6,name:"Rod Laver Arena",city:"Melbourne",cat:"Arena"},
+  // Clubs
+  {id:7,name:"House of Blues",city:"Los Angeles",cat:"Club"},
+  {id:8,name:"The Fillmore",city:"San Francisco",cat:"Club"},
+  {id:9,name:"Roundhouse",city:"London",cat:"Club"},
+  {id:10,name:"Melkweg",city:"Amsterdam",cat:"Club"},
+  {id:11,name:"Bataclan",city:"Paris",cat:"Club"},
+  {id:12,name:"Paradiso",city:"Amsterdam",cat:"Club"},
+  {id:13,name:"Brixton Academy",city:"London",cat:"Club"},
+  // Festivals
+  {id:14,name:"Download Festival",city:"Donington",cat:"Festival"},
+  {id:15,name:"Wacken Open Air",city:"Wacken",cat:"Festival"},
+  {id:16,name:"Hellfest",city:"Clisson",cat:"Festival"},
+  {id:17,name:"Graspop",city:"Dessel",cat:"Festival"},
+  {id:18,name:"Rock am Ring",city:"Nürburg",cat:"Festival"},
+  {id:19,name:"Mystic Festival",city:"Gdansk",cat:"Festival"},
+  {id:20,name:"Summer Breeze",city:"Dinkelsbühl",cat:"Festival"},
 ];
-const CAT_COLOR = {Arena:"#4cc8e8",Hala:"#a78bfa",Klub:"#e84c4c",Festival:"#f5c842",Other:"#aaa"};
-const GENRES = ["Metal","Rock","Black Metal","Death Metal","Doom Metal","Thrash Metal","Heavy Metal","Prog Metal","Metalcore","Sludge","Grindcore","Post-Metal","Other"];
+const CAT_COLOR = {Arena:"#4cc8e8",Hall:"#a78bfa",Klub:"#e84c4c",Festival:"#f5c842",Other:"#aaa"};
+const GENRES = ["Metal","Rock","Black Metal","Death Metal","Doom Metal","Thrash Metal","Heavy Metal","Progressive Metal","Metalcore","Sludge Metal","Grindcore","Post-Metal","Folk Metal","Symphonic Metal","Industrial Metal","Nu-Metal","Punk","Hardcore","Other"];
 const LS_KEY = 'mv_concerts_v1';
 const LS_VENUES = 'mv_venues_v1';
 
@@ -125,7 +140,7 @@ export default function ConcertsTab() {
         {[
           {icon:'🎸',val:concerts.length,label:'shows'},
           {icon:'🏆',val:Object.keys(bandMap).length,label:'bands'},
-          {icon:'🎟',val:totalSpent>0?`${totalSpent.toFixed(0)}zł`:'—',label:'spent'},
+          {icon:'🎟',val:totalSpent>0?'$'+totalSpent.toFixed(0):'—',label:'spent'},
         ].map(s=>(
           <div key={s.label} style={{flex:1,textAlign:'center',padding:'10px 4px'}}>
             <div style={{fontSize:11,...MONO,color:C.dim}}>{s.icon}</div>
@@ -189,7 +204,7 @@ export default function ConcertsTab() {
               <select value={form.venueId||''} onChange={e=>setForm(f=>({...f,venueId:e.target.value?Number(e.target.value):null}))}
                 style={{...inputSt,cursor:'pointer'}}>
                 <option value="">— Select venue —</option>
-                {['Arena','Hala','Klub','Festival','Other'].map(cat=>{
+                {['Arena','Club','Festival','Hall','Other'].map(cat=>{
                   const vs=venues.filter(v=>v.cat===cat);
                   return vs.length>0?(
                     <optgroup key={cat} label={cat}>
@@ -234,8 +249,8 @@ export default function ConcertsTab() {
                 <Stars value={form.rating} onChange={v=>setForm(f=>({...f,rating:v}))}/>
               </div>
               <div>
-                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>Ticket price (zł)</label>
-                <input type="number" min="0" value={form.price} onChange={e=>setForm(f=>({...f,price:e.target.value}))} placeholder="e.g. 150" style={inputSt}/>
+                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>Ticket price ($)</label>
+                <input type="number" min="0" value={form.price} onChange={e=>setForm(f=>({...f,price:e.target.value}))} placeholder="e.g. 75" style={inputSt}/>
               </div>
             </div>
 
@@ -292,7 +307,7 @@ export default function ConcertsTab() {
                          <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
                            {v&&<span style={{fontSize:11,color:C.dim,...MONO}}>📍{v.name}{v.city?` · ${v.city}`:''}</span>}
                            {c.year&&<span style={{fontSize:11,color:C.dim,...MONO}}>📅{c.year}</span>}
-                           {c.price>0&&<span style={{fontSize:11,color:'#f5c842',...MONO}}>🎟{Number(c.price).toFixed(0)}zł</span>}
+                           {c.price>0&&<span style={{fontSize:11,color:'#f5c842',...MONO}}>🎟{Number(c.price).toFixed(0)}</span>}
                          </div>
                          {c.note&&<p style={{margin:'7px 0 0',fontSize:12,color:C.muted,fontFamily:'Georgia,serif',fontStyle:'italic',lineHeight:1.5}}>"{c.note}"</p>}
                          <div style={{marginTop:6}}><Stars value={c.rating||0}/></div>

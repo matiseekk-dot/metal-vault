@@ -94,13 +94,17 @@ export async function GET() {
       try {
         // Step 1: search for artist
         const searchRes = await fetch(
-          'https://api.spotify.com/v1/search?q=' + encodeURIComponent('artist:' + artistName) + '&type=artist&limit=1',
+          'https://api.spotify.com/v1/search?q=' + encodeURIComponent(artistName) + '&type=artist&limit=1',
           { headers: { Authorization: 'Bearer ' + token } }
         );
-        if (!searchRes.ok) { errors.push(artistName + ':search:' + searchRes.status); continue; }
+        if (!searchRes.ok) {
+          const errBody = await searchRes.text().catch(()=>'');
+          errors.push(artistName + ':search:' + searchRes.status + ':' + errBody.slice(0,50));
+          continue;
+        }
         const searchData = await searchRes.json();
         const artist = searchData.artists?.items?.[0];
-        if (!artist) { errors.push(artistName + ':not_found'); continue; }
+        if (!artist) { errors.push(artistName + ':not_found:' + JSON.stringify(searchData).slice(0,80)); continue; }
 
         // Step 2: get their albums
         const albumsRes = await fetch(
@@ -122,7 +126,10 @@ export async function GET() {
     }
 
     if (results.length === 0) {
-      throw new Error('No results. Errors: ' + errors.slice(0, 3).join(', '));
+      const msg = errors.length > 0
+        ? 'All requests failed. First errors: ' + errors.slice(0,5).join(' | ')
+        : 'Spotify returned 0 albums despite successful API calls. Check Web API is enabled in Spotify Dashboard.';
+      throw new Error(msg);
     }
 
     results.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));

@@ -64,7 +64,7 @@ function PortfolioChart({snapshots}){
     <div>
       <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
         <span style={{fontSize:10,color:C.dim,...MONO}}>90 day trend</span>
-        <span style={{fontSize:12,color:gainColor,...MONO}}>{gain>=0?'+':''}{gain.toFixed(0)} PLN</span>
+        <span style={{fontSize:12,color:gainColor,...MONO}}>{gain>=0?'+$':'-$'}{Math.abs(gain).toFixed(0)}</span>
       </div>
       <svg viewBox={'0 0 '+W+' '+H} style={{width:'100%',height:'auto'}}>
         <defs>
@@ -156,14 +156,14 @@ export default function StatsTab({collection,watchlist}){
         <StatCard icon="★" value={watchlist.length} label="Watching" color="#f5c842" loading={false}/>
         <StatCard
           icon="💰"
-          value={totalPaid>0?totalPaid.toFixed(0)+' PLN':'—'}
+          value={totalPaid>0?totalPaid.toFixed(0)+:'—'}
           label="Total paid"
           color="#4ade80"
           loading={loading}
         />
         <StatCard
           icon={gain>=0?'📈':'📉'}
-          value={totalCurrent>0?(gain>=0?'+':'')+gain.toFixed(0)+' PLN':'—'}
+          value={totalCurrent>0?(gain>=0?'+':'')+gain.toFixed(0)+:'—'}
           label={'Est. gain '+gainPct+'%'}
           color={gain>=0?'#4ade80':'#f87171'}
           loading={loading}
@@ -211,7 +211,7 @@ export default function StatsTab({collection,watchlist}){
                   <span style={{fontSize:11,color:C.dim,...MONO}}>💎 Most valuable</span>
                 </div>
                 <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:13,color:'#f5c842',...MONO}}>{Number(mostValuable.median_price||mostValuable.current_price).toFixed(0)} PLN</div>
+                  <div style={{fontSize:13,color:'#f5c842',...MONO}}>{'$'+Number(mostValuable.median_price||mostValuable.current_price).toFixed(0)}</div>
                   <div style={{fontSize:10,color:C.dim,...MONO,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{mostValuable.artist}</div>
                 </div>
               </div>
@@ -228,7 +228,7 @@ export default function StatsTab({collection,watchlist}){
             {avgPrice>0&&(
               <div style={{display:'flex',justifyContent:'space-between',borderTop:'1px solid '+C.border,paddingTop:10}}>
                 <span style={{fontSize:11,color:C.dim,...MONO}}>📊 Avg. purchase price</span>
-                <span style={{fontSize:13,color:C.text,...MONO}}>{avgPrice} PLN</span>
+                <span style={{fontSize:13,color:C.text,...MONO}}>${avgPrice}</span>
               </div>
             )}
           </div>
@@ -247,7 +247,7 @@ export default function StatsTab({collection,watchlist}){
               </div>
               <div style={{textAlign:'right',flexShrink:0}}>
                 <div style={{...BEBAS,fontSize:18,color:'#f5c842',lineHeight:1}}>{Number(item.median_price||item.current_price).toFixed(0)}</div>
-                <div style={{fontSize:8,color:C.dim,...MONO}}>PLN median</div>
+                <div style={{fontSize:8,color:C.dim,...MONO}}>USD</div>
               </div>
             </div>
           ))}
