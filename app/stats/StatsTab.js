@@ -156,14 +156,14 @@ export default function StatsTab({collection,watchlist}){
         <StatCard icon="★" value={watchlist.length} label="Watching" color="#f5c842" loading={false}/>
         <StatCard
           icon="💰"
-          value={totalPaid>0?totalPaid.toFixed(0)+:'—'}
+          value={totalPaid>0?'$'+totalPaid.toFixed(0):'—'}
           label="Total paid"
           color="#4ade80"
           loading={loading}
         />
         <StatCard
           icon={gain>=0?'📈':'📉'}
-          value={totalCurrent>0?(gain>=0?'+':'')+gain.toFixed(0)+:'—'}
+          value={totalCurrent>0?(gain>=0?'+':'')+'$'+gain.toFixed(0):'—'}
           label={'Est. gain '+gainPct+'%'}
           color={gain>=0?'#4ade80':'#f87171'}
           loading={loading}
