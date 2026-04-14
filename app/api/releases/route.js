@@ -1,11 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 
-let _token = null;
-let _expiry = 0;
-
 async function getToken() {
-  if (_token && Date.now() < _expiry) return _token;
   const id = process.env.SPOTIFY_CLIENT_ID;
   const secret = process.env.SPOTIFY_CLIENT_SECRET;
   if (!id || !secret) throw new Error('Spotify keys not set');
@@ -16,12 +12,11 @@ async function getToken() {
       Authorization: 'Basic ' + Buffer.from(id + ':' + secret).toString('base64'),
     },
     body: 'grant_type=client_credentials',
+    cache: 'no-store',
   });
   const d = await r.json();
   if (!d.access_token) throw new Error('Token error: ' + d.error + ' ' + (d.error_description||''));
-  _token = d.access_token;
-  _expiry = Date.now() + (d.expires_in - 60) * 1000;
-  return _token;
+  return d.access_token;
 }
 
 function norm(album, genre) {

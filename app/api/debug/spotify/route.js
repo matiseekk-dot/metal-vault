@@ -13,6 +13,7 @@ export async function GET() {
       Authorization: 'Basic ' + Buffer.from(id + ':' + secret).toString('base64'),
     },
     body: 'grant_type=client_credentials',
+    cache: 'no-store',
   });
   const tokenData = await tokenRes.json();
   if (!tokenData.access_token) return NextResponse.json({ step: 'token_failed', data: tokenData });
