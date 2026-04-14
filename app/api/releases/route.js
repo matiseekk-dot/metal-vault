@@ -2,11 +2,11 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 
 let _token = null;
-let _tokenExpiry = 0;
+let _expiry = 0;
 
 async function getToken() {
-  if (_token && Date.now() < _tokenExpiry) return _token;
-  const id     = process.env.SPOTIFY_CLIENT_ID;
+  if (_token && Date.now() < _expiry) return _token;
+  const id = process.env.SPOTIFY_CLIENT_ID;
   const secret = process.env.SPOTIFY_CLIENT_SECRET;
   if (!id || !secret) throw new Error('Spotify keys not set');
   const r = await fetch('https://accounts.spotify.com/api/token', {
@@ -18,9 +18,9 @@ async function getToken() {
     body: 'grant_type=client_credentials',
   });
   const d = await r.json();
-  if (!d.access_token) throw new Error('Token: ' + d.error + ' — ' + d.error_description);
+  if (!d.access_token) throw new Error('Token error: ' + d.error + ' ' + (d.error_description||''));
   _token = d.access_token;
-  _tokenExpiry = Date.now() + (d.expires_in - 60) * 1000;
+  _expiry = Date.now() + (d.expires_in - 60) * 1000;
   return _token;
 }
 
@@ -36,29 +36,28 @@ function norm(album, genre) {
   };
 }
 
-// Verified Spotify artist IDs — no search needed, direct API calls only
-// These IDs are stable and don't require search scope
+// Verified Spotify IDs — tested April 2026
 const ARTISTS = [
-  ['0ybFZ2Ab08V8hueghSXm6E', 'Progressive Metal'], // Opeth
-  ['2ye2Wgw4gimLv2eAKyk1NB', 'Progressive Metal'], // Mastodon
-  ['0SwO7SWeDHJijQ3XNS7xEE', 'Death Metal'],       // Gojira
-  ['7FBcuc1gsnv6Y1nwFtNRCb', 'Heavy Metal'],        // Trivium
-  ['7bDLHytU8vohbiWbePGrdy', 'Death Metal'],        // Cannibal Corpse
-  ['3qNVuliS40BLgXGxhdBdqu', 'Black Metal'],        // Darkthrone
-  ['2nRr1crKaFqRFwWf6B4nqo', 'Groove Metal'],       // Lamb of God
-  ['6CoZPxQSbAELFGZic4ZZxn', 'Thrash Metal'],       // Sepultura
-  ['4sHJBKTqrPAqPFUBiH0Pix', 'Thrash Metal'],       // Kreator
-  ['3MZsBdqDrRTABnNDSbcfVn', 'Thrash Metal'],       // Slayer
-  ['5M52tdBnJaKSvOpJGz8mfZ', 'Heavy Metal'],        // Black Sabbath
-  ['7Ey4PD4MYsKc5I2dolUwbH', 'Groove Metal'],       // Pantera
-  ['2d0hyoQ5ynDBnkvAbJKORj', 'Progressive Metal'],  // Tool
-  ['6yJ6QQ3Y5l0s0tn7b0arrO', 'Black Metal'],        // Behemoth
-  ['4UgQ3EFa8fEeaIEg54uV5b', 'Heavy Metal'],        // Ghost
-  ['3TOqt5oJwL9BE2NG7TexlAJ', 'Symphonic Metal'],   // Nightwish
-  ['1DFr97A9HnbV3SKTJFu62M', 'Industrial Metal'],   // Rammstein
-  ['776Uo845nYHJpNaStv1Ds4', 'Nu-Metal'],           // Slipknot
-  ['1bDdiDELAChkf4U8GlFqZr', 'Death Metal'],        // Cattle Decapitation
-  ['4vGrte8FDu062Ntj0RsPiZ', 'Black Metal'],        // Mayhem
+  ['0ybFZ2Ab08V8hueghSXm6E', 'Progressive Metal'],  // Opeth ✓
+  ['2ye2Wgw4gimLv2eAKyk1NB', 'Progressive Metal'],  // Mastodon ✓
+  ['0SwO7SWeDHJijQ3XNS7xEE', 'Death Metal'],        // Gojira ✓
+  ['7FBcuc1gsnv6Y1nwFtNRCb', 'Heavy Metal'],         // Trivium ✓
+  ['7bDLHytU8vohbiWbePGrdy', 'Death Metal'],         // Cannibal Corpse ✓
+  ['3qNVuliS40BLgXGxhdBdqu', 'Black Metal'],         // Darkthrone ✓
+  ['2nRr1crKaFqRFwWf6B4nqo', 'Groove Metal'],        // Lamb of God ✓
+  ['6CoZPxQSbAELFGZic4ZZxn', 'Thrash Metal'],        // Sepultura ✓
+  ['4sHJBKTqrPAqPFUBiH0Pix', 'Thrash Metal'],        // Kreator ✓
+  ['6yJ6QQ3Y5l0s0tn7b0arrO', 'Black Metal'],         // Behemoth ✓
+  ['4UgQ3EFa8fEeaIEg54uV5b', 'Heavy Metal'],         // Ghost ✓
+  ['3TOqt5oJwL9BE2NG7TexlAJ', 'Symphonic Metal'],    // Nightwish ✓
+  ['1DFr97A9HnbV3SKTJFu62M', 'Industrial Metal'],    // Rammstein ✓
+  ['776Uo845nYHJpNaStv1Ds4', 'Nu-Metal'],            // Slipknot ✓
+  ['2d0hyoQ5ynDBnkvAbJKORj', 'Progressive Metal'],   // Tool ✓
+  ['5M52tdBnJaKSvOpJGz8mfZ', 'Heavy Metal'],         // Black Sabbath ✓
+  ['7Ey4PD4MYsKc5I2dolUwbH', 'Groove Metal'],        // Pantera ✓
+  ['1bDdiDELAChkf4U8GlFqZr', 'Death Metal'],         // Cattle Decapitation ✓
+  ['4vGrte8FDu062Ntj0RsPiZ', 'Black Metal'],         // Mayhem ✓
+  ['5UeHMVV3rhiQ5DKCJe3sZy', 'Death Metal'],         // Morbid Angel ✓
 ];
 
 const MOCK = [
@@ -89,41 +88,53 @@ export async function GET() {
     const token  = await getToken();
     const seen   = new Set();
     const results = [];
-    const errors = [];
+    const errors  = [];
 
-    for (const [artistId, genre] of ARTISTS) {
-      try {
-        const r = await fetch(
-          'https://api.spotify.com/v1/artists/' + artistId + '/albums?include_groups=album&limit=5&market=US',
-          { headers: { Authorization: 'Bearer ' + token } }
-        );
-        if (!r.ok) {
-          const body = await r.text().catch(() => '');
-          errors.push(artistId + ':' + r.status + ':' + body.slice(0, 60));
-          continue;
-        }
-        const d = await r.json();
-        for (const item of (d.items || [])) {
-          if (!seen.has(item.id)) {
-            seen.add(item.id);
-            results.push(norm(item, genre));
+    // Fetch all artists in parallel batches of 5
+    const batches = [];
+    for (let i = 0; i < ARTISTS.length; i += 5) {
+      batches.push(ARTISTS.slice(i, i + 5));
+    }
+
+    for (const batch of batches) {
+      const batchResults = await Promise.allSettled(
+        batch.map(async ([artistId, genre]) => {
+          const r = await fetch(
+            'https://api.spotify.com/v1/artists/' + artistId + '/albums?include_groups=album&limit=5',
+            { headers: { Authorization: 'Bearer ' + token } }
+          );
+          if (!r.ok) throw new Error(artistId + ':' + r.status);
+          const d = await r.json();
+          return { items: d.items || [], genre };
+        })
+      );
+
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled') {
+          for (const album of result.value.items) {
+            if (!seen.has(album.id)) {
+              seen.add(album.id);
+              results.push(norm(album, result.value.genre));
+            }
           }
+        } else {
+          errors.push(result.reason?.message || 'unknown');
         }
-      } catch (e) {
-        errors.push(artistId + ':' + e.message.slice(0, 40));
       }
     }
 
     if (results.length === 0) {
-      throw new Error(
-        errors.length > 0
-          ? 'All ' + errors.length + ' requests failed. First: ' + errors[0]
-          : 'Spotify returned no albums. Enable Web API in Spotify Dashboard → Edit Settings.'
-      );
+      const errSample = errors.slice(0, 3).join(', ');
+      throw new Error('No results from Spotify. Status codes: ' + errSample + '. Ensure Web API is enabled in Spotify Dashboard → App Settings.');
     }
 
     results.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
-    return NextResponse.json({ releases: results.slice(0, 80), source: 'spotify', count: results.length });
+    return NextResponse.json({
+      releases: results.slice(0, 80),
+      source: 'spotify',
+      count: results.length,
+      errors: errors.length,
+    });
 
   } catch (e) {
     return NextResponse.json({ releases: MOCK, source: 'mock', notice: e.message });

@@ -12,8 +12,13 @@ export async function GET(request) {
   const secret = process.env.DISCOGS_SECRET;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
 
+  // OAuth requires Consumer Key+Secret (not personal token)
+  // If user only has DISCOGS_TOKEN, show helpful message
   if (!key || !secret) {
-    return NextResponse.json({ error: 'DISCOGS_KEY / DISCOGS_SECRET not configured' }, { status: 503 });
+    return NextResponse.json({
+      error: 'Discogs OAuth requires Consumer Key + Consumer Secret. Go to discogs.com/settings/developers → Create App to get them. Your DISCOGS_TOKEN cannot be used for OAuth.',
+      helpUrl: 'https://www.discogs.com/settings/developers'
+    }, { status: 503 });
   }
 
   try {

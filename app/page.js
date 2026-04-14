@@ -788,21 +788,26 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
             {alertItem===id&&(
               <div style={{borderTop:'1px solid '+C.border,padding:'10px 14px',background:'#1a0a00',borderRadius:'0 0 10px 10px'}}>
                 <div style={{fontSize:10,color:'#f5c842',...MONO,marginBottom:6}}>
-                  🔔 Email alert when Discogs price drops below:
+                  🔔 Alert when price drops below
                 </div>
-                <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  <span style={{fontSize:13,color:C.dim,...MONO,flexShrink:0}}>$</span>
+                <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
+                  <span style={{...BEBAS,fontSize:18,color:C.muted}}>$</span>
                   <input type="number" value={alertPrice} onChange={e=>setAlertPrice(e.target.value)}
                     onKeyDown={e=>e.key==='Enter'&&saveAlert(album)}
-                    placeholder="target price" style={{flex:1,background:C.bg3,border:'1px solid '+C.border,
-                      borderRadius:6,color:C.text,padding:'8px 10px',fontSize:16,...MONO,outline:'none'}}/>
+                    placeholder="e.g. 25" autoFocus
+                    style={{flex:1,background:C.bg3,border:'1px solid '+C.border,
+                      borderRadius:8,color:C.text,padding:'10px 12px',fontSize:20,...MONO,outline:'none'}}/>
                   <button onClick={()=>saveAlert(album)} disabled={alertSaving||!user}
-                    style={{background:alertSaving?C.bg3:C.accent,border:'none',borderRadius:6,color:'#fff',
-                      padding:'8px 16px',cursor:'pointer',...BEBAS,fontSize:15,flexShrink:0}}>
+                    style={{padding:'10px 18px',background:!user||alertSaving?C.bg3:C.accent,
+                      border:'none',borderRadius:8,color:'#fff',cursor:!user?'default':'pointer',
+                      ...BEBAS,fontSize:17,flexShrink:0}}>
                     {alertSaving?'…':'SET'}
                   </button>
                 </div>
-                {!user&&<div style={{fontSize:10,color:'#f87171',...MONO,marginTop:6}}>Sign in to set alerts</div>}
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:10,...MONO,color:hasAlert?'#4ade80':'#f87171'}}>{hasAlert?'✓ Active: $'+hasAlert:!user?'Sign in required':''}</span>
+                  <button onClick={()=>{setAlertItem(null);setAlertPrice('');}} style={{fontSize:10,color:C.dim,...MONO,background:'none',border:'none',cursor:'pointer'}}>Cancel</button>
+                </div>
               </div>
             )}
           </div>
@@ -819,7 +824,7 @@ function BottomNav({tab,onChange,watchCount,user}){
     {id:'search',    icon:'🔍', label:'Search'},
     {id:'collection',icon:'📦', label:'Vault'},
     {id:'calendar',  icon:'📅', label:'Calendar'},
-    {id:'scan',      icon:'📷', label:'Scan'},
+    {id:'concerts',  icon:'🎸', label:'Live'},
     {id:'stats',     icon:'📊', label:'Stats'},
     {id:'profile',   icon:'👤', label:user?'Me':'Login'},
   ];
@@ -890,6 +895,7 @@ export default function MetalVault(){
   const [portfolio,setPortfolio]=useState(null);
 
   const [showImportModal,setShowImportModal]=useState(false);
+  const [showScanner,setShowScanner]=useState(false);
   const [collectionSummary,setCollectionSummary]=useState(null);
   const [pushEnabled,setPushEnabled]=useState(false);
   const [pushLoading,setPushLoading]=useState(false);
@@ -1086,7 +1092,10 @@ export default function MetalVault(){
   const connectDiscogs=async()=>{
     const r=await fetch('/api/discogs/oauth');
     const d=await r.json();
-    if(d.authorizeUrl)window.location.href=d.authorizeUrl;
+    if(d.authorizeUrl){window.location.href=d.authorizeUrl;}
+    else if(d.helpUrl){
+      if(window.confirm(d.error+'\n\nOpen Discogs developers page?')){window.open(d.helpUrl,'_blank');}
+    }
     else alert(d.error||'Failed to connect Discogs');
   };
 
@@ -1256,6 +1265,39 @@ export default function MetalVault(){
       </div>
 
       <BottomNav tab={tab} onChange={setTab} watchCount={watchlist.length} user={user}/>
+
+      {/* Floating scan button */}
+      {(tab==='feed'||tab==='search'||tab==='collection')&&(
+        <button onClick={()=>setShowScanner(true)}
+          style={{position:'fixed',bottom:80,right:16,zIndex:90,
+            width:52,height:52,borderRadius:'50%',
+            background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')',
+            border:'none',color:'#fff',cursor:'pointer',fontSize:22,
+            boxShadow:'0 4px 20px rgba(220,38,38,0.4)',
+            display:'flex',alignItems:'center',justifyContent:'center'}}>
+          📷
+        </button>
+      )}
+
+      {showScanner&&(
+        <div style={{position:'fixed',inset:0,background:'#000000cc',zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}
+          onClick={e=>e.target===e.currentTarget&&setShowScanner(false)}>
+          <div style={{background:C.bg2,borderRadius:'16px 16px 0 0',maxHeight:'92vh',overflow:'auto',paddingBottom:'env(safe-area-inset-bottom,24px)'}}>
+            <div style={{width:40,height:4,background:'#333',borderRadius:2,margin:'12px auto 0'}}/>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px 0'}}>
+              <div style={{...BEBAS,fontSize:22,color:C.text,letterSpacing:'0.06em'}}>BARCODE SCANNER</div>
+              <button onClick={()=>setShowScanner(false)}
+                style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:24,padding:'0 4px'}}>×</button>
+            </div>
+            <ScannerTab
+              onAddToCollection={addToCollection}
+              onAddToWatchlist={toggleWatch}
+              collection={collection}
+              watchlist={watchlist}
+            />
+          </div>
+        </div>
+      )}
 
       {showImportModal&&(
         <div style={{position:'fixed',inset:0,background:'#000000cc',zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}
