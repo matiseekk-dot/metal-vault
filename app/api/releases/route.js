@@ -1,135 +1,103 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 
-async function getToken() {
-  const id = process.env.SPOTIFY_CLIENT_ID;
-  const secret = process.env.SPOTIFY_CLIENT_SECRET;
-  if (!id || !secret) throw new Error('Spotify keys not set');
-  const r = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Authorization: 'Basic ' + Buffer.from(id + ':' + secret).toString('base64'),
-    },
-    body: 'grant_type=client_credentials',
-    cache: 'no-store',
-  });
-  const d = await r.json();
-  if (!d.access_token) throw new Error('Token error: ' + d.error + ' ' + (d.error_description||''));
-  return d.access_token;
+function authHeader() {
+  const key   = process.env.DISCOGS_KEY;
+  const secret= process.env.DISCOGS_SECRET;
+  const token = process.env.DISCOGS_TOKEN;
+  if (key && secret) return 'Discogs key=' + key + ', secret=' + secret;
+  if (token)         return 'Discogs token=' + token;
+  return null;
 }
 
-function norm(album, genre) {
-  return {
-    id:          album.id,
-    artist:      album.artists?.[0]?.name || 'Unknown',
-    album:       album.name,
-    cover:       album.images?.[0]?.url || null,
-    releaseDate: album.release_date || '',
-    genre:       genre || 'Metal',
-    spotifyUrl:  album.external_urls?.spotify || '',
-  };
-}
-
-// Verified Spotify IDs — tested April 2026
-const ARTISTS = [
-  ['0ybFZ2Ab08V8hueghSXm6E', 'Progressive Metal'],  // Opeth ✓
-  ['2ye2Wgw4gimLv2eAKyk1NB', 'Progressive Metal'],  // Mastodon ✓
-  ['0SwO7SWeDHJijQ3XNS7xEE', 'Death Metal'],        // Gojira ✓
-  ['7FBcuc1gsnv6Y1nwFtNRCb', 'Heavy Metal'],         // Trivium ✓
-  ['7bDLHytU8vohbiWbePGrdy', 'Death Metal'],         // Cannibal Corpse ✓
-  ['3qNVuliS40BLgXGxhdBdqu', 'Black Metal'],         // Darkthrone ✓
-  ['2nRr1crKaFqRFwWf6B4nqo', 'Groove Metal'],        // Lamb of God ✓
-  ['6CoZPxQSbAELFGZic4ZZxn', 'Thrash Metal'],        // Sepultura ✓
-  ['4sHJBKTqrPAqPFUBiH0Pix', 'Thrash Metal'],        // Kreator ✓
-  ['6yJ6QQ3Y5l0s0tn7b0arrO', 'Black Metal'],         // Behemoth ✓
-  ['4UgQ3EFa8fEeaIEg54uV5b', 'Heavy Metal'],         // Ghost ✓
-  ['3TOqt5oJwL9BE2NG7TexlAJ', 'Symphonic Metal'],    // Nightwish ✓
-  ['1DFr97A9HnbV3SKTJFu62M', 'Industrial Metal'],    // Rammstein ✓
-  ['776Uo845nYHJpNaStv1Ds4', 'Nu-Metal'],            // Slipknot ✓
-  ['2d0hyoQ5ynDBnkvAbJKORj', 'Progressive Metal'],   // Tool ✓
-  ['5M52tdBnJaKSvOpJGz8mfZ', 'Heavy Metal'],         // Black Sabbath ✓
-  ['7Ey4PD4MYsKc5I2dolUwbH', 'Groove Metal'],        // Pantera ✓
-  ['1bDdiDELAChkf4U8GlFqZr', 'Death Metal'],         // Cattle Decapitation ✓
-  ['4vGrte8FDu062Ntj0RsPiZ', 'Black Metal'],         // Mayhem ✓
-  ['5UeHMVV3rhiQ5DKCJe3sZy', 'Death Metal'],         // Morbid Angel ✓
+const METAL_STYLES = [
+  'Heavy Metal','Death Metal','Black Metal','Thrash Metal',
+  'Doom Metal','Progressive Metal','Power Metal','Metalcore',
+  'Groove Metal','Nu Metal','Symphonic Metal','Sludge Metal',
 ];
 
 const MOCK = [
-  {id:'m1',artist:'Opeth',album:'The Last Will and Testament',cover:null,releaseDate:'2024-11-01',genre:'Progressive Metal',spotifyUrl:''},
-  {id:'m2',artist:'Knocked Loose',album:"You Won't Go Before You're Supposed To",cover:null,releaseDate:'2024-05-10',genre:'Metalcore',spotifyUrl:''},
-  {id:'m3',artist:'Darkthrone',album:'It Beckons Us All',cover:null,releaseDate:'2024-03-22',genre:'Black Metal',spotifyUrl:''},
-  {id:'m4',artist:'Gatecreeper',album:'Dark Superstition',cover:null,releaseDate:'2024-03-01',genre:'Death Metal',spotifyUrl:''},
-  {id:'m5',artist:'Yob',album:'The Prophet',cover:null,releaseDate:'2024-05-17',genre:'Doom Metal',spotifyUrl:''},
-  {id:'m6',artist:'Blood Incantation',album:'Absolute Elsewhere',cover:null,releaseDate:'2023-10-06',genre:'Death Metal',spotifyUrl:''},
-  {id:'m7',artist:'Cannibal Corpse',album:'Chaos Horrific',cover:null,releaseDate:'2023-09-22',genre:'Death Metal',spotifyUrl:''},
-  {id:'m8',artist:'Imperial Triumphant',album:'Spirit of Ecstasy',cover:null,releaseDate:'2023-07-28',genre:'Avant-garde Metal',spotifyUrl:''},
-  {id:'m9',artist:'Cattle Decapitation',album:'Terrasite',cover:null,releaseDate:'2023-05-12',genre:'Death Metal',spotifyUrl:''},
-  {id:'m10',artist:'Tomb Mold',album:'The Enduring Spirit',cover:null,releaseDate:'2023-07-28',genre:'Death Metal',spotifyUrl:''},
-  {id:'m11',artist:'Behemoth',album:'I Loved You at Your Darkest',cover:null,releaseDate:'2018-10-05',genre:'Black Metal',spotifyUrl:''},
-  {id:'m12',artist:'Ghost',album:'Impera',cover:null,releaseDate:'2022-03-11',genre:'Heavy Metal',spotifyUrl:''},
-  {id:'m13',artist:'Mastodon',album:'Hushed and Grim',cover:null,releaseDate:'2021-10-29',genre:'Progressive Metal',spotifyUrl:''},
-  {id:'m14',artist:'Gojira',album:'Fortitude',cover:null,releaseDate:'2021-04-30',genre:'Death Metal',spotifyUrl:''},
-  {id:'m15',artist:'Tool',album:'Fear Inoculum',cover:null,releaseDate:'2019-08-30',genre:'Progressive Metal',spotifyUrl:''},
-  {id:'m16',artist:'Rammstein',album:'Zeit',cover:null,releaseDate:'2022-04-29',genre:'Industrial Metal',spotifyUrl:''},
-  {id:'m17',artist:'Slipknot',album:'The End, So Far',cover:null,releaseDate:'2022-09-30',genre:'Nu-Metal',spotifyUrl:''},
-  {id:'m18',artist:'Nightwish',album:'Human. :||: Nature.',cover:null,releaseDate:'2020-04-10',genre:'Symphonic Metal',spotifyUrl:''},
-  {id:'m19',artist:'Kreator',album:'Hate Ueber Alles',cover:null,releaseDate:'2022-06-03',genre:'Thrash Metal',spotifyUrl:''},
-  {id:'m20',artist:'Lamb of God',album:'Omens',cover:null,releaseDate:'2022-10-07',genre:'Groove Metal',spotifyUrl:''},
+  {id:'m1', artist:'Opeth',           album:'The Last Will and Testament',            cover:null, releaseDate:'2024-11-01', genre:'Progressive Metal', spotifyUrl:'', discogsUrl:''},
+  {id:'m2', artist:'Knocked Loose',   album:"You Won't Go Before You're Supposed To", cover:null, releaseDate:'2024-05-10', genre:'Metalcore',         spotifyUrl:'', discogsUrl:''},
+  {id:'m3', artist:'Darkthrone',      album:'It Beckons Us All',                     cover:null, releaseDate:'2024-03-22', genre:'Black Metal',        spotifyUrl:'', discogsUrl:''},
+  {id:'m4', artist:'Ghost',           album:'Skeletá',                               cover:null, releaseDate:'2025-03-07', genre:'Heavy Metal',        spotifyUrl:'', discogsUrl:''},
+  {id:'m5', artist:'Mastodon',        album:'The Toilet of Venus',                   cover:null, releaseDate:'2025-01-10', genre:'Progressive Metal',  spotifyUrl:'', discogsUrl:''},
+  {id:'m6', artist:'Cannibal Corpse', album:'Chaos Horrific',                        cover:null, releaseDate:'2023-09-22', genre:'Death Metal',        spotifyUrl:'', discogsUrl:''},
+  {id:'m7', artist:'Behemoth',        album:'I Loved You at Your Darkest',           cover:null, releaseDate:'2018-10-05', genre:'Black Metal',        spotifyUrl:'', discogsUrl:''},
+  {id:'m8', artist:'Rammstein',       album:'Zeit',                                  cover:null, releaseDate:'2022-04-29', genre:'Industrial Metal',   spotifyUrl:'', discogsUrl:''},
+  {id:'m9', artist:'Gojira',          album:'Fortitude',                             cover:null, releaseDate:'2021-04-30', genre:'Death Metal',        spotifyUrl:'', discogsUrl:''},
+  {id:'m10',artist:'Kreator',         album:'Hate Ueber Alles',                      cover:null, releaseDate:'2022-06-03', genre:'Thrash Metal',       spotifyUrl:'', discogsUrl:''},
+  {id:'m11',artist:'Trivium',         album:'In The Court of the Dragon',            cover:null, releaseDate:'2021-10-08', genre:'Heavy Metal',        spotifyUrl:'', discogsUrl:''},
+  {id:'m12',artist:'Nightwish',       album:'Yesterwynde',                           cover:null, releaseDate:'2024-09-20', genre:'Symphonic Metal',    spotifyUrl:'', discogsUrl:''},
+  {id:'m13',artist:'Cattle Decap.',   album:'Terrasite',                             cover:null, releaseDate:'2023-05-12', genre:'Death Metal',        spotifyUrl:'', discogsUrl:''},
+  {id:'m14',artist:'Lamb of God',     album:'Omens',                                 cover:null, releaseDate:'2022-10-07', genre:'Groove Metal',       spotifyUrl:'', discogsUrl:''},
+  {id:'m15',artist:'Tool',            album:'Fear Inoculum',                         cover:null, releaseDate:'2019-08-30', genre:'Progressive Metal',  spotifyUrl:'', discogsUrl:''},
 ];
 
 export async function GET() {
+  const auth = authHeader();
+
+  // No Discogs token → return mock
+  if (!auth) {
+    return NextResponse.json({ releases: MOCK, source: 'mock', notice: 'DISCOGS_TOKEN not configured' });
+  }
+
   try {
-    const token  = await getToken();
-    const seen   = new Set();
+    const headers = {
+      Authorization: auth,
+      'User-Agent': 'MetalVault/1.0 +https://metal-vault-six.vercel.app',
+    };
+
+    // Fetch new metal releases from Discogs (vinyl only, sorted by date)
+    const style = METAL_STYLES[Math.floor(Math.random() * 4)]; // vary style each request
+    const url = 'https://api.discogs.com/database/search'
+      + '?type=release'
+      + '&format=Vinyl'
+      + '&style=' + encodeURIComponent(style)
+      + '&sort=year'
+      + '&sort_order=desc'
+      + '&per_page=50'
+      + '&page=1';
+
+    const res = await fetch(url, { headers, cache: 'no-store' });
+    if (!res.ok) throw new Error('Discogs search ' + res.status);
+    const data = await res.json();
+
+    const seen = new Set();
     const results = [];
-    const errors  = [];
 
-    // Fetch all artists in parallel batches of 5
-    const batches = [];
-    for (let i = 0; i < ARTISTS.length; i += 5) {
-      batches.push(ARTISTS.slice(i, i + 5));
+    for (const item of (data.results || [])) {
+      // Parse "Artist - Album (Year)" format from Discogs title
+      const titleParts = (item.title || '').split(' - ');
+      const artist = titleParts[0]?.trim() || 'Unknown';
+      const album  = titleParts.slice(1).join(' - ').replace(/\s*\(\d{4}\)$/, '').trim() || item.title || '';
+      const key    = artist + '::' + album;
+
+      if (seen.has(key) || !artist || !album) continue;
+      seen.add(key);
+
+      const year = item.year || '';
+      // Use mid-year date so sorting works but display can show just year
+      const releaseDate = year ? year + '-06-01' : '';
+
+      results.push({
+        id:          String(item.id),
+        artist,
+        album,
+        cover:       item.cover_image && !item.cover_image.includes('spacer') ? item.cover_image : null,
+        releaseDate,
+        genre:       (item.style?.[0] || item.genre?.[0] || 'Metal'),
+        spotifyUrl:  '',
+        discogsUrl:  'https://www.discogs.com' + (item.uri || ''),
+        format:      item.format?.join(', ') || 'Vinyl',
+        country:     item.country || '',
+        label:       item.label?.[0] || '',
+      });
     }
 
-    for (const batch of batches) {
-      const batchResults = await Promise.allSettled(
-        batch.map(async ([artistId, genre]) => {
-          const r = await fetch(
-            'https://api.spotify.com/v1/artists/' + artistId + '/albums?include_groups=album&limit=5',
-            { headers: { Authorization: 'Bearer ' + token } }
-          );
-          if (!r.ok) throw new Error(artistId + ':' + r.status);
-          const d = await r.json();
-          return { items: d.items || [], genre };
-        })
-      );
+    if (results.length === 0) throw new Error('No results from Discogs');
 
-      for (const result of batchResults) {
-        if (result.status === 'fulfilled') {
-          for (const album of result.value.items) {
-            if (!seen.has(album.id)) {
-              seen.add(album.id);
-              results.push(norm(album, result.value.genre));
-            }
-          }
-        } else {
-          errors.push(result.reason?.message || 'unknown');
-        }
-      }
-    }
-
-    if (results.length === 0) {
-      const errSample = errors.slice(0, 3).join(', ');
-      throw new Error('No results from Spotify. Status codes: ' + errSample + '. Ensure Web API is enabled in Spotify Dashboard → App Settings.');
-    }
-
-    results.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
-    return NextResponse.json({
-      releases: results.slice(0, 80),
-      source: 'spotify',
-      count: results.length,
-      errors: errors.length,
-    });
+    return NextResponse.json({ releases: results, source: 'discogs', count: results.length });
 
   } catch (e) {
     return NextResponse.json({ releases: MOCK, source: 'mock', notice: e.message });

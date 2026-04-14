@@ -134,7 +134,7 @@ function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,o
           )}
         </div>
         <div style={{fontSize:10,color:C.dim,...MONO,marginTop:5}}>
-          {isPreorder?`🗓 Release: ${album.releaseDate}`:album.releaseDate}
+          {isPreorder?('🗓 '+(album.releaseDate||'')):(album.releaseDate?.length===10&&album.releaseDate.endsWith('-06-01')?album.releaseDate.slice(0,4):album.releaseDate||'')}
         </div>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
@@ -863,6 +863,7 @@ const FILTERS=[
   {id:'limited', label:'💎 Limited'},
   {id:'vinyl',   label:'💿 Has Vinyl'},
 ];
+const ALL_GENRES=['Heavy Metal','Death Metal','Black Metal','Thrash Metal','Doom Metal','Progressive Metal','Power Metal','Metalcore','Groove Metal','Nu-Metal','Symphonic Metal','Sludge Metal','Industrial Metal','Folk Metal','Post-Metal'];
 const SORT_OPTIONS=[
   {id:'date_desc', label:'Newest first'},
   {id:'date_asc',  label:'Oldest first'},
@@ -896,6 +897,8 @@ export default function MetalVault(){
 
   const [showImportModal,setShowImportModal]=useState(false);
   const [showScanner,setShowScanner]=useState(false);
+  const [genreInterests,setGenreInterests]=useState(()=>loadLS('mv_genre_interests',[]));
+  const [showGenrePicker,setShowGenrePicker]=useState(false);
   const [collectionSummary,setCollectionSummary]=useState(null);
   const [pushEnabled,setPushEnabled]=useState(false);
   const [pushLoading,setPushLoading]=useState(false);
@@ -1168,7 +1171,44 @@ export default function MetalVault(){
                 <option value="artist">A–Z</option>
               </select>
             </div>
-            {!feedLoading&&<div style={{padding:'8px 16px 4px',fontSize:10,color:C.dim,...MONO}}>{filtered.length} album{filtered.length!==1?'s':''}</div>}
+            {!feedLoading&&(
+              <div style={{padding:'4px 16px 4px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div style={{fontSize:10,color:C.dim,...MONO}}>{filtered.length} release{filtered.length!==1?'s':''}{genreInterests.length>0?' · filtered':''}</div>
+                <button onClick={()=>setShowGenrePicker(p=>!p)}
+                  style={{fontSize:10,color:genreInterests.length>0?C.accent:C.dim,...MONO,background:'none',border:'none',cursor:'pointer',padding:'2px 4px'}}>
+                  🎸 {genreInterests.length>0?genreInterests.length+' genres':'genres'}
+                </button>
+              </div>
+            )}
+            {showGenrePicker&&(
+              <div style={{padding:'8px 16px 12px',borderBottom:'1px solid '+C.border,background:C.bg2}}>
+                <div style={{fontSize:9,color:C.dim,...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:6}}>Tap to filter by genre</div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                  {ALL_GENRES.map(g=>{
+                    const active=genreInterests.includes(g);
+                    return(
+                      <button key={g} onClick={()=>{
+                        const next=active?genreInterests.filter(x=>x!==g):[...genreInterests,g];
+                        setGenreInterests(next);
+                        try{localStorage.setItem('mv_genre_interests',JSON.stringify(next));}catch{}
+                      }}
+                        style={{fontSize:10,padding:'4px 9px',borderRadius:20,...MONO,cursor:'pointer',
+                          background:active?C.accent+'22':C.bg3,
+                          color:active?C.accent:C.dim,
+                          border:'1px solid '+(active?C.accent+'66':C.border)}}>
+                        {g}
+                      </button>
+                    );
+                  })}
+                  {genreInterests.length>0&&(
+                    <button onClick={()=>{setGenreInterests([]);try{localStorage.removeItem('mv_genre_interests');}catch{}}}
+                      style={{fontSize:10,padding:'4px 9px',borderRadius:20,...MONO,cursor:'pointer',background:'#1a0000',color:'#f87171',border:'1px solid #7f1d1d'}}>
+                      ✕ Clear all
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {feedLoading&&<div style={{textAlign:'center',padding:'80px 24px',color:C.dim,...MONO}}><div style={{fontSize:32,marginBottom:12}}>⟳</div>Loading…</div>}
             {feedError&&<div style={{margin:'16px',background:'#1a0000',border:'1px solid '+C.accent+'44',borderRadius:8,padding:'12px 14px',color:'#f87171',fontSize:12,...MONO}}>⚠ {feedError}</div>}
             {!feedLoading&&!feedError&&(
@@ -1219,6 +1259,11 @@ export default function MetalVault(){
         {/* CALENDAR TAB */}
         {tab==='calendar'&&(
           <CalendarTab releases={releases} followedArtists={followedArtists}/>
+        )}
+
+        {/* CONCERTS TAB */}
+        {tab==='concerts'&&(
+          <ConcertsTab/>
         )}
 
         {/* STATS TAB */}
