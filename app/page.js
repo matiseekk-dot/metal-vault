@@ -365,7 +365,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
           onRemove={onRemoveWatch}
           onAlbumClick={onAlbumClick}
         />
-      )}}
+      )}
 
       {view==='vinyl'&&(
       <div style={{padding:'16px'}}>
