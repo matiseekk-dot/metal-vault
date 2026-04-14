@@ -786,32 +786,31 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
               </div>
             </div>
             {alertItem===id&&(
-              <div style={{borderTop:'1px solid '+C.border,padding:'10px 14px',background:'#1a0a00',borderRadius:'0 0 10px 10px'}}>
-                <div style={{fontSize:10,color:'#f5c842',...MONO,marginBottom:6}}>
-                  🔔 Alert when price drops below
-                </div>
-                <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
-                  <span style={{...BEBAS,fontSize:18,color:C.muted}}>$</span>
+              <div style={{borderTop:'1px solid '+C.border,padding:'10px 14px',background:'#1a0a00'}}>
+                <div style={{fontSize:10,color:'#f5c842',...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:6}}>🔔 Alert when price drops below</div>
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <span style={{fontSize:13,color:C.dim,...MONO,flexShrink:0}}>$</span>
                   <input type="number" value={alertPrice} onChange={e=>setAlertPrice(e.target.value)}
                     onKeyDown={e=>e.key==='Enter'&&saveAlert(album)}
                     placeholder="e.g. 25" autoFocus
-                    style={{flex:1,background:C.bg3,border:'1px solid '+C.border,
-                      borderRadius:8,color:C.text,padding:'10px 12px',fontSize:20,...MONO,outline:'none'}}/>
+                    style={{flex:1,background:C.bg3,border:'1px solid '+C.border,borderRadius:6,
+                      color:C.text,padding:'7px 10px',fontSize:16,...MONO,outline:'none'}}/>
                   <button onClick={()=>saveAlert(album)} disabled={alertSaving||!user}
-                    style={{padding:'10px 18px',background:!user||alertSaving?C.bg3:C.accent,
-                      border:'none',borderRadius:8,color:'#fff',cursor:!user?'default':'pointer',
-                      ...BEBAS,fontSize:17,flexShrink:0}}>
-                    {alertSaving?'…':'SET'}
+                    style={{background:!user||alertSaving?C.bg3:C.accent,border:'none',borderRadius:6,
+                      color:'#fff',padding:'7px 12px',cursor:!user?'default':'pointer',
+                      ...BEBAS,fontSize:15,flexShrink:0}}>
+                    {alertSaving?'…':'OK'}
                   </button>
+                  <button onClick={()=>{setAlertItem(null);setAlertPrice('');}}
+                    style={{background:'none',border:'1px solid '+C.border,borderRadius:6,
+                      color:C.dim,padding:'7px 10px',cursor:'pointer',...MONO,fontSize:10}}>✕</button>
                 </div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <span style={{fontSize:10,...MONO,color:hasAlert?'#4ade80':'#f87171'}}>{hasAlert?'✓ Active: $'+hasAlert:!user?'Sign in required':''}</span>
-                  <button onClick={()=>{setAlertItem(null);setAlertPrice('');}} style={{fontSize:10,color:C.dim,...MONO,background:'none',border:'none',cursor:'pointer'}}>Cancel</button>
-                </div>
+                {hasAlert&&<div style={{fontSize:10,color:'#4ade80',...MONO,marginTop:4}}>{'✓ Active: $'+hasAlert}</div>}
+                {!user&&<div style={{fontSize:10,color:'#f87171',...MONO,marginTop:4}}>Sign in to set alerts</div>}
               </div>
             )}
           </div>
-        )})}
+        )})}}
       </div>
     </div>
   );
