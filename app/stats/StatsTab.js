@@ -5,6 +5,7 @@ const C = {
   bg:'#0a0a0a',bg2:'#141414',bg3:'#1e1e1e',
   border:'#2a2a2a',accent:'#dc2626',
   text:'#f0f0f0',muted:'#888',dim:'#555',
+  green:'#4ade80',red:'#f87171',gold:'#f5c842',blue:'#60a5fa',
 };
 const MONO  = {fontFamily:"'Space Mono',monospace"};
 const BEBAS = {fontFamily:"'Bebas Neue',sans-serif"};
@@ -47,7 +48,7 @@ function BarChart({data,colorFn}){
 function PortfolioChart({snapshots}){
   if(!snapshots||snapshots.length<2)return(
     <div style={{textAlign:'center',padding:'24px 0',color:C.dim,...MONO,fontSize:11}}>
-      Add records to collection to see value history
+      Tracking market prices — chart appears after first sync
     </div>
   );
   const vals=snapshots.map(s=>Number(s.total_value)||0);
@@ -59,7 +60,7 @@ function PortfolioChart({snapshots}){
     return x+','+y;
   }).join(' ');
   const first=vals[0],last=vals[vals.length-1],gain=last-first;
-  const gainColor=gain>=0?'#4ade80':'#f87171';
+  const gainColor=gain>=0?C.green:C.red;
   return(
     <div>
       <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
@@ -89,8 +90,23 @@ function PortfolioChart({snapshots}){
           return<circle key={i} cx={parseFloat(parts[0])} cy={parseFloat(parts[1])} r="2.5" fill={C.accent}/>;
         })}
       </svg>
-      <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
     </div>
+  );
+}
+
+// ── Gain badge used in multiple places ──────────────────────────
+function GainBadge({paid,current}){
+  if(!paid||!current||paid<=0) return null;
+  const gain=current-paid;
+  const pct=((gain/paid)*100);
+  // Cap display at ±999% for credibility
+  const pctCapped=Math.max(-999,Math.min(999,pct));
+  const color=gain>=0?C.green:C.red;
+  const arrow=gain>=0?'▲':'▼';
+  return(
+    <span style={{fontSize:10,color,...MONO}}>
+      {arrow} {gain>=0?'+':''}{gain.toFixed(0)} ({pctCapped>=0?'+':''}{pctCapped.toFixed(1)}%)
+    </span>
   );
 }
 
@@ -102,43 +118,58 @@ export default function StatsTab({collection,watchlist}){
     fetch('/api/portfolio').then(r=>r.json()).then(d=>{setPortfolio(d);setLoading(false);}).catch(()=>setLoading(false));
   },[collection.length]);
 
-  // ── Financial stats ──────────────────────────────────────────
+  // ── Financial calculations ────────────────────────────────────
   const totalPaid    = collection.reduce((s,i)=>s+(Number(i.purchase_price)||0),0);
-  const totalCurrent = collection.reduce((s,i)=>s+(Number(i.median_price||i.current_price||i.purchase_price)||0),0);
-  const gain         = totalCurrent - totalPaid;
-  const gainPct      = totalPaid>0?((gain/totalPaid)*100).toFixed(1):0;
+  const totalCurrent = collection.reduce((s,i)=>s+(Number(i.median_price||i.current_price)||0),0);
+  // Fallback: if median price missing for an item, use purchase price
+  const totalValue   = collection.reduce((s,i)=>{
+    const market=Number(i.median_price||i.current_price);
+    const bought=Number(i.purchase_price)||0;
+    return s+(market>0?market:bought);
+  },0);
+  const priceCount   = collection.filter(i=>Number(i.median_price||i.current_price)>0).length;
+  const gain         = totalValue - totalPaid;
+  const gainPct      = totalPaid>0?((gain/totalPaid)*100):0;
+  // Cap for display credibility
+  const gainPctDisplay = Math.max(-999,Math.min(999,gainPct)).toFixed(1);
   const avgPrice     = collection.length>0?(totalPaid/collection.length).toFixed(0):0;
+
+  // ── Top gainers / losers ──────────────────────────────────────
+  const withGain = collection
+    .filter(i=>Number(i.purchase_price)>0&&Number(i.median_price||i.current_price)>0)
+    .map(i=>{
+      const paid=Number(i.purchase_price);
+      const now=Number(i.median_price||i.current_price);
+      const gainAbs=now-paid;
+      const gainPct=((gainAbs/paid)*100);
+      return {...i,gainAbs,gainPct};
+    });
+  const topGainer  = withGain.length>0?[...withGain].sort((a,b)=>b.gainPct-a.gainPct)[0]:null;
+  const topLoser   = withGain.length>1?[...withGain].sort((a,b)=>a.gainPct-b.gainPct)[0]:null;
 
   // Most valuable
   const mostValuable = [...collection].sort((a,b)=>(Number(b.median_price||b.current_price)||0)-(Number(a.median_price||a.current_price)||0))[0];
-
-  // Recently added
   const recentlyAdded = [...collection].sort((a,b)=>new Date(b.added_at||0)-new Date(a.added_at||0))[0];
 
-  // Top artist
   const artistMap={};
   collection.forEach(c=>{artistMap[c.artist]=(artistMap[c.artist]||0)+1;});
   const topArtist=Object.entries(artistMap).sort((a,b)=>b[1]-a[1])[0];
 
-  // Genre breakdown
   const genreMap={};
   collection.forEach(c=>{const g=c.genre||'Metal';genreMap[g]=(genreMap[g]||0)+1;});
   const genreData=Object.entries(genreMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([label,value])=>({label,value}));
 
-  // Format breakdown
   const fmtMap={};
   collection.forEach(c=>{const f=(c.format||'Vinyl').split('·')[0].trim();fmtMap[f]=(fmtMap[f]||0)+1;});
   const fmtData=Object.entries(fmtMap).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([label,value])=>({label,value}));
 
-  // Top 5 by value
   const topByValue=[...collection]
     .filter(i=>Number(i.median_price||i.current_price)>0)
     .sort((a,b)=>(Number(b.median_price||b.current_price)||0)-(Number(a.median_price||a.current_price)||0))
     .slice(0,5);
 
   const COLORS=['#dc2626','#f5c842','#4ade80','#60a5fa','#a78bfa','#f97316'];
-
-  const priceDataAvailable = collection.some(i=>i.median_price||i.current_price);
+  const priceDataAvailable = priceCount>0;
 
   return(
     <div style={{padding:'0 16px 16px'}}>
@@ -150,32 +181,113 @@ export default function StatsTab({collection,watchlist}){
         <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>YOUR METAL VAULT OVERVIEW</div>
       </div>
 
-      {/* Financial stats */}
+      {/* ═══ HERO: Collection Value Card ═══ */}
+      <div style={{
+        background:'linear-gradient(135deg,#1a0800 0%,#2a0a00 50%,#1a0800 100%)',
+        border:'1px solid '+C.accent,borderRadius:16,padding:'20px',marginBottom:16,
+        position:'relative',overflow:'hidden',
+      }}>
+        {/* decorative bg text */}
+        <div style={{position:'absolute',right:-10,top:-10,fontSize:80,opacity:0.04,...BEBAS,userSelect:'none'}}>$</div>
+        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',textTransform:'uppercase',marginBottom:8}}>
+          💰 Collection Value
+        </div>
+        {loading?(
+          <Skeleton h={52} r={6}/>
+        ):(
+          <div style={{...BEBAS,fontSize:54,color:C.text,lineHeight:1,marginBottom:6}}>
+            {totalValue>0?'$'+totalValue.toFixed(0):'—'}
+          </div>
+        )}
+        <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          {totalPaid>0&&!loading&&(
+            <span style={{
+              fontSize:15,
+              color:gain>=0?C.green:C.red,
+              ...MONO,fontWeight:'bold',
+            }}>
+              {gain>=0?'▲ +$':'▼ $'}{Math.abs(gain).toFixed(0)}
+              <span style={{fontSize:11,marginLeft:4,opacity:0.8}}>({gain>=0?'+':''}{gainPctDisplay}%)</span>
+            </span>
+          )}
+          {totalPaid>0&&!loading&&(
+            <span style={{fontSize:10,color:C.dim,...MONO}}>vs ${totalPaid.toFixed(0)} paid</span>
+          )}
+        </div>
+        {priceDataAvailable?(
+          <div style={{fontSize:9,color:C.dim,...MONO,marginTop:6,letterSpacing:'0.08em'}}>
+            Based on Discogs median prices · {priceCount}/{collection.length} records tracked
+          </div>
+        ):(
+          <div style={{fontSize:9,color:'#f5c84299',...MONO,marginTop:6}}>
+            Tracking market prices…
+          </div>
+        )}
+      </div>
+
+      {/* Secondary stats grid */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
-        <StatCard icon="📦" value={collection.length} label="Records" color={C.accent} loading={false}/>
-        <StatCard icon="★" value={watchlist.length} label="Watching" color="#f5c842" loading={false}/>
+        <StatCard icon="📦" value={collection.length} label="Records" color={C.accent}/>
+        <StatCard icon="★" value={watchlist.length} label="Watching" color={C.gold}/>
         <StatCard
-          icon="💰"
+          icon="💳"
           value={totalPaid>0?'$'+totalPaid.toFixed(0):'—'}
           label="Total paid"
-          color="#4ade80"
+          color={C.muted}
           loading={loading}
         />
         <StatCard
-          icon={gain>=0?'📈':'📉'}
-          value={totalCurrent>0?(gain>=0?'+':'')+'$'+gain.toFixed(0):'—'}
-          label={'Est. gain '+gainPct+'%'}
-          color={gain>=0?'#4ade80':'#f87171'}
+          icon="📊"
+          value={avgPrice>0?'$'+avgPrice:'—'}
+          label="Avg per record"
+          color={C.blue}
           loading={loading}
         />
       </div>
 
-      {/* Price notice if no data */}
+      {/* Top Gainers / Losers */}
+      {(topGainer||topLoser)&&(
+        <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>
+            📈 Market movers
+          </div>
+          {topGainer&&(
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:topLoser?10:0}}>
+              <div>
+                <div style={{fontSize:9,color:C.green,...MONO,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>▲ Top gainer</div>
+                <div style={{fontSize:12,color:C.text,...MONO,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{topGainer.artist}</div>
+                <div style={{fontSize:10,color:C.dim,...MONO,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{topGainer.album}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{...BEBAS,fontSize:20,color:C.green,lineHeight:1}}>+{topGainer.gainPct.toFixed(0)}%</div>
+                <div style={{fontSize:10,color:C.green,...MONO}}>+${topGainer.gainAbs.toFixed(0)}</div>
+                <div style={{fontSize:9,color:C.dim,...MONO}}>${Number(topGainer.purchase_price).toFixed(0)} → ${Number(topGainer.median_price||topGainer.current_price).toFixed(0)}</div>
+              </div>
+            </div>
+          )}
+          {topLoser&&topLoser.gainPct<0&&(
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid '+C.border,paddingTop:10}}>
+              <div>
+                <div style={{fontSize:9,color:C.red,...MONO,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>▼ Biggest drop</div>
+                <div style={{fontSize:12,color:C.text,...MONO,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{topLoser.artist}</div>
+                <div style={{fontSize:10,color:C.dim,...MONO,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{topLoser.album}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{...BEBAS,fontSize:20,color:C.red,lineHeight:1}}>{topLoser.gainPct.toFixed(0)}%</div>
+                <div style={{fontSize:10,color:C.red,...MONO}}>${topLoser.gainAbs.toFixed(0)}</div>
+                <div style={{fontSize:9,color:C.dim,...MONO}}>${Number(topLoser.purchase_price).toFixed(0)} → ${Number(topLoser.median_price||topLoser.current_price).toFixed(0)}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* No price data notice */}
       {collection.length>0&&!priceDataAvailable&&(
-        <div style={{background:'#1a1a00',border:'1px solid #55550033',borderRadius:8,padding:'10px 14px',marginBottom:16}}>
-          <div style={{fontSize:11,color:'#f5c842',...MONO,lineHeight:1.5}}>
-            💡 Price data loads automatically when you add records from the album modal.<br/>
-            <span style={{color:C.dim,fontSize:10}}>Current values show purchase prices only.</span>
+        <div style={{background:'#1a1a00',border:'1px solid #55550044',borderRadius:8,padding:'12px 14px',marginBottom:16}}>
+          <div style={{fontSize:12,color:C.gold,...MONO,marginBottom:4}}>⏳ First price update in progress</div>
+          <div style={{fontSize:10,color:C.dim,...MONO,lineHeight:1.6}}>
+            Market values load automatically.<br/>Add records from the album modal to start tracking.
           </div>
         </div>
       )}
@@ -188,31 +300,49 @@ export default function StatsTab({collection,watchlist}){
         </div>
       )}
 
-      {/* Top insights */}
-      {(topArtist||mostValuable||recentlyAdded||avgPrice>0)&&(
+      {/* Top by value */}
+      {topByValue.length>0&&(
+        <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>
+            💎 Top by market value
+          </div>
+          {topByValue.map((item,i)=>{
+            const paid=Number(item.purchase_price)||0;
+            const now=Number(item.median_price||item.current_price)||0;
+            const g=paid>0?now-paid:null;
+            const gPct=paid>0?((g/paid)*100).toFixed(0):null;
+            return(
+              <div key={item.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:i<topByValue.length-1?'1px solid '+C.border:'none'}}>
+                <div style={{flex:1,minWidth:0,marginRight:12}}>
+                  <div style={{fontSize:12,color:C.text,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.artist}</div>
+                  <div style={{fontSize:10,color:C.dim,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.album}</div>
+                  {paid>0&&<div style={{fontSize:10,color:C.dim,...MONO}}>paid ${paid.toFixed(0)}</div>}
+                </div>
+                <div style={{textAlign:'right',flexShrink:0}}>
+                  <div style={{...BEBAS,fontSize:20,color:C.gold,lineHeight:1}}>${now.toFixed(0)}</div>
+                  {g!==null&&(
+                    <div style={{fontSize:10,color:g>=0?C.green:C.red,...MONO}}>
+                      {g>=0?'+':''}{g.toFixed(0)} ({g>=0?'+':''}{gPct}%)
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Insights */}
+      {(topArtist||mostValuable||recentlyAdded)&&(
         <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
           <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>Insights</div>
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
             {topArtist&&(
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <div>
-                  <span style={{fontSize:11,color:C.dim,...MONO}}>🔥 Top artist</span>
-                  <span style={{fontSize:9,background:'#dc262622',color:C.accent,padding:'1px 6px',borderRadius:8,...MONO,marginLeft:6}}>Most owned</span>
-                </div>
+                <span style={{fontSize:11,color:C.dim,...MONO}}>🔥 Top artist</span>
                 <div style={{textAlign:'right'}}>
                   <div style={{fontSize:13,color:C.text,...MONO}}>{topArtist[0]}</div>
                   <div style={{fontSize:10,color:C.dim,...MONO}}>{topArtist[1]} records</div>
-                </div>
-              </div>
-            )}
-            {mostValuable&&(Number(mostValuable.median_price||mostValuable.current_price)>0)&&(
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid '+C.border,paddingTop:10}}>
-                <div>
-                  <span style={{fontSize:11,color:C.dim,...MONO}}>💎 Most valuable</span>
-                </div>
-                <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:13,color:'#f5c842',...MONO}}>{'$'+Number(mostValuable.median_price||mostValuable.current_price).toFixed(0)}</div>
-                  <div style={{fontSize:10,color:C.dim,...MONO,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{mostValuable.artist}</div>
                 </div>
               </div>
             )}
@@ -220,39 +350,38 @@ export default function StatsTab({collection,watchlist}){
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid '+C.border,paddingTop:10}}>
                 <span style={{fontSize:11,color:C.dim,...MONO}}>🆕 Recently added</span>
                 <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:13,color:C.text,...MONO,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{recentlyAdded.artist}</div>
+                  <div style={{fontSize:12,color:C.text,...MONO,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{recentlyAdded.artist}</div>
                   <div style={{fontSize:10,color:C.dim,...MONO}}>{(recentlyAdded.added_at||'').split('T')[0]}</div>
                 </div>
-              </div>
-            )}
-            {avgPrice>0&&(
-              <div style={{display:'flex',justifyContent:'space-between',borderTop:'1px solid '+C.border,paddingTop:10}}>
-                <span style={{fontSize:11,color:C.dim,...MONO}}>📊 Avg. purchase price</span>
-                <span style={{fontSize:13,color:C.text,...MONO}}>${avgPrice}</span>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Top by value */}
-      {topByValue.length>0&&(
-        <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>Top by value</div>
-          {topByValue.map((item,i)=>(
-            <div key={item.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:i<topByValue.length-1?'1px solid '+C.border:'none'}}>
-              <div style={{flex:1,minWidth:0,marginRight:12}}>
-                <div style={{fontSize:12,color:C.text,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.artist}</div>
-                <div style={{fontSize:10,color:C.dim,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.album}</div>
-              </div>
-              <div style={{textAlign:'right',flexShrink:0}}>
-                <div style={{...BEBAS,fontSize:18,color:'#f5c842',lineHeight:1}}>{Number(item.median_price||item.current_price).toFixed(0)}</div>
-                <div style={{fontSize:8,color:C.dim,...MONO}}>USD</div>
-              </div>
-            </div>
+      {/* 🔒 Premium teaser */}
+      <div style={{
+        background:'linear-gradient(135deg,#0a0a1a,#14142a)',
+        border:'1px solid #3333aa55',borderRadius:12,padding:'16px',marginBottom:16,
+        position:'relative',overflow:'hidden',
+      }}>
+        <div style={{position:'absolute',right:12,top:12,fontSize:20,opacity:0.3}}>🔒</div>
+        <div style={{fontSize:10,color:'#818cf8',...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:8}}>
+          Advanced Analytics
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
+          {['📈 Price history per record','🔔 Smart price alerts','📊 30d / 90d portfolio change','🏆 Rarity score per pressing'].map((f,i)=>(
+            <div key={i} style={{fontSize:11,color:'#6366f1',...MONO,opacity:0.8}}>{f}</div>
           ))}
         </div>
-      )}
+        <div style={{
+          background:'#4f46e5',borderRadius:8,padding:'8px 14px',
+          fontSize:11,color:'#fff',...BEBAS,letterSpacing:'0.1em',
+          textAlign:'center',opacity:0.85,
+        }}>
+          Coming soon — Metal Vault Pro
+        </div>
+      </div>
 
       {/* Genre chart */}
       {genreData.length>0&&(
@@ -266,7 +395,7 @@ export default function StatsTab({collection,watchlist}){
       {fmtData.length>1&&(
         <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
           <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>Vinyl formats</div>
-          <BarChart data={fmtData} colorFn={()=>'#60a5fa'}/>
+          <BarChart data={fmtData} colorFn={()=>C.blue}/>
         </div>
       )}
 

@@ -87,12 +87,12 @@ function StatsBar({releases}){
   const today=new Date();
   const newCount = releases.filter(r=>{
     const d=new Date(r.releaseDate);
-    return !isNaN(d)&&(today-d)/(1000*60*60*24)<60&&d<=today;
+    return !isNaN(d)&&(today-d)/(1000*60*60*24)<365&&d<=today;
   }).length;
   const preorders = releases.filter(r=>new Date(r.releaseDate)>today).length;
   return(
     <div style={{display:'flex',borderBottom:'1px solid '+C.border,background:C.bg2}}>
-      {[{icon:'💿',val:releases.length,label:'releases'},{icon:'🆕',val:newCount,label:'← 60 days'},{icon:'⏳',val:preorders,label:'pre-order'}].map(s=>(
+      {[{icon:'💿',val:releases.length,label:'releases'},{icon:'🆕',val:newCount,label:'← 365 days'},{icon:'⏳',val:preorders,label:'pre-order'}].map(s=>(
         <div key={s.label} style={{flex:1,textAlign:'center',padding:'10px 4px'}}>
           <div style={{fontSize:11,...MONO,color:C.dim}}>{s.icon}</div>
           <div style={{...BEBAS,fontSize:22,color:C.accent,lineHeight:1}}>{s.val}</div>
@@ -134,8 +134,20 @@ function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,o
           )}
         </div>
         <div style={{fontSize:10,color:C.dim,...MONO,marginTop:5}}>
-          {isPreorder?('🗓 '+(album.releaseDate||'')):(album.releaseDate?.length===10&&album.releaseDate.endsWith('-06-01')?album.releaseDate.slice(0,4):album.releaseDate||'')}
+          {isPreorder?('🗓 '+(album.releaseDate||'')):(album.releaseDate||'')}
         </div>
+        {(album.lowest_price||album.median_price)?(
+          <div style={{display:'flex',gap:6,alignItems:'center',marginTop:4,flexWrap:'wrap'}}>
+            {album.lowest_price>0&&(
+              <span style={{fontSize:10,color:'#4ade80',...MONO}}>from ${Number(album.lowest_price).toFixed(0)}</span>
+            )}
+            {album.median_price>0&&(
+              <span style={{fontSize:10,color:'#aaa',...MONO}}>median ${Number(album.median_price).toFixed(0)}</span>
+            )}
+          </div>
+        ):(
+          <div style={{fontSize:9,color:'#444',...MONO,marginTop:3}}>price unknown</div>
+        )}
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
         <button onClick={e=>{e.stopPropagation();onWatchToggle(album);}}
@@ -320,21 +332,62 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
   return(
     <div style={{padding:'0 0 16px'}}>
       {/* Summary */}
-      {summary&&summary.itemCount>0&&(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:0,borderBottom:'1px solid '+C.border}}>
-          {[
-            {l:'Records',v:summary.itemCount},
-            {l:'Paid',v:summary.totalPurchased>0?`${summary.totalPurchased.toFixed(0)} `:'—'},
-            {l:'Gain',v:summary.gain!==0?`${summary.gain>0?'+':''}${summary.gain.toFixed(0)}`:'—',
-              color:summary.gain>0?'#4ade80':summary.gain<0?'#f87171':C.muted},
-          ].map(s=>(
-            <div key={s.l} style={{textAlign:'center',padding:'14px 8px',borderRight:'1px solid '+C.border}}>
-              <div style={{...BEBAS,fontSize:20,color:s.color||C.accent,lineHeight:1}}>{s.v}</div>
-              <div style={{fontSize:9,color:C.dim,...MONO,letterSpacing:'0.1em',textTransform:'uppercase',marginTop:3}}>{s.l}</div>
+      {/* ═══ HERO: Collection Value ═══ */}
+      {summary&&summary.itemCount>0&&(()=>{
+        const totalVal=summary.totalCurrent>0?summary.totalCurrent:(summary.totalPurchased||0);
+        const paid=summary.totalPurchased||0;
+        const gain=summary.gain||0;
+        const gainPct=paid>0?Math.max(-999,Math.min(999,(gain/paid)*100)):0;
+        const gainColor=gain>=0?'#4ade80':'#f87171';
+        const priceTracked=collection.filter(i=>Number(i.median_price||i.current_price)>0).length;
+        return(
+          <div style={{padding:'12px 16px',borderBottom:'1px solid '+C.border}}>
+            {/* Big value card */}
+            <div style={{
+              background:'linear-gradient(135deg,#1a0800,#2a0a00,#1a0800)',
+              border:'1px solid '+C.accent,borderRadius:14,padding:'16px',
+              marginBottom:10,position:'relative',overflow:'hidden',
+            }}>
+              <div style={{position:'absolute',right:-8,top:-8,fontSize:70,...BEBAS,opacity:0.04,userSelect:'none'}}>$</div>
+              <div style={{fontSize:9,color:C.accent,...MONO,letterSpacing:'0.2em',textTransform:'uppercase',marginBottom:4}}>
+                💰 Collection Value
+              </div>
+              <div style={{...BEBAS,fontSize:44,color:C.text,lineHeight:1,marginBottom:6}}>
+                {totalVal>0?'$'+totalVal.toFixed(0):'—'}
+              </div>
+              <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+                {paid>0&&totalVal>0&&(
+                  <span style={{fontSize:14,color:gainColor,...MONO,fontWeight:'bold'}}>
+                    {gain>=0?'▲ +$':'▼ -$'}{Math.abs(gain).toFixed(0)}
+                    <span style={{fontSize:10,opacity:0.8,marginLeft:4}}>
+                      ({gain>=0?'+':''}{gainPct.toFixed(1)}%)
+                    </span>
+                  </span>
+                )}
+                {paid>0&&<span style={{fontSize:10,color:C.dim,...MONO}}>paid ${paid.toFixed(0)}</span>}
+              </div>
+              <div style={{fontSize:9,color:C.dim,...MONO,marginTop:5}}>
+                {priceTracked>0
+                  ?'Based on Discogs median · '+priceTracked+'/'+collection.length+' tracked'
+                  :'⏳ Tracking market prices…'}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+            {/* 3-col mini stats */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
+              {[
+                {l:'Records',v:summary.itemCount,c:C.accent},
+                {l:'Paid',v:paid>0?'$'+paid.toFixed(0):'—',c:C.muted},
+                {l:'Gain',v:gain!==0?(gain>0?'+$':'-$')+Math.abs(gain).toFixed(0):'—',c:gainColor},
+              ].map(s=>(
+                <div key={s.l} style={{background:C.bg2,borderRadius:8,padding:'8px',textAlign:'center',border:'1px solid '+C.border}}>
+                  <div style={{...BEBAS,fontSize:17,color:s.c,lineHeight:1}}>{s.v}</div>
+                  <div style={{fontSize:8,color:C.dim,...MONO,textTransform:'uppercase',letterSpacing:'0.1em',marginTop:2}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Portfolio chart */}
       {portfolio?.snapshots?.length>=2&&(
@@ -367,7 +420,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
         />
       )}
 
-      {view==='vinyl'&&(
+            {view==='vinyl'&&(
       <div style={{padding:'16px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO}}>
@@ -437,9 +490,22 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
                     <div style={{display:'flex',gap:6,marginTop:5,flexWrap:'wrap',alignItems:'center'}}>
                       {item.grade&&item.grade!=='NM'&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:4,background:GRADE_COLOR[item.grade]+'22',color:GRADE_COLOR[item.grade],...MONO}}>{item.grade}</span>}
                       {item.format&&item.format!=='Vinyl'&&<span style={{fontSize:9,color:C.dim,...MONO,padding:'1px 5px',background:C.bg3,borderRadius:4}}>{item.format}</span>}
-                      {item.purchase_price>0&&<span style={{fontSize:10,color:'#f5c842',...MONO}}>💰 ${Number(item.purchase_price).toFixed(0)}</span>}
-                      {item.median_price>0&&<span style={{fontSize:10,color:'#4ade80',...MONO}}>📈 ${Number(item.median_price).toFixed(0)}</span>}
-                      {item.current_price>0&&!item.median_price&&<span style={{fontSize:10,color:'#60a5fa',...MONO}}>🏷 ${Number(item.current_price).toFixed(0)}</span>}
+                      {(()=>{
+                        const paid=Number(item.purchase_price)||0;
+                        const now=Number(item.median_price||item.current_price)||0;
+                        const gain=paid>0&&now>0?now-paid:null;
+                        const gainPct=gain!==null?Math.max(-999,Math.min(999,(gain/paid)*100)):null;
+                        const gainColor=gain>=0?'#4ade80':'#f87171';
+                        return(<>
+                          {paid>0&&<span style={{fontSize:10,color:'#f5c842',...MONO}}>💳 ${paid.toFixed(0)}</span>}
+                          {now>0&&<span style={{fontSize:10,color:'#aaa',...MONO}}>→</span>}
+                          {now>0&&<span style={{fontSize:10,color:'#4ade80',...MONO}}>📈 ${now.toFixed(0)}</span>}
+                          {gain!==null&&<span style={{fontSize:10,color:gainColor,...MONO,fontWeight:'bold'}}>
+                            {gain>=0?'▲':''}{gain>=0?'+':''}${gain.toFixed(0)} ({gainPct>=0?'+':''}{gainPct.toFixed(0)}%)
+                          </span>}
+                          {now===0&&paid>0&&<span style={{fontSize:9,color:'#555',...MONO}}>tracking…</span>}
+                        </>);
+                      })()}
                     </div>
                     {/* Purchase price edit */}
                     {showAlertForm===item.id+'_price'?(
@@ -761,7 +827,7 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {sorted.map(album=>{
-          const id=album.id||album.album_id;
+          const id=String(album.album_id||album.id);
           const hasAlert=alertDone[id];
           return(
           <div key={id} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,overflow:'hidden'}}>
@@ -796,18 +862,19 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
                     onKeyDown={e=>e.key==='Enter'&&saveAlert(album)}
                     placeholder="e.g. 25" autoFocus
                     style={{flex:1,background:C.bg3,border:'1px solid '+C.border,
-                      borderRadius:8,color:C.text,padding:'10px 12px',fontSize:20,...MONO,outline:'none'}}/>
+                      borderRadius:6,color:C.text,padding:'7px 10px',fontSize:16,...MONO,outline:'none'}}/>
                   <button onClick={()=>saveAlert(album)} disabled={alertSaving||!user}
                     style={{padding:'10px 18px',background:!user||alertSaving?C.bg3:C.accent,
                       border:'none',borderRadius:8,color:'#fff',cursor:!user?'default':'pointer',
                       ...BEBAS,fontSize:17,flexShrink:0}}>
-                    {alertSaving?'…':'SET'}
+                    {alertSaving?'…':'OK'}
                   </button>
+                  <button onClick={()=>{setAlertItem(null);setAlertPrice('');}}
+                    style={{background:'none',border:'1px solid '+C.border,borderRadius:6,
+                      color:C.dim,padding:'7px 10px',cursor:'pointer',...MONO,fontSize:10,flexShrink:0}}>✕</button>
                 </div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <span style={{fontSize:10,...MONO,color:hasAlert?'#4ade80':'#f87171'}}>{hasAlert?'✓ Active: $'+hasAlert:!user?'Sign in required':''}</span>
-                  <button onClick={()=>{setAlertItem(null);setAlertPrice('');}} style={{fontSize:10,color:C.dim,...MONO,background:'none',border:'none',cursor:'pointer'}}>Cancel</button>
-                </div>
+                {hasAlert&&<div style={{fontSize:10,color:'#4ade80',...MONO,marginTop:4}}>{'✓ Alert set at $'+hasAlert}</div>}
+                {!user&&<div style={{fontSize:10,color:'#f87171',...MONO,marginTop:4}}>Sign in to set alerts</div>}
               </div>
             )}
           </div>
@@ -1108,12 +1175,12 @@ export default function MetalVault(){
   const today=new Date();
   const filtered=releases.filter(r=>{
     const rd=new Date(r.releaseDate);
-    const isPreorder=rd>today;
+    const isPreorder=(rd>today)||r.preorder===true;
     const isNew=(today-rd)/(1000*60*60*24)<45&&!isPreorder;
     const vinyl=vinylCache[r.id];
     if(filter==='new')     return isNew;
-    if(filter==='preorder')return isPreorder;
-    if(filter==='limited') return vinyl?.hasLimited===true;
+    if(filter==='preorder')return isPreorder||r.preorder;
+    if(filter==='limited') return vinyl?.hasLimited===true||r.limited===true;
     if(filter==='vinyl')   return vinyl?.hasVinyl===true;
     return true;
   }).filter(r=>!search||r.artist.toLowerCase().includes(search.toLowerCase())||r.album.toLowerCase().includes(search.toLowerCase()))
@@ -1319,8 +1386,19 @@ export default function MetalVault(){
             background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')',
             border:'none',color:'#fff',cursor:'pointer',fontSize:22,
             boxShadow:'0 4px 20px rgba(220,38,38,0.4)',
-            display:'flex',alignItems:'center',justifyContent:'center'}}>
+            display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}
+            className="scan-fab">
           📷
+          <span style={{
+            position:'absolute',right:'110%',top:'50%',transform:'translateY(-50%)',
+            background:'#1a1a1a',border:'1px solid #333',borderRadius:8,
+            padding:'6px 10px',fontSize:10,color:'#aaa',
+            fontFamily:"'Space Mono',monospace",
+            whiteSpace:'nowrap',pointerEvents:'none',
+            opacity:0,transition:'opacity 0.2s',
+          }} className="scan-tip">
+            Scan vinyl → check market value instantly
+          </span>
         </button>
       )}
 
