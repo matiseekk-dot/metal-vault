@@ -1,140 +1,177 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 
-function discogsAuth() {
-  const key = process.env.DISCOGS_KEY;
-  const secret = process.env.DISCOGS_SECRET;
-  const token = process.env.DISCOGS_TOKEN;
-  if (key && secret) return 'Discogs key=' + key + ', secret=' + secret;
-  if (token) return 'Discogs token=' + token;
+const UA = { 'User-Agent': 'MetalVault/1.0 +https://metal-vault-six.vercel.app' };
+
+function auth() {
+  const k = process.env.DISCOGS_KEY, s = process.env.DISCOGS_SECRET, t = process.env.DISCOGS_TOKEN;
+  if (k && s) return 'Discogs key=' + k + ', secret=' + s;
+  if (t)      return 'Discogs token=' + t;
   return null;
 }
 
-const HEADERS = { 'User-Agent': 'MetalVault/1.0 +https://metal-vault-six.vercel.app' };
+function parseDate(str) {
+  if (!str) return '';
+  const s = String(str).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}$/.test(s))        return s + '-01';
+  if (/^\d{4}$/.test(s))              return '';  // year-only → not reliable for preorder
+  // "15 Apr 2026" or "Apr 2026"
+  const d = new Date(s);
+  if (!isNaN(d)) return d.toISOString().split('T')[0];
+  return '';
+}
 
-const MOCK = [
-  {id:'m1',artist:'Opeth',album:'The Last Will and Testament',cover:null,releaseDate:'2024-11-01',genre:'Progressive Metal',preorder:false},
-  {id:'m2',artist:'Knocked Loose',album:"You Won't Go Before You're Supposed To",cover:null,releaseDate:'2024-05-10',genre:'Metalcore',preorder:false},
-  {id:'m3',artist:'Ghost',album:'Skeleta',cover:null,releaseDate:'2025-03-07',genre:'Heavy Metal',preorder:false},
-  {id:'m4',artist:'Mastodon',album:'The Toilet of Venus',cover:null,releaseDate:'2025-01-10',genre:'Progressive Metal',preorder:false},
-  {id:'m5',artist:'Darkthrone',album:'It Beckons Us All',cover:null,releaseDate:'2024-03-22',genre:'Black Metal',preorder:false},
-  {id:'m6',artist:'Gojira',album:'Fortitude',cover:null,releaseDate:'2021-04-30',genre:'Death Metal',preorder:false},
-  {id:'m7',artist:'Rammstein',album:'Zeit',cover:null,releaseDate:'2022-04-29',genre:'Industrial Metal',preorder:false},
-  {id:'m8',artist:'Cannibal Corpse',album:'Chaos Horrific',cover:null,releaseDate:'2023-09-22',genre:'Death Metal',preorder:false},
-];
-
-// Fetch full release details to get proper date
-async function getReleaseFull(id, auth) {
+async function getDetail(id, token) {
   try {
-    const r = await fetch('https://api.discogs.com/releases/' + id, {
-      headers: { ...HEADERS, Authorization: auth },
-      cache: 'no-store',
-    });
-    if (!r.ok) return null;
-    return await r.json();
+    const r = await fetch('https://api.discogs.com/releases/' + id,
+      { headers: { ...UA, Authorization: token }, cache: 'no-store' });
+    return r.ok ? r.json() : null;
   } catch { return null; }
 }
 
+const MOCK = [
+  {id:'m1',artist:'Opeth',album:'The Last Will and Testament',cover:null,releaseDate:'2024-11-01',genre:'Progressive Metal',preorder:false,limited:false},
+  {id:'m2',artist:'Knocked Loose',album:"You Won't Go Before You're Supposed To",cover:null,releaseDate:'2024-05-10',genre:'Metalcore',preorder:false,limited:false},
+  {id:'m3',artist:'Ghost',album:'Skeleta',cover:null,releaseDate:'2025-03-07',genre:'Heavy Metal',preorder:false,limited:false},
+  {id:'m4',artist:'Mastodon',album:'The Toilet of Venus',cover:null,releaseDate:'2025-01-10',genre:'Progressive Metal',preorder:false,limited:false},
+  {id:'m5',artist:'Darkthrone',album:'It Beckons Us All',cover:null,releaseDate:'2024-03-22',genre:'Black Metal',preorder:false,limited:false},
+  {id:'m6',artist:'Gojira',album:'Fortitude',cover:null,releaseDate:'2021-04-30',genre:'Death Metal',preorder:false,limited:false},
+];
+
+const METAL_STYLES = [
+  'Heavy Metal','Death Metal','Black Metal','Thrash Metal',
+  'Doom Metal','Progressive Metal','Power Metal','Metalcore',
+];
+
 export async function GET() {
-  const auth = discogsAuth();
-  if (!auth) return NextResponse.json({ releases: MOCK, source: 'mock', notice: 'DISCOGS_TOKEN not configured' });
+  const token = auth();
+  if (!token) return NextResponse.json({ releases: MOCK, source: 'mock' });
+
+  const headers  = { ...UA, Authorization: token };
+  const todayStr = new Date().toISOString().split('T')[0];
+  const today    = new Date(todayStr);
+  const curYear  = today.getFullYear();
+  // 45-day window: items added to Discogs after this date are "very recent"
+  const recentCutoff = new Date(today.getTime() - 45*24*60*60*1000).toISOString().split('T')[0];
 
   try {
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const lastYear = currentYear - 1;
-
-    // Search for new metal vinyl releases from this year and last
+    // ── Search queries ──────────────────────────────────────────
+    // A: current year, sorted by date_added → catches recently announced / pre-orders
+    // B: current year, sorted by year desc → standard new releases
+    // C: last year, date_added → still-relevant 2025 releases
     const fetches = [
-      // This year
-      fetch(`https://api.discogs.com/database/search?type=release&format=Vinyl&style=Heavy+Metal&year=${currentYear}&sort=date_added&sort_order=desc&per_page=25&page=1`,
-        { headers: { ...HEADERS, Authorization: auth }, cache: 'no-store' }),
-      fetch(`https://api.discogs.com/database/search?type=release&format=Vinyl&style=Death+Metal&year=${currentYear}&sort=date_added&sort_order=desc&per_page=25&page=1`,
-        { headers: { ...HEADERS, Authorization: auth }, cache: 'no-store' }),
-      fetch(`https://api.discogs.com/database/search?type=release&format=Vinyl&style=Black+Metal&year=${currentYear}&sort=date_added&sort_order=desc&per_page=25&page=1`,
-        { headers: { ...HEADERS, Authorization: auth }, cache: 'no-store' }),
-      // Last year
-      fetch(`https://api.discogs.com/database/search?type=release&format=Vinyl&style=Thrash+Metal&year=${lastYear}&sort=date_added&sort_order=desc&per_page=15&page=1`,
-        { headers: { ...HEADERS, Authorization: auth }, cache: 'no-store' }),
-      fetch(`https://api.discogs.com/database/search?type=release&format=Vinyl&style=Progressive+Metal&year=${lastYear}&sort=date_added&sort_order=desc&per_page=15&page=1`,
-        { headers: { ...HEADERS, Authorization: auth }, cache: 'no-store' }),
+      ...METAL_STYLES.slice(0,6).map(style =>
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear}&sort=date_added&sort_order=desc&per_page=15&page=1`
+      ),
+      ...METAL_STYLES.slice(0,4).map(style =>
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear}&sort=year&sort_order=desc&per_page=10&page=1`
+      ),
+      ...METAL_STYLES.slice(0,3).map(style =>
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear-1}&sort=date_added&sort_order=desc&per_page=8&page=1`
+      ),
     ];
 
-    const responses = await Promise.all(fetches);
-    const seen = new Set();
-    const rawItems = [];
+    const pages = await Promise.all(
+      fetches.map(u => fetch(u, { headers, cache: 'no-store' })
+        .then(r => r.ok ? r.json() : { results: [] })
+        .catch(() => ({ results: [] })))
+    );
 
-    for (const resp of responses) {
-      if (!resp.ok) continue;
-      const data = await resp.json();
-      for (const item of (data.results || [])) {
-        const parts = (item.title || '').split(' - ');
+    // ── Deduplicate ─────────────────────────────────────────────
+    const seen = new Set();
+    const candidates = [];
+    for (const page of pages) {
+      for (const item of (page.results || [])) {
+        const parts  = (item.title || '').split(' - ');
         const artist = parts[0]?.trim();
-        const album = parts.slice(1).join(' - ').replace(/\s*\(\d{4}\)$/, '').trim();
+        const album  = parts.slice(1).join(' - ').replace(/\s*\(\d{4}\)$/, '').trim();
         if (!artist || !album) continue;
         const key = artist + '::' + album;
         if (seen.has(key)) continue;
         seen.add(key);
-        rawItems.push({ id: String(item.id), artist, album, item });
+        candidates.push({ id: String(item.id), artist, album, item });
       }
     }
 
-    // Fetch full details for top 40 to get proper dates (parallel, rate limit friendly)
-    const top40 = rawItems.slice(0, 40);
+    // ── Fetch release details for top 60 ───────────────────────
     const detailed = await Promise.all(
-      top40.map(async ({ id, artist, album, item }) => {
-        const full = await getReleaseFull(id, auth);
-        const released = full?.released || full?.released_formatted || '';
-        // Parse various formats: "2026-03-15", "15 Mar 2026", "2026"
-        let releaseDate = '';
-        if (released.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          releaseDate = released;
-        } else if (released.match(/^\d{4}-\d{2}$/)) {
-          releaseDate = released + '-01';
-        } else if (released.match(/^\d{4}$/)) {
-          releaseDate = released + '-01-01';
-        } else if (released.match(/\d{1,2}\s+\w+\s+\d{4}/)) {
-          const d = new Date(released);
-          if (!isNaN(d)) releaseDate = d.toISOString().split('T')[0];
-        }
+      candidates.slice(0, 60).map(async ({ id, artist, album, item }) => {
+        const full = await getDetail(id, token);
 
-        const isPreorder = releaseDate ? new Date(releaseDate) > new Date() : false;
-        const cover = item.cover_image && !item.cover_image.includes('spacer') ? item.cover_image : null;
-        const genre = full?.styles?.[0] || full?.genres?.[0] || item.style?.[0] || item.genre?.[0] || 'Metal';
-        const isLimited = (full?.formats || item.format || []).some(f =>
-          typeof f === 'string' ? f.includes('Limited') : (f.descriptions || []).some(d => d.includes('Limited'))
-        );
+        // Date resolution:
+        // 1. Use full release `released` field (most accurate)
+        // 2. Fall back to search result `year`
+        const rawReleased = full?.released || '';
+        const releaseDate = parseDate(rawReleased) ||
+          (item.year ? String(item.year) + '-06-01' : '');
+
+        // Pre-order detection:
+        // - Definitive: full date from release detail is in the future
+        // - Likely: item was added to Discogs recently (last 45d) AND year = this year
+        //   (bands announce upcoming releases to Discogs before they drop)
+        const releaseTs = releaseDate && releaseDate.length === 10 ? new Date(releaseDate) : null;
+        const hasFutureDate = releaseTs && releaseTs > today;
+        const isRecentAddition = item.date_added && item.date_added.slice(0,10) >= recentCutoff;
+        const isCurrentYear = Number(item.year) === curYear;
+        const isPreorder = hasFutureDate || (isRecentAddition && isCurrentYear);
+
+        // Limited edition
+        const fmts = [
+          ...(full?.formats || []),
+          ...(item.format || []).map(f => ({ descriptions: [f] })),
+        ];
+        const allDesc = fmts.flatMap(f => f.descriptions || []).join(' ').toLowerCase();
+        const isLimited = allDesc.includes('limited') || allDesc.includes('numbered');
+
+        // Cover image
+        const cover = [full?.images?.[0]?.uri, item.cover_image]
+          .find(u => u && !u.includes('spacer') && !u.includes('noimage')) || null;
+
+        // Clean artist name
+        const cleanArtist = (full?.artists?.[0]?.name || artist).replace(/\s*\(\d+\)$/, '');
 
         return {
           id,
-          artist: full?.artists?.[0]?.name?.replace(/\s*\(\d+\)$/, '') || artist,
-          album: full?.title || album,
+          artist:       cleanArtist,
+          album:        full?.title || album,
           cover,
           releaseDate,
-          genre,
-          preorder: isPreorder,
-          limited: isLimited,
-          label: full?.labels?.[0]?.name || item.label?.[0] || '',
-          country: full?.country || item.country || '',
-          discogsUrl: 'https://www.discogs.com/release/' + id,
-          spotifyUrl: '',
+          genre:        full?.styles?.[0] || full?.genres?.[0] || item.style?.[0] || 'Metal',
+          preorder:     isPreorder,
+          limited:      isLimited,
+          label:        full?.labels?.[0]?.name || item.label?.[0] || '',
+          country:      full?.country || item.country || '',
+          discogsUrl:   'https://www.discogs.com/release/' + id,
+          lowest_price: Number(full?.lowest_price) || 0,
+          median_price: 0,
+          spotifyUrl:   '',
+          // debug
+          _dateAdded:   item.date_added?.slice(0,10) || '',
+          _rawReleased: rawReleased,
         };
       })
     );
 
-    const results = detailed.filter(r => r.artist && r.album);
-    if (!results.length) throw new Error('No results from Discogs');
+    const valid = detailed.filter(r => r.artist && r.album);
+    if (!valid.length) throw new Error('No results');
 
-    // Sort: preorders first, then by date desc
-    results.sort((a, b) => {
-      if (a.preorder && !b.preorder) return -1;
-      if (!a.preorder && b.preorder) return 1;
-      if (!a.releaseDate) return 1;
-      if (!b.releaseDate) return -1;
+    // ── Sort: preorders first, then newest ─────────────────────
+    valid.sort((a, b) => {
+      if (a.preorder !== b.preorder) return a.preorder ? -1 : 1;
+      if (!a.releaseDate && b.releaseDate) return 1;
+      if (a.releaseDate && !b.releaseDate) return -1;
       return b.releaseDate.localeCompare(a.releaseDate);
     });
 
-    return NextResponse.json({ releases: results, source: 'discogs', count: results.length });
+    return NextResponse.json({
+      releases:  valid,
+      source:    'discogs',
+      count:     valid.length,
+      preorders: valid.filter(r => r.preorder).length,
+      today:     todayStr,
+      recentCutoff,
+    });
 
   } catch (e) {
     return NextResponse.json({ releases: MOCK, source: 'mock', notice: e.message });

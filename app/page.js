@@ -8,6 +8,7 @@ const SearchTab     = dynamic(() => import('@/app/search/SearchTab'),       { ss
 const StatsTab      = dynamic(() => import('@/app/stats/StatsTab'),         { ssr: false });
 const ConcertsTab   = dynamic(() => import('@/app/concerts/ConcertsTab'),   { ssr: false });
 const CalendarTab   = dynamic(() => import('@/app/calendar/CalendarTab'),   { ssr: false });
+const BandsTab      = dynamic(() => import('@/app/artists/BandsTab'),       { ssr: false });
 
 // ── Design tokens ─────────────────────────────────────────────
 const C = {
@@ -89,7 +90,7 @@ function StatsBar({releases}){
     const d=new Date(r.releaseDate);
     return !isNaN(d)&&(today-d)/(1000*60*60*24)<365&&d<=today;
   }).length;
-  const preorders = releases.filter(r=>new Date(r.releaseDate)>today).length;
+  const preorders = releases.filter(r=>r.preorder===true||(r.releaseDate&&new Date(r.releaseDate)>today)).length;
   return(
     <div style={{display:'flex',borderBottom:'1px solid '+C.border,background:C.bg2}}>
       {[{icon:'💿',val:releases.length,label:'releases'},{icon:'🆕',val:newCount,label:'← 365 days'},{icon:'⏳',val:preorders,label:'pre-order'}].map(s=>(
@@ -107,9 +108,10 @@ function StatsBar({releases}){
 function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,onFollowToggle,user}){
   const today=new Date();
   const rd=new Date(album.releaseDate);
-  const isPreorder=rd>today;
-  const isNew=(today-rd)/(1000*60*60*24)<45&&!isPreorder;
-  const badges=[vinylData?.hasVinyl!==false&&'VINYL',vinylData?.hasLimited&&'LIMITED',isPreorder&&'PREORDER',isNew&&'NEW'].filter(Boolean);
+  const isPreorder=(rd>today)||album.preorder===true;
+  const isNew=(today-rd)/(1000*60*60*24)<365&&!isPreorder;
+  const isLimited=album.limited===true||vinylData?.hasLimited===true;
+  const badges=[vinylData?.hasVinyl!==false&&'VINYL',isLimited&&'LIMITED',isPreorder&&'PREORDER',isNew&&'NEW'].filter(Boolean);
   return(
     <div onClick={onClick} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,
       padding:'12px 14px',display:'flex',gap:12,alignItems:'flex-start',cursor:'pointer',WebkitTapHighlightColor:'transparent'}}
@@ -298,7 +300,7 @@ function PortfolioChart({snapshots}){
 }
 
 // ── Collection Tab ────────────────────────────────────────────
-function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUpdate,portfolio,onAlbumClick}){
+function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUpdate,portfolio,onAlbumClick,onAddToWatchlist}){
   const [view,setView]=useState('vinyl');
   if(!onUpdate)onUpdate=()=>{}; // safety
   const [showAlertForm,setShowAlertForm]=useState(null);
@@ -401,7 +403,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
 
       {/* Subtabs */}
       <div style={{display:'flex',borderBottom:'1px solid '+C.border,padding:'0 16px',flexShrink:0}}>
-        {[['vinyl',`💿 Vinyl (${collection.length})`],['watchlist',`★ Watchlist (${watchlist.length})`]].map(([k,l])=>(
+        {[['vinyl',`💿 Vinyl (${collection.length})`],['watchlist',`★ Watchlist (${watchlist.length})`],['bands','🎸 Bands']].map(([k,l])=>(
           <button key={k} onClick={()=>setView(k)}
             style={{padding:'10px 14px',background:'none',border:'none',cursor:'pointer',
               borderBottom:view===k?'2px solid '+C.accent:'2px solid transparent',
@@ -417,6 +419,14 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
           user={user}
           onRemove={onRemoveWatch}
           onAlbumClick={onAlbumClick}
+        />
+      )}
+
+      {view==='bands'&&(
+        <BandsTab
+          collection={collection}
+          watchlist={watchlist}
+          onAddToWatchlist={onAddToWatchlist||(()=>{})}
         />
       )}
 
@@ -1310,6 +1320,11 @@ export default function MetalVault(){
               if(user)await fetch('/api/watchlist?album_id='+id,{method:'DELETE'});
               setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id));
             }}
+            onAddToWatchlist={async(artist,album)=>{
+              const item={artist,album:album.title,album_id:album.id,year:album.year,cover:album.cover,discogsUrl:album.discogsUrl};
+              setWatchlist(w=>[...w,{...item,id:album.id}]);
+              if(user)await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});
+            }}
             onAlbumClick={openAlbum} onRemove={removeFromCollection} onUpdate={setCollection} portfolio={portfolio}/>
         )}
 
@@ -1444,4 +1459,3 @@ export default function MetalVault(){
     </div>
   );
 }
-// v
