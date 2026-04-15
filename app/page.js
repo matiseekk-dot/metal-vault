@@ -851,16 +851,27 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
                   {hasAlert&&<div style={{fontSize:10,color:'#f5c842',...MONO,marginTop:2}}>🔔 Alert: ≤${hasAlert}</div>}
                 </div>
               </div>
-              <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
-                <button onClick={()=>{setAlertItem(alertItem===id?null:id);setAlertPrice('');}}
-                  style={{background:'none',border:'none',color:alertItem===id||hasAlert?'#f5c842':'#444',cursor:'pointer',fontSize:16,padding:'2px'}}
-                  title="Set price alert">🔔</button>
+              <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0,alignItems:'flex-end'}}>
+                {hasAlert&&<div style={{fontSize:10,color:'#f5c842',...MONO}}>🔔 ≤${hasAlert}</div>}
                 <button onClick={()=>onRemove(id)}
-                  style={{background:'none',border:'none',color:'#333',cursor:'pointer',fontSize:18,padding:'2px'}}
+                  style={{background:'none',border:'none',color:'#444',cursor:'pointer',fontSize:18,padding:'2px'}}
                   onMouseEnter={e=>e.currentTarget.style.color=C.accent}
-                  onMouseLeave={e=>e.currentTarget.style.color='#333'}>×</button>
+                  onMouseLeave={e=>e.currentTarget.style.color='#444'}>×</button>
               </div>
             </div>
+            {/* Set price alert button — full width like collection */}
+            <button onClick={()=>{setAlertItem(alertItem===id?null:id);setAlertPrice('');}}
+              style={{
+                width:'100%',padding:'8px 14px',
+                background:alertItem===id?'#1a0a00':'transparent',
+                border:'none',borderTop:'1px solid '+C.border,
+                color:alertItem===id?'#f5c842':hasAlert?'#f5c842':'#555',
+                cursor:'pointer',fontSize:11,...MONO,
+                display:'flex',alignItems:'center',gap:6,
+                letterSpacing:'0.05em',textAlign:'left',
+              }}>
+              🔔 {hasAlert?'Alert active: ≤$'+hasAlert+' · edit':'Set price alert'}
+            </button>
             {alertItem===id&&(
               <div style={{borderTop:'1px solid '+C.border,padding:'10px 14px',background:'#1a0a00',borderRadius:'0 0 10px 10px'}}>
                 <div style={{fontSize:10,color:'#f5c842',...MONO,marginBottom:6}}>
@@ -912,9 +923,9 @@ function BottomNav({tab,onChange,watchCount,user}){
       boxShadow:'0 -4px 20px #00000088'}}>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>onChange(t.id)}
-          style={{flex:1,padding:'6px 1px 5px',background:'none',border:'none',cursor:'pointer',
-            display:'flex',flexDirection:'column',alignItems:'center',gap:1,position:'relative',
-            borderTop:tab===t.id?'2px solid '+C.accent:'2px solid transparent'}}>
+          style={{flex:1,padding:'5px 0px 4px',background:'none',border:'none',cursor:'pointer',
+            display:'flex',flexDirection:'column',alignItems:'center',gap:0,position:'relative',
+            minWidth:0,borderTop:tab===t.id?'2px solid '+C.accent:'2px solid transparent'}}>
           {t.badge&&(
             <div style={{position:'absolute',top:4,right:'18%',background:C.accent,borderRadius:10,
               minWidth:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',
@@ -922,10 +933,13 @@ function BottomNav({tab,onChange,watchCount,user}){
               {t.badge}
             </div>
           )}
-          <span style={{fontSize:tab===t.id?20:17,color:t.id==='watchlist'?'#f5c842':tab===t.id?'#fff':'#666',
-            transition:'all 0.15s'}}>{t.icon}</span>
-          <span style={{fontSize:8,color:tab===t.id?C.accent:'#444',...MONO,letterSpacing:'0.02em',
-            fontWeight:tab===t.id?'700':'400'}}>{t.label}</span>
+          <span style={{fontSize:tab===t.id?19:16,color:t.id==='watchlist'?'#f5c842':tab===t.id?'#fff':'#666',
+            transition:'all 0.15s',lineHeight:1.2}}>{t.icon}</span>
+          <span style={{fontSize:7,color:tab===t.id?C.accent:'#444',...MONO,letterSpacing:'0em',
+            fontWeight:tab===t.id?'700':'400',
+            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+            maxWidth:'100%',textAlign:'center',display:'block',
+            padding:'0 1px'}}>{t.label}</span>
         </button>
       ))}
     </div>
@@ -1395,17 +1409,8 @@ export default function MetalVault(){
 
       {/* Floating scan button */}
       {(tab==='feed'||tab==='search'||tab==='collection')&&(
-        <button onClick={()=>setShowScanner(true)}
-          style={{position:'fixed',bottom:80,right:16,zIndex:90,
-            width:52,height:52,borderRadius:'50%',
-            background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')',
-            border:'none',color:'#fff',cursor:'pointer',fontSize:22,
-            boxShadow:'0 4px 20px rgba(220,38,38,0.4)',
-            display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}
-            className="scan-fab">
-          📷
-          <span style={{
-            position:'absolute',right:'110%',top:'50%',transform:'translateY(-50%)',
+        <div style={{position:'fixed',bottom:80,right:16,zIndex:90,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6}}>
+          <div style={{
             background:'#1a1a1a',border:'1px solid #333',borderRadius:8,
             padding:'6px 10px',fontSize:10,color:'#aaa',
             fontFamily:"'Space Mono',monospace",
@@ -1413,8 +1418,20 @@ export default function MetalVault(){
             opacity:0,transition:'opacity 0.2s',
           }} className="scan-tip">
             Scan vinyl → check market value instantly
-          </span>
-        </button>
+          </div>
+          <button onClick={()=>setShowScanner(true)}
+            className="scan-fab"
+            style={{
+              width:56,height:56,borderRadius:16,
+              background:'linear-gradient(135deg,#dc2626,#991b1b)',
+              border:'none',color:'#fff',cursor:'pointer',fontSize:24,
+              boxShadow:'0 4px 24px rgba(220,38,38,0.5)',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              flexShrink:0,
+            }}>
+            📷
+          </button>
+        </div>
       )}
 
       {showScanner&&(

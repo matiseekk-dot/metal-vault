@@ -73,12 +73,21 @@ export async function GET(req) {
     // ── Step 3: filter to main studio/live albums ───────────────
     // type=master + role=Main = the band's own releases (not appearances)
     // Exclude: singles (format contains "Single"), EPs sometimes
+    // Formats we WANT: Album, Live (studio + live albums only)
+    // Formats we SKIP: Single, EP, Compilation, Video, Unofficial, DJ-mix, etc.
+    const WANTED_FORMATS  = ['album', 'live'];
+    const BLOCKED_FORMATS = ['single', 'ep', 'compilation', 'video', 'unofficial', 'dj-mix', 'mixtape', 'interview', 'soundtrack'];
+
     const albums = (relData.releases || [])
-      .filter(r =>
-        r.type === 'master' &&
-        r.role === 'Main' &&
-        !['single','ep'].some(x => (r.format || '').toLowerCase().includes(x))
-      )
+      .filter(r => {
+        if (r.type !== 'master') return false;
+        if (r.role !== 'Main')   return false;
+        const fmt = (r.format || '').toLowerCase();
+        // Must match a wanted format OR format is empty/unknown (assume album)
+        const isWanted  = !fmt || WANTED_FORMATS.some(f => fmt.includes(f));
+        const isBlocked = BLOCKED_FORMATS.some(f => fmt.includes(f));
+        return isWanted && !isBlocked;
+      })
       .map(r => ({
         id:         String(r.id),                      // master release ID
         title:      r.title || '',

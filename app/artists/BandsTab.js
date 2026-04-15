@@ -138,7 +138,14 @@ function ArtistDiscography({ artistName, collection, onAddToWatchlist, watchlist
                 }}>
                   {album.title}
                 </div>
-                <div style={{ fontSize: 10, color: C.dim, ...MONO }}>{album.year}</div>
+                <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+                  <span style={{ fontSize: 10, color: C.dim, ...MONO }}>{album.year}</span>
+                  {album.format && album.format.toLowerCase().includes('live') && (
+                    <span style={{ fontSize:8, color:'#60a5fa', background:'#60a5fa22',
+                      borderRadius:4, padding:'1px 5px', fontFamily:"'Space Mono',monospace",
+                      letterSpacing:'0.05em' }}>LIVE</span>
+                  )}
+                </div>
               </div>
 
               {/* Status */}
