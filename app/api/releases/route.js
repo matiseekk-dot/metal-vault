@@ -15,7 +15,7 @@ function parseDate(str) {
   const s = String(str).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   if (/^\d{4}-\d{2}$/.test(s))        return s + '-01';
-  if (/^\d{4}$/.test(s))              return '';  // year-only → not reliable for preorder
+  if (/^\d{4}$/.test(s))              return s;  // year-only → keep as year
   // "15 Apr 2026" or "Apr 2026"
   const d = new Date(s);
   if (!isNaN(d)) return d.toISOString().split('T')[0];
@@ -101,20 +101,21 @@ export async function GET() {
 
         // Date resolution:
         // 1. Use full release `released` field (most accurate)
-        // 2. Fall back to search result `year`
+        // 2. Fall back to search result `year` (just year, no fake month)
         const rawReleased = full?.released || '';
         const releaseDate = parseDate(rawReleased) ||
-          (item.year ? String(item.year) + '-06-01' : '');
+          (item.year ? String(item.year) : '');
 
         // Pre-order detection:
-        // - Definitive: full date from release detail is in the future
-        // - Likely: item was added to Discogs recently (last 45d) AND year = this year
-        //   (bands announce upcoming releases to Discogs before they drop)
+        // - Definitive: full date (YYYY-MM-DD) is in the future
+        // - Year-only: if year > current year, it's preorder
+        // - Likely: item was added recently (last 45d) AND year = current year
         const releaseTs = releaseDate && releaseDate.length === 10 ? new Date(releaseDate) : null;
         const hasFutureDate = releaseTs && releaseTs > today;
+        const hasFutureYear = releaseDate && releaseDate.length === 4 && Number(releaseDate) > curYear;
         const isRecentAddition = item.date_added && item.date_added.slice(0,10) >= recentCutoff;
         const isCurrentYear = Number(item.year) === curYear;
-        const isPreorder = hasFutureDate || (isRecentAddition && isCurrentYear);
+        const isPreorder = hasFutureDate || hasFutureYear || (isRecentAddition && isCurrentYear);
 
         // Limited edition
         const fmts = [

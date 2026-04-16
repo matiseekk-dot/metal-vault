@@ -38,6 +38,14 @@ const GENRE_COLOR = (g='') => {
   return '#1a0000';
 };
 
+// Format release dates nicely
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  if (/^\d{4}$/.test(dateStr)) return dateStr; // year-only → just "2026"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr; // full date → "2026-04-17" 
+  return dateStr;
+}
+
 const VINYL_GRADES = ['M','NM','VG+','VG','G+','G','F','P'];
 const GRADE_COLOR = {'M':'#4ade80','NM':'#4ade80','VG+':'#f5c842','VG':'#f5c842','G+':'#f97316','G':'#f87171','F':'#f87171','P':'#888'};
 
@@ -136,7 +144,7 @@ function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,o
           )}
         </div>
         <div style={{fontSize:10,color:C.dim,...MONO,marginTop:5}}>
-          {isPreorder?('🗓 '+(album.releaseDate||'')):(album.releaseDate||'')}
+          {isPreorder?('🗓 '+formatDate(album.releaseDate||'')):formatDate(album.releaseDate||'')}
         </div>
         {(album.lowest_price||album.median_price)?(
           <div style={{display:'flex',gap:6,alignItems:'center',marginTop:4,flexWrap:'wrap'}}>
@@ -183,7 +191,7 @@ function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vin
           <div style={{flex:1,minWidth:0}}>
             <div style={{...BEBAS,fontSize:24,letterSpacing:'0.04em',color:C.text,lineHeight:1.1}}>{album.artist}</div>
             <div style={{fontSize:13,color:C.muted,...MONO,marginTop:3}}>{album.album}</div>
-            <div style={{fontSize:11,color:C.dim,...MONO,marginTop:3}}>{album.releaseDate}</div>
+            <div style={{fontSize:11,color:C.dim,...MONO,marginTop:3}}>{formatDate(album.releaseDate)}</div>
           </div>
           <button onClick={()=>onWatchToggle(album)}
             style={{background:isWatched?'#2a2200':'none',border:'1px solid '+(isWatched?'#92400e':C.border),
@@ -761,6 +769,37 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
             <div style={{fontSize:9,color:C.dim,...MONO,marginTop:8,lineHeight:1.6,textAlign:'center'}}>
               Redirects to discogs.com → authorize → returns here → syncs automatically
             </div>
+            
+            {/* Manual sync fallback */}
+            <div style={{fontSize:9,color:C.dim,...MONO,marginTop:16,marginBottom:8,textAlign:'center'}}>
+              OAuth issues? Use manual sync (for username: matiseekk)
+            </div>
+            <button onClick={async()=>{
+              if(!user?.id) return;
+              try {
+                // Direct insert to discogs_tokens with known username
+                const r = await fetch('/api/discogs/manual-sync', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({user_id: user.id, username: 'matiseekk'})
+                });
+                if (r.ok) {
+                  const d = await r.json();
+                  if (d.success) {
+                    // Trigger sync
+                    onSyncDiscogs?.();
+                  }
+                }
+              } catch(e) {
+                console.error('Manual sync error:', e);
+              }
+            }}
+              style={{width:'100%',padding:'10px',
+                background:'#2a0a0a',border:'1px solid #666',borderRadius:8,color:'#888',
+                cursor:'pointer',...MONO,fontSize:11}}>
+              🔧 Manual Sync (matiseekk)
+            </button>
+            </div>
           </div>
         )}
       </div>
@@ -885,7 +924,7 @@ function WatchlistTab({watchlist,onRemove,onAlbumClick,user}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{...BEBAS,fontSize:17,color:C.text,lineHeight:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.artist}</div>
                   <div style={{fontSize:11,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{album.album}</div>
-                  <div style={{fontSize:10,color:C.dim,...MONO,marginTop:3}}>{album.release_date||album.releaseDate}</div>
+                  <div style={{fontSize:10,color:C.dim,...MONO,marginTop:3}}>{formatDate(album.release_date||album.releaseDate)}</div>
                   {hasAlert&&<div style={{fontSize:10,color:'#f5c842',...MONO,marginTop:2}}>🔔 Alert: ≤${hasAlert}</div>}
                 </div>
               </div>
