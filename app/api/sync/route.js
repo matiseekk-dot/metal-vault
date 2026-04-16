@@ -4,36 +4,30 @@ import { createClient, getAdminClient } from '@/lib/supabase-server';
 
 const UA = { 'User-Agent': 'MetalVault/1.0 +https://metal-vault-six.vercel.app' };
 
-// Build auth header — OAuth if available, else personal token
-function buildHeader(discogsToken) {
+// Build auth header — prefer OAuth (user-specific), fallback to personal token
+function buildHeader(oauthToken) {
   const key    = process.env.DISCOGS_KEY;
   const secret = process.env.DISCOGS_SECRET;
   const token  = process.env.DISCOGS_TOKEN;
 
-  // OAuth (user connected their account)
-  if (discogsToken?.access_token && key && secret) {
+  // OAuth path: user has valid access_token AND access_secret
+  if (oauthToken?.access_token && oauthToken?.access_secret && key && secret) {
     const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
     return {
       ...UA,
-      Authorization: `OAuth oauth_consumer_key="${key}",oauth_token="${discogsToken.access_token}",oauth_signature_method="PLAINTEXT",oauth_signature="${secret}&${discogsToken.access_secret}",oauth_version="1.0",oauth_timestamp="${Math.floor(Date.now()/1000)}",oauth_nonce="${nonce}"`,
+      Authorization: 'OAuth '
+        + 'oauth_consumer_key="' + key + '",'
+        + 'oauth_token="' + oauthToken.access_token + '",'
+        + 'oauth_signature_method="PLAINTEXT",'
+        + 'oauth_signature="' + secret + '&' + oauthToken.access_secret + '",'
+        + 'oauth_version="1.0",'
+        + 'oauth_timestamp="' + Math.floor(Date.now()/1000) + '",'
+        + 'oauth_nonce="' + nonce + '"',
     };
   }
 
-  // Personal token — works for your OWN private collection
+  // Fallback: personal token (works for owner's own collection)
   if (token) return { ...UA, Authorization: 'Discogs token=' + token };
-
-  return null;
-}
-
-// Auto-detect Discogs username via /oauth/identity
-async function getUsername(headers) {
-  try {
-    const r = await fetch('https://api.discogs.com/oauth/identity', { headers, cache: 'no-store' });
-    if (r.ok) {
-      const d = await r.json();
-      return d.username || null;
-    }
-  } catch {}
   return null;
 }
 
@@ -43,10 +37,12 @@ async function fetchAllPages(baseUrl, headers) {
   while (page <= totalPages && page <= 20) {
     const r = await fetch(baseUrl + `&page=${page}&per_page=100`, { headers, cache: 'no-store' });
     if (!r.ok) {
-      if (r.status === 401) throw new Error('Discogs auth failed — check DISCOGS_TOKEN in Vercel');
-      if (r.status === 404) throw new Error('Collection not found — make sure Discogs username is correct');
-      if (r.status === 429) throw new Error('Discogs rate limited — try again in a moment');
-      throw new Error('Discogs error ' + r.status);
+      if (r.status === 401) throw new Error('Discogs auth failed (401) — reconnect Discogs OAuth');
+      if (r.status === 403) throw new Error('Discogs forbidden (403) — collection is private, OAuth needed');
+      if (r.status === 404) throw new Error('Discogs user not found (404) — check username');
+      if (r.status === 429) throw new Error('Discogs rate limited (429) — wait a moment');
+      const txt = await r.text().catch(()=>'');
+      throw new Error(`Discogs error ${r.status}: ${txt.slice(0,80)}`);
     }
     const data = await r.json();
     totalPages = data.pagination?.pages || 1;
@@ -82,50 +78,67 @@ export async function POST(req) {
   try {
     const sb    = await createClient();
     const admin = getAdminClient();
-
-    // Auth check
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
-    const { type = 'both' } = body;
+    const { type = 'both', username: overrideUsername } = body;
 
-    // ── Get Discogs credentials ──────────────────────────────
-    // First try OAuth token from DB, fallback to env personal token
+    // ── Get OAuth token (if user connected Discogs) ──────────────
     const { data: oauthToken } = await admin
       .from('discogs_tokens')
       .select('access_token, access_secret, discogs_username')
       .eq('user_id', user.id)
       .single();
 
-    const headers = buildHeader(oauthToken);
-    if (!headers) {
-      return NextResponse.json({
-        error: 'Discogs not configured — add DISCOGS_TOKEN to Vercel environment variables',
-      }, { status: 503 });
-    }
+    // ── Resolve username: body param → OAuth username → personal token identity
+    let username = (overrideUsername || '').trim() || oauthToken?.discogs_username || null;
 
-    // ── Get username from OAuth token ─────────────────────────
-    const username = oauthToken?.discogs_username || null;
+    // If no username stored, try to get it from personal token
+    if (!username && process.env.DISCOGS_TOKEN) {
+      try {
+        const idR = await fetch('https://api.discogs.com/oauth/identity', {
+          headers: { 'Authorization': 'Discogs token=' + process.env.DISCOGS_TOKEN, ...UA },
+        });
+        if (idR.ok) {
+          const idData = await idR.json();
+          username = idData.username;
+          // Persist for next time
+          await admin.from('discogs_tokens').upsert({
+            user_id: user.id,
+            discogs_username: username,
+            access_token:  oauthToken?.access_token  || null,
+            access_secret: oauthToken?.access_secret || null,
+          }, { onConflict: 'user_id' });
+        }
+      } catch {}
+    }
 
     if (!username) {
       return NextResponse.json({
-        error: 'Connect your Discogs account first — tap "Connect Discogs Account" in the Me tab',
-        needsConnect: true,
+        error: 'No Discogs username available. Pass { username: "..." } in request body or connect Discogs OAuth.',
+        hint: 'Try: fetch("/api/sync", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({type:"collection", username:"YOUR_DISCOGS_USERNAME"})})',
       }, { status: 400 });
+    }
+
+    // ── Build auth headers ──────────────────────────────────────
+    const headers = buildHeader(oauthToken);
+    if (!headers) {
+      return NextResponse.json({ error: 'No Discogs auth configured' }, { status: 503 });
     }
 
     const result = { added: 0, updated: 0, watchAdded: 0, errors: [], username };
 
-    // ── Sync Collection ──────────────────────────────────────
+    // ── Sync Collection ─────────────────────────────────────────
     if (type === 'collection' || type === 'both') {
       try {
         const raw = await fetchAllPages(
           `https://api.discogs.com/users/${username}/collection/folders/0/releases?sort=added&sort_order=desc`,
           headers
         );
+        result.discogs_total = raw.length;
 
-        // Fetch all existing discogs_ids at once for faster lookup
+        // Fetch existing items for fast lookup
         const { data: existing } = await admin
           .from('collection')
           .select('id, discogs_id, purchase_price, grade')
@@ -138,7 +151,6 @@ export async function POST(req) {
           const ex   = existingMap[item.discogs_id];
 
           if (ex) {
-            // Update — preserve user-set purchase_price and grade
             await admin.from('collection').update({
               cover:   item.cover   || undefined,
               format:  item.format  || undefined,
@@ -146,9 +158,7 @@ export async function POST(req) {
               year:    item.year    || undefined,
               genres:  item.genres,
               styles:  item.styles,
-              ...(item.purchase_price && !ex.purchase_price
-                ? { purchase_price: item.purchase_price }
-                : {}),
+              ...(item.purchase_price && !ex.purchase_price ? { purchase_price: item.purchase_price } : {}),
             }).eq('id', ex.id);
             result.updated++;
           } else {
@@ -177,7 +187,7 @@ export async function POST(req) {
       }
     }
 
-    // ── Sync Wantlist ────────────────────────────────────────
+    // ── Sync Wantlist ───────────────────────────────────────────
     if (type === 'wantlist' || type === 'both') {
       try {
         const raw = await fetchAllPages(
@@ -189,11 +199,11 @@ export async function POST(req) {
           .from('watchlist')
           .select('album_id')
           .eq('user_id', user.id);
-        const existingWatchSet = new Set((existingWatch||[]).map(e => e.album_id));
+        const existingSet = new Set((existingWatch||[]).map(e => e.album_id));
 
         for (const r of raw) {
           const item = normalizeItem(r);
-          if (!existingWatchSet.has(item.discogs_id)) {
+          if (!existingSet.has(item.discogs_id)) {
             await admin.from('watchlist').insert({
               user_id:      user.id,
               album_id:     item.discogs_id,
@@ -214,8 +224,7 @@ export async function POST(req) {
     }
 
     return NextResponse.json({ success: true, ...result });
-
   } catch (e) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: e.message, stack: e.stack?.slice(0,300) }, { status: 500 });
   }
 }

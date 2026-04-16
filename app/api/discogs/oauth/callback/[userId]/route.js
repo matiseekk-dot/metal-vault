@@ -27,8 +27,7 @@ export async function GET(request, { params }) {
 
     const requestSecret = stored?.access_secret || '';
 
-    // Exchange request token for access token using PLAINTEXT signature
-    // Signature = consumerSecret&requestTokenSecret (NOT url-encoded in the value itself)
+    // PLAINTEXT signature = consumerSecret&requestTokenSecret (RAW, no encoding)
     const sig = secret + '&' + requestSecret;
 
     const r = await fetch('https://api.discogs.com/oauth/access_token', {
@@ -54,7 +53,7 @@ export async function GET(request, { params }) {
       );
     }
 
-    const p           = new URLSearchParams(text);
+    const p            = new URLSearchParams(text);
     const accessToken  = p.get('oauth_token');
     const accessSecret = p.get('oauth_token_secret');
     if (!accessToken) return NextResponse.redirect(appUrl + '/?discogs_error=no_access_token');
