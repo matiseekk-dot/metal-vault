@@ -613,7 +613,7 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
     const d=await r.json();
     setSaving(false);
     setMsg(d.error||'✓ Saved');
-    if(!d.error)onUpdateProfile({username,is_public:isPublic});
+    if(!d.error)onUpdateProfile({username,is_public:isPublic,discogs_username:discogsUser.trim()||null});
   };
 
   if(!user)return(
@@ -721,21 +721,22 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
         <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Discogs Account</div>
         {discogsConnected?(
           <div>
+            {/* Connected state — show sync button */}
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-              <div style={{fontSize:12,color:'#4ade80',...MONO}}>✓ Connected to Discogs</div>
+              <div style={{fontSize:12,color:'#4ade80',...MONO}}>✓ Discogs connected</div>
               <button onClick={onSyncDiscogs}
                 disabled={syncStatus==='syncing'}
-                style={{padding:'5px 12px',background:syncStatus==='syncing'?C.bg3:'#0d1f0d',
+                style={{padding:'6px 14px',background:syncStatus==='syncing'?C.bg3:'#0d1f0d',
                   border:'1px solid '+(syncStatus==='syncing'?C.border:'#1a3d1a'),
                   borderRadius:6,color:syncStatus==='syncing'?C.dim:'#4ade80',
-                  cursor:syncStatus==='syncing'?'default':'pointer',...MONO,fontSize:10,
-                  display:'flex',alignItems:'center',gap:5}}>
-                {syncStatus==='syncing'?'⏳ Syncing…':'↺ Sync now'}
+                  cursor:syncStatus==='syncing'?'default':'pointer',...MONO,fontSize:11}}>
+                {syncStatus==='syncing'?'⏳ Syncing…':'↺ Sync collection'}
               </button>
             </div>
             {syncStatus==='done'&&syncResult&&(
-              <div style={{fontSize:10,color:C.dim,...MONO,lineHeight:1.6}}>
-                ✓ Added {syncResult.added} · Updated {syncResult.updated} · Watchlist +{syncResult.watchAdded}
+              <div style={{fontSize:10,color:'#4ade80',...MONO,lineHeight:1.7,
+                background:'#0d1f0d',border:'1px solid #1a3d1a',borderRadius:6,padding:'8px 10px'}}>
+                ✓ Added {syncResult.added} new · Updated {syncResult.updated} · Watchlist +{syncResult.watchAdded}
               </div>
             )}
             {syncStatus==='error'&&(
@@ -743,10 +744,24 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
             )}
           </div>
         ):(
-          <button onClick={onConnectDiscogs}
-            style={{width:'100%',padding:'10px',background:'#1a1a00',border:'1px solid #555500',borderRadius:8,color:'#f5c842',cursor:'pointer',...MONO,fontSize:12}}>
-            🔗 Connect Discogs (one-click import)
-          </button>
+          <div>
+            {/* Not connected — explain the flow */}
+            <div style={{fontSize:11,color:C.dim,...MONO,lineHeight:1.7,marginBottom:10}}>
+              Connect your Discogs account to automatically sync your collection and wantlist.
+              Works for all users — each person authorizes their own account.
+            </div>
+            <button onClick={onConnectDiscogs}
+              style={{width:'100%',padding:'12px',
+                background:'linear-gradient(135deg,#1a1a00,#2a2800)',
+                border:'1px solid #f5c842',borderRadius:8,color:'#f5c842',
+                cursor:'pointer',...BEBAS,fontSize:16,letterSpacing:'0.06em',
+                display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+              🔗 Connect Discogs Account
+            </button>
+            <div style={{fontSize:9,color:C.dim,...MONO,marginTop:8,lineHeight:1.6,textAlign:'center'}}>
+              Redirects to discogs.com → authorize → returns here → syncs automatically
+            </div>
+          </div>
         )}
       </div>
 

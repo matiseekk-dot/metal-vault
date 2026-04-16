@@ -106,31 +106,23 @@ export async function POST(req) {
     }
 
     // ── Get username ─────────────────────────────────────────
-    // Priority: stored OAuth username → identity API → error
+    // Priority: OAuth table → profile discogs_username field
     let username = oauthToken?.discogs_username || null;
 
     if (!username) {
-      // Auto-detect via /oauth/identity (works with personal token too!)
-      username = await getUsername(headers);
+      const { data: prof } = await admin
+        .from('profiles')
+        .select('discogs_username')
+        .eq('id', user.id)
+        .single();
+      username = prof?.discogs_username || null;
     }
 
     if (!username) {
       return NextResponse.json({
-        error: 'Could not determine Discogs username. Connect your Discogs account in the Me tab.',
+        error: 'Set your Discogs username in the Me tab → Profile Settings',
         needsConnect: true,
       }, { status: 400 });
-    }
-
-    // Store username for next time
-    if (!oauthToken?.discogs_username) {
-      try {
-        await admin.from('discogs_tokens').upsert({
-          user_id: user.id,
-          discogs_username: username,
-          access_token: null,
-          access_secret: null,
-        }, { onConflict: 'user_id' });
-      } catch {}
     }
 
     const result = { added: 0, updated: 0, watchAdded: 0, errors: [], username };
