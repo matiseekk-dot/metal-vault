@@ -1,13 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { C, MONO, BEBAS } from '@/lib/theme';
 
-const C = {
-  bg:'#0a0a0a', bg2:'#141414', bg3:'#1e1e1e', bg4:'#252525',
-  border:'#2a2a2a', accent:'#dc2626', accent2:'#991b1b',
-  text:'#f0f0f0', muted:'#888', dim:'#555',
-};
-const MONO  = { fontFamily:"'Space Mono',monospace" };
-const BEBAS = { fontFamily:"'Bebas Neue',sans-serif" };
 
 function PriceTag({ label, value, color = C.accent }) {
   if (!value) return null;

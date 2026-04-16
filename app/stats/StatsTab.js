@@ -1,14 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { C, MONO, BEBAS } from '@/lib/theme';
 
-const C = {
-  bg:'#0a0a0a',bg2:'#141414',bg3:'#1e1e1e',
-  border:'#2a2a2a',accent:'#dc2626',
-  text:'#f0f0f0',muted:'#888',dim:'#555',
-  green:'#4ade80',red:'#f87171',gold:'#f5c842',blue:'#60a5fa',
-};
-const MONO  = {fontFamily:"'Space Mono',monospace"};
-const BEBAS = {fontFamily:"'Bebas Neue',sans-serif"};
 const GRADE_COLORS = {M:'#a78bfa',NM:'#4ade80','VG+':'#60a5fa',VG:'#f5c842','G+':'#f97316',G:'#f87171',F:'#888',P:'#555'};
 const GRADE_ORDER  = ['M','NM','VG+','VG','G+','G','F','P'];
 

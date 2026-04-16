@@ -1,13 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 
-const C = {
-  bg:'#0a0a0a', bg2:'#141414', bg3:'#1e1e1e',
-  border:'#2a2a2a', accent:'#dc2626', accent2:'#991b1b',
-  text:'#f0f0f0', muted:'#888', dim:'#555',
-};
-const MONO  = { fontFamily:"'Space Mono',monospace" };
-const BEBAS = { fontFamily:"'Bebas Neue',sans-serif" };
 
 const VENUES = [
   // Arenas

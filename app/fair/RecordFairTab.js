@@ -1,14 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { C, MONO, BEBAS } from '@/lib/theme';
 
-const C = {
-  bg:'#0a0a0a',bg2:'#141414',bg3:'#1e1e1e',
-  border:'#2a2a2a',accent:'#dc2626',
-  text:'#f0f0f0',muted:'#888',dim:'#555',
-  green:'#4ade80',gold:'#f5c842',red:'#f87171',
-};
-const MONO  = {fontFamily:"'Space Mono',monospace"};
-const BEBAS = {fontFamily:"'Bebas Neue',sans-serif"};
 
 const LS_KEY = 'mv_shopping_list';
 

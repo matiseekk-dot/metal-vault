@@ -1,13 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { C, MONO, BEBAS } from '@/lib/theme';
 
-const C = {
-  bg:'#0a0a0a',bg2:'#141414',bg3:'#1e1e1e',
-  border:'#2a2a2a',accent:'#dc2626',
-  text:'#f0f0f0',muted:'#888',dim:'#555',
-};
-const MONO  = {fontFamily:"'Space Mono',monospace"};
-const BEBAS = {fontFamily:"'Bebas Neue',sans-serif"};
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];

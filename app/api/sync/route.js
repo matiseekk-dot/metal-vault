@@ -2,40 +2,33 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
 
+import { discogsApiHeaders } from '@/lib/oauth';
+
 const UA = { 'User-Agent': 'MetalVault/1.0 +https://metal-vault-six.vercel.app' };
 
-// Build auth header — prefer OAuth (user-specific), fallback to personal token
-function buildHeader(oauthToken) {
-  const key    = process.env.DISCOGS_KEY;
-  const secret = process.env.DISCOGS_SECRET;
-  const token  = process.env.DISCOGS_TOKEN;
+// Returns a per-request signer: (url, method?) => headers
+// Uses HMAC-SHA1 (OAuth) or personal token as fallback.
+function buildSigner(oauthToken) {
+  const token = process.env.DISCOGS_TOKEN;
 
-  // OAuth path: user has valid access_token AND access_secret
-  if (oauthToken?.access_token && oauthToken?.access_secret && key && secret) {
-    const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    return {
-      ...UA,
-      Authorization: 'OAuth '
-        + 'oauth_consumer_key="' + key + '",'
-        + 'oauth_token="' + oauthToken.access_token + '",'
-        + 'oauth_signature_method="PLAINTEXT",'
-        + 'oauth_signature="' + secret + '&' + oauthToken.access_secret + '",'
-        + 'oauth_version="1.0",'
-        + 'oauth_timestamp="' + Math.floor(Date.now()/1000) + '",'
-        + 'oauth_nonce="' + nonce + '"',
-    };
+  if (oauthToken?.access_token && oauthToken?.access_secret
+      && process.env.DISCOGS_KEY && process.env.DISCOGS_SECRET) {
+    // HMAC-SHA1: each call is signed with the full URL (includes pagination params)
+    return (url, method = 'GET') => discogsApiHeaders(url, method, oauthToken);
   }
 
-  // Fallback: personal token (works for owner's own collection)
-  if (token) return { ...UA, Authorization: 'Discogs token=' + token };
+  // Personal token fallback — signature doesn't depend on URL
+  if (token) return (_url) => ({ ...UA, Authorization: 'Discogs token=' + token });
   return null;
 }
 
-async function fetchAllPages(baseUrl, headers) {
+async function fetchAllPages(baseUrl, signer) {
   const items = [];
   let page = 1, totalPages = 1;
   while (page <= totalPages && page <= 20) {
-    const r = await fetch(baseUrl + `&page=${page}&per_page=100`, { headers, cache: 'no-store' });
+    const fullUrl = baseUrl + `&page=${page}&per_page=100`;
+    const headers = signer(fullUrl, 'GET');
+    const r = await fetch(fullUrl, { headers, cache: 'no-store' });
     if (!r.ok) {
       if (r.status === 401) throw new Error('Discogs auth failed (401) — reconnect Discogs OAuth');
       if (r.status === 403) throw new Error('Discogs forbidden (403) — collection is private, OAuth needed');
@@ -122,8 +115,8 @@ export async function POST(req) {
     }
 
     // ── Build auth headers ──────────────────────────────────────
-    const headers = buildHeader(oauthToken);
-    if (!headers) {
+    const signer = buildSigner(oauthToken);
+    if (!signer) {
       return NextResponse.json({ error: 'No Discogs auth configured' }, { status: 503 });
     }
 
@@ -134,7 +127,7 @@ export async function POST(req) {
       try {
         const raw = await fetchAllPages(
           `https://api.discogs.com/users/${username}/collection/folders/0/releases?sort=added&sort_order=desc`,
-          headers
+          signer
         );
         result.discogs_total = raw.length;
 
@@ -192,7 +185,7 @@ export async function POST(req) {
       try {
         const raw = await fetchAllPages(
           `https://api.discogs.com/users/${username}/wants?sort=added&sort_order=desc`,
-          headers
+          signer
         );
 
         const { data: existingWatch } = await admin
