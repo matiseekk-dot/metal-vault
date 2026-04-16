@@ -46,10 +46,19 @@ export async function GET(req) {
     let artistName = artist;
 
     if (!artistId) {
-      const sr = await fetch(
-        `https://api.discogs.com/database/search?q=${encodeURIComponent(artist)}&type=artist&per_page=8`,
-        { headers, cache: 'no-store' }
-      );
+      // Retry up to 2 times with backoff for rate limiting
+      let sr, attempts = 0;
+      while (attempts < 3) {
+        sr = await fetch(
+          `https://api.discogs.com/database/search?q=${encodeURIComponent(artist)}&type=artist&per_page=8`,
+          { headers, cache: 'no-store' }
+        );
+        if (sr.status === 429) {
+          attempts++;
+          if (attempts < 3) await new Promise(r => setTimeout(r, 1200 * attempts));
+          else throw new Error('Discogs rate limited — please wait a moment and try again');
+        } else break;
+      }
       if (!sr.ok) throw new Error('Discogs search failed: ' + sr.status);
       const sd = await sr.json();
 
@@ -63,10 +72,18 @@ export async function GET(req) {
     }
 
     // ── Step 2: fetch artist releases (all pages up to 100) ─────
-    const relResp = await fetch(
-      `https://api.discogs.com/artists/${artistId}/releases?sort=year&sort_order=asc&per_page=100&page=1`,
-      { headers, cache: 'no-store' }
-    );
+    let relResp, relAttempts = 0;
+    while (relAttempts < 3) {
+      relResp = await fetch(
+        `https://api.discogs.com/artists/${artistId}/releases?sort=year&sort_order=asc&per_page=100&page=1`,
+        { headers, cache: 'no-store' }
+      );
+      if (relResp.status === 429) {
+        relAttempts++;
+        if (relAttempts < 3) await new Promise(r => setTimeout(r, 1200 * relAttempts));
+        else throw new Error('Discogs rate limited — please wait a moment and try again');
+      } else break;
+    }
     if (!relResp.ok) throw new Error('Releases fetch failed: ' + relResp.status);
     const relData = await relResp.json();
 

@@ -335,10 +335,12 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
     <div style={{padding:'0 0 16px'}}>
       {/* Summary */}
       {/* ═══ HERO: Collection Value ═══ */}
-      {summary&&summary.itemCount>0&&(()=>{
-        const totalVal=summary.totalCurrent>0?summary.totalCurrent:(summary.totalPurchased||0);
-        const paid=summary.totalPurchased||0;
-        const gain=summary.gain||0;
+      {collection.length>0&&(()=>{
+        // Compute directly from collection prop — always available, no API dependency
+        const paid=collection.reduce((s,i)=>s+(Number(i.purchase_price)||0),0);
+        const marketVal=collection.reduce((s,i)=>s+(Number(i.median_price||i.current_price)||0),0);
+        const totalVal=marketVal>0?marketVal:paid;
+        const gain=marketVal>0?marketVal-paid:0;
         const gainPct=paid>0?Math.max(-999,Math.min(999,(gain/paid)*100)):0;
         const gainColor=gain>=0?'#4ade80':'#f87171';
         const priceTracked=collection.filter(i=>Number(i.median_price||i.current_price)>0).length;
@@ -595,7 +597,7 @@ function CollectionTab({user,collection,watchlist=[],onRemoveWatch,onRemove,onUp
 }
 
 // ── Profile Tab ───────────────────────────────────────────────
-function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onShowImport,pushEnabled,pushLoading,onTogglePush,discogsConnected,onConnectDiscogs,shareToken,onGetShareToken}){
+function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onShowImport,pushEnabled,pushLoading,onTogglePush,discogsConnected,onConnectDiscogs,onSyncDiscogs,syncStatus,syncResult,shareToken,onGetShareToken}){
   const [username,setUsername]=useState(profile?.username||'');
   const [isPublic,setIsPublic]=useState(profile?.is_public||false);
   const [saving,setSaving]=useState(false);
@@ -718,7 +720,28 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
       <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
         <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Discogs Account</div>
         {discogsConnected?(
-          <div style={{fontSize:12,color:'#4ade80',...MONO}}>✓ Connected to Discogs</div>
+          <div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+              <div style={{fontSize:12,color:'#4ade80',...MONO}}>✓ Connected to Discogs</div>
+              <button onClick={onSyncDiscogs}
+                disabled={syncStatus==='syncing'}
+                style={{padding:'5px 12px',background:syncStatus==='syncing'?C.bg3:'#0d1f0d',
+                  border:'1px solid '+(syncStatus==='syncing'?C.border:'#1a3d1a'),
+                  borderRadius:6,color:syncStatus==='syncing'?C.dim:'#4ade80',
+                  cursor:syncStatus==='syncing'?'default':'pointer',...MONO,fontSize:10,
+                  display:'flex',alignItems:'center',gap:5}}>
+                {syncStatus==='syncing'?'⏳ Syncing…':'↺ Sync now'}
+              </button>
+            </div>
+            {syncStatus==='done'&&syncResult&&(
+              <div style={{fontSize:10,color:C.dim,...MONO,lineHeight:1.6}}>
+                ✓ Added {syncResult.added} · Updated {syncResult.updated} · Watchlist +{syncResult.watchAdded}
+              </div>
+            )}
+            {syncStatus==='error'&&(
+              <div style={{fontSize:10,color:'#f87171',...MONO}}>⚠️ Sync failed — try again</div>
+            )}
+          </div>
         ):(
           <button onClick={onConnectDiscogs}
             style={{width:'100%',padding:'10px',background:'#1a1a00',border:'1px solid #555500',borderRadius:8,color:'#f5c842',cursor:'pointer',...MONO,fontSize:12}}>
@@ -911,7 +934,7 @@ function BottomNav({tab,onChange,watchCount,user}){
     {id:'feed',      icon:'🔥', label:'Feed'},
     {id:'search',    icon:'🔍', label:'Search'},
     {id:'collection',icon:'📦', label:'Vault'},
-    {id:'calendar',  icon:'📅', label:'Calendar'},
+    {id:'calendar',  icon:'📅', label:'Cal'},
     {id:'concerts',  icon:'🎸', label:'Live'},
     {id:'stats',     icon:'📊', label:'Stats'},
     {id:'profile',   icon:'👤', label:user?'Me':'Login'},
@@ -935,11 +958,11 @@ function BottomNav({tab,onChange,watchCount,user}){
           )}
           <span style={{fontSize:tab===t.id?19:16,color:t.id==='watchlist'?'#f5c842':tab===t.id?'#fff':'#666',
             transition:'all 0.15s',lineHeight:1.2}}>{t.icon}</span>
-          <span style={{fontSize:7,color:tab===t.id?C.accent:'#444',...MONO,letterSpacing:'0em',
-            fontWeight:tab===t.id?'700':'400',
+          <span style={{fontSize:9,color:tab===t.id?C.accent:'#444',fontFamily:'system-ui,sans-serif',
+            fontWeight:tab===t.id?'600':'400',
             overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
             maxWidth:'100%',textAlign:'center',display:'block',
-            padding:'0 1px'}}>{t.label}</span>
+            lineHeight:1.2}}>{t.label}</span>
         </button>
       ))}
     </div>
@@ -987,6 +1010,9 @@ export default function MetalVault(){
   const [portfolio,setPortfolio]=useState(null);
 
   const [showImportModal,setShowImportModal]=useState(false);
+  const [syncStatus,setSyncStatus]=useState(null);   // null|'syncing'|'done'|'error'
+  const [syncResult,setSyncResult]=useState(null);
+  const [syncError,setSyncError]=useState(null);
   const [showScanner,setShowScanner]=useState(false);
   const [genreInterests,setGenreInterests]=useState(()=>loadLS('mv_genre_interests',[]));
   const [showGenrePicker,setShowGenrePicker]=useState(false);
@@ -1025,7 +1051,31 @@ export default function MetalVault(){
     }
     // Check URL params for OAuth callbacks
     const params=new URLSearchParams(window.location.search);
-    if(params.get('discogs_connected')){setDiscogsConnected(true);window.history.replaceState({},'','/');} 
+    if(params.get('discogs_connected')){
+      setDiscogsConnected(true);
+      window.history.replaceState({},'','/');
+      // Auto-sync collection + wantlist immediately after connecting
+      if(user){
+        setSyncStatus('syncing');
+        fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'both'})})
+          .then(r=>r.json())
+          .then(d=>{
+            setSyncStatus('done');
+            setSyncResult(d);
+            // Reload collection and watchlist
+            return Promise.all([
+              fetch('/api/collection').then(r=>r.json()),
+              fetch('/api/watchlist').then(r=>r.json()),
+            ]);
+          })
+          .then(([coll,wl])=>{
+            if(coll.items)setCollection(coll.items);
+            if(wl.items)setWatchlist(wl.items);
+            setSyncStatus(null);
+          })
+          .catch(e=>{setSyncStatus('error');setSyncError(e.message);});
+      }
+    } 
     if(!user)setWatchlist(loadLS(LS_WL,[]));
   },[]);
 
@@ -1388,6 +1438,22 @@ export default function MetalVault(){
               onSignOut={signOut} onUpdateProfile={setProfile} onShowImport={()=>setShowImportModal(true)}
               pushEnabled={pushEnabled} pushLoading={pushLoading} onTogglePush={togglePush}
               discogsConnected={discogsConnected} onConnectDiscogs={connectDiscogs}
+              onSyncDiscogs={()=>{
+                setSyncStatus('syncing');setSyncError(null);setSyncResult(null);
+                fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'both'})})
+                  .then(r=>r.json())
+                  .then(async d=>{
+                    setSyncResult(d);setSyncStatus('done');
+                    const [coll,wl]=await Promise.all([
+                      fetch('/api/collection').then(r=>r.json()),
+                      fetch('/api/watchlist').then(r=>r.json()),
+                    ]);
+                    if(coll.items)setCollection(coll.items);
+                    if(wl.items)setWatchlist(wl.items);
+                  })
+                  .catch(e=>{setSyncStatus('error');setSyncError(e.message);});
+              }}
+              syncStatus={syncStatus} syncResult={syncResult}
               shareToken={shareToken} onGetShareToken={getShareToken}/>
           ):(
             <div style={{textAlign:'center',padding:'80px 24px'}}>
