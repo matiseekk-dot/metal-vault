@@ -937,32 +937,48 @@ function BottomNav({tab,onChange,watchCount,user}){
     {id:'calendar',  icon:'📅', label:'Cal'},
     {id:'concerts',  icon:'🎸', label:'Live'},
     {id:'stats',     icon:'📊', label:'Stats'},
-    {id:'profile',   icon:'👤', label:user?'Me':'Login'},
+    {id:'profile',   icon:'👤', label:user?'Me':'Me'},
   ];
   return(
-    <div style={{position:'fixed',bottom:0,left:0,right:0,background:'#0d0d0d',
-      borderTop:'1px solid '+C.border,display:'flex',zIndex:100,
+    <div style={{
+      position:'fixed',bottom:0,left:0,right:0,background:'#0d0d0d',
+      borderTop:'1px solid '+C.border,zIndex:100,
       paddingBottom:'env(safe-area-inset-bottom,0px)',
-      boxShadow:'0 -4px 20px #00000088'}}>
+      boxShadow:'0 -4px 20px #00000088',
+      display:'grid',gridTemplateColumns:'repeat(7,1fr)',
+      overflow:'hidden',
+    }}>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>onChange(t.id)}
-          style={{flex:1,padding:'5px 0px 4px',background:'none',border:'none',cursor:'pointer',
-            display:'flex',flexDirection:'column',alignItems:'center',gap:0,position:'relative',
-            minWidth:0,borderTop:tab===t.id?'2px solid '+C.accent:'2px solid transparent'}}>
-          {t.badge&&(
-            <div style={{position:'absolute',top:4,right:'18%',background:C.accent,borderRadius:10,
-              minWidth:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',
-              fontSize:9,...MONO,color:'#fff',padding:'0 4px'}}>
-              {t.badge}
-            </div>
-          )}
-          <span style={{fontSize:tab===t.id?19:16,color:t.id==='watchlist'?'#f5c842':tab===t.id?'#fff':'#666',
-            transition:'all 0.15s',lineHeight:1.2}}>{t.icon}</span>
-          <span style={{fontSize:9,color:tab===t.id?C.accent:'#444',fontFamily:'system-ui,sans-serif',
+          style={{
+            background:'none',border:'none',cursor:'pointer',
+            display:'flex',flexDirection:'column',alignItems:'center',
+            justifyContent:'center',padding:'6px 0 5px',
+            borderTop:tab===t.id?'2px solid '+C.accent:'2px solid transparent',
+            overflow:'hidden',minWidth:0,
+          }}>
+          <span style={{
+            fontSize:tab===t.id?18:15,
+            lineHeight:1,
+            color:tab===t.id?'#fff':'#555',
+            transition:'font-size 0.15s',
+            display:'block',
+          }}>{t.icon}</span>
+          <span style={{
+            fontSize:'8px',
+            color:tab===t.id?C.accent:'#444',
+            fontFamily:'system-ui,-apple-system,sans-serif',
             fontWeight:tab===t.id?'600':'400',
-            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
-            maxWidth:'100%',textAlign:'center',display:'block',
-            lineHeight:1.2}}>{t.label}</span>
+            lineHeight:1.3,
+            marginTop:2,
+            display:'block',
+            width:'100%',
+            textAlign:'center',
+            overflow:'hidden',
+            textOverflow:'ellipsis',
+            whiteSpace:'nowrap',
+            letterSpacing:'-0.01em',
+          }}>{t.label}</span>
         </button>
       ))}
     </div>
