@@ -13,60 +13,73 @@ export async function GET(request, { params }) {
     return NextResponse.redirect(appUrl + '/?discogs_error=missing_params');
   }
 
-  const key    = process.env.DISCOGS_KEY;
-  const secret = process.env.DISCOGS_SECRET;
-  const sb     = getAdminClient();
+  const key   = process.env.DISCOGS_KEY;
+  const secret= process.env.DISCOGS_SECRET;
+  const admin = getAdminClient();
 
   try {
-    // Get stored request secret
-    const { data: stored } = await sb
-      .from('discogs_tokens').select('access_secret').eq('user_id', userId).single();
+    // Get the stored request secret for this user
+    const { data: stored } = await admin
+      .from('discogs_tokens')
+      .select('access_secret')
+      .eq('user_id', userId)
+      .single();
+
     const requestSecret = stored?.access_secret || '';
 
-    // Exchange for access token
+    // Exchange request token for access token using PLAINTEXT signature
+    // Signature = consumerSecret&requestTokenSecret (NOT url-encoded in the value itself)
+    const sig = secret + '&' + requestSecret;
+
     const r = await fetch('https://api.discogs.com/oauth/access_token', {
       method: 'POST',
       headers: {
-        Authorization: 'OAuth oauth_consumer_key="'+key+'",'
-          + 'oauth_nonce="'+Math.random().toString(36).slice(2)+'",'
-          + 'oauth_timestamp="'+Math.floor(Date.now()/1000)+'",'
-          + 'oauth_token="'+oauthToken+'",'
-          + 'oauth_verifier="'+oauthVerifier+'",'
+        Authorization: 'OAuth oauth_consumer_key="' + key + '",'
+          + 'oauth_nonce="' + Math.random().toString(36).slice(2) + '",'
+          + 'oauth_timestamp="' + Math.floor(Date.now()/1000) + '",'
+          + 'oauth_token="' + oauthToken + '",'
+          + 'oauth_verifier="' + oauthVerifier + '",'
           + 'oauth_signature_method="PLAINTEXT",'
           + 'oauth_version="1.0",'
-          + 'oauth_signature="'+secret+'&'+requestSecret+'"',
+          + 'oauth_signature="' + sig + '"',
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': 'MetalVault/1.0',
       },
     });
 
     const text = await r.text();
-    if (!r.ok) return NextResponse.redirect(appUrl + '/?discogs_error=' + encodeURIComponent(text));
+    if (!r.ok) {
+      return NextResponse.redirect(
+        appUrl + '/?discogs_error=' + encodeURIComponent(text.slice(0, 200))
+      );
+    }
 
     const p           = new URLSearchParams(text);
     const accessToken  = p.get('oauth_token');
     const accessSecret = p.get('oauth_token_secret');
     if (!accessToken) return NextResponse.redirect(appUrl + '/?discogs_error=no_access_token');
 
-    // Get Discogs username
+    // Get username via identity endpoint
     let username = null;
     try {
       const identity = await fetch('https://api.discogs.com/oauth/identity', {
         headers: {
-          Authorization: 'OAuth oauth_consumer_key="'+key+'",'
-            + 'oauth_token="'+accessToken+'",'
+          Authorization: 'OAuth oauth_consumer_key="' + key + '",'
+            + 'oauth_token="' + accessToken + '",'
             + 'oauth_signature_method="PLAINTEXT",'
-            + 'oauth_signature="'+secret+'&'+accessSecret+'",'
+            + 'oauth_signature="' + secret + '&' + accessSecret + '",'
             + 'oauth_version="1.0"',
           'User-Agent': 'MetalVault/1.0',
         },
       });
-      const data = await identity.json();
-      username = data.username;
+      if (identity.ok) {
+        const data = await identity.json();
+        username = data.username || null;
+      }
     } catch {}
 
-    // Store final access token + username
-    await sb.from('discogs_tokens').upsert({
+    // Save access token + username
+    await admin.from('discogs_tokens').upsert({
       user_id:          userId,
       access_token:     accessToken,
       access_secret:    accessSecret,
@@ -76,8 +89,9 @@ export async function GET(request, { params }) {
     return NextResponse.redirect(
       appUrl + '/?discogs_connected=1&username=' + encodeURIComponent(username || '')
     );
-
   } catch (e) {
-    return NextResponse.redirect(appUrl + '/?discogs_error=' + encodeURIComponent(e.message));
+    return NextResponse.redirect(
+      appUrl + '/?discogs_error=' + encodeURIComponent(e.message.slice(0, 100))
+    );
   }
 }
