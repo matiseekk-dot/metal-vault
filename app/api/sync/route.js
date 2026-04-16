@@ -105,22 +105,12 @@ export async function POST(req) {
       }, { status: 503 });
     }
 
-    // ── Get username ─────────────────────────────────────────
-    // Priority: OAuth table → profile discogs_username field
-    let username = oauthToken?.discogs_username || null;
-
-    if (!username) {
-      const { data: prof } = await admin
-        .from('profiles')
-        .select('discogs_username')
-        .eq('id', user.id)
-        .single();
-      username = prof?.discogs_username || null;
-    }
+    // ── Get username from OAuth token ─────────────────────────
+    const username = oauthToken?.discogs_username || null;
 
     if (!username) {
       return NextResponse.json({
-        error: 'Set your Discogs username in the Me tab → Profile Settings',
+        error: 'Connect your Discogs account first — tap "Connect Discogs Account" in the Me tab',
         needsConnect: true,
       }, { status: 400 });
     }

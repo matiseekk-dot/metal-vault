@@ -22,7 +22,8 @@ export async function GET(request) {
   }
 
   try {
-    const callback = encodeURIComponent(appUrl + '/api/discogs/oauth/callback?user_id=' + user.id);
+    // user_id in PATH (not query string) — Discogs strips query params when appending oauth_token/verifier
+    const callback = encodeURIComponent(appUrl + '/api/discogs/oauth/callback/' + user.id);
 
     const r = await fetch(
       'https://api.discogs.com/oauth/request_token',
