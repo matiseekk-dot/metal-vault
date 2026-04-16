@@ -1085,27 +1085,8 @@ export default function MetalVault(){
     if(params.get('discogs_connected')){
       setDiscogsConnected(true);
       window.history.replaceState({},'','/');
-      // Auto-sync collection + wantlist immediately after connecting
-      if(user){
-        setSyncStatus('syncing');
-        fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'both'})})
-          .then(r=>r.json())
-          .then(d=>{
-            setSyncStatus('done');
-            setSyncResult(d);
-            // Reload collection and watchlist
-            return Promise.all([
-              fetch('/api/collection').then(r=>r.json()),
-              fetch('/api/watchlist').then(r=>r.json()),
-            ]);
-          })
-          .then(([coll,wl])=>{
-            if(coll.items)setCollection(coll.items);
-            if(wl.items)setWatchlist(wl.items);
-            setSyncStatus(null);
-          })
-          .catch(e=>{setSyncStatus('error');setSyncError(e.message);});
-      }
+      // Flag pending sync — will fire in loadUserData() once auth resolves
+      try{localStorage.setItem('mv_pending_sync','1');}catch{}
     } 
     if(!user)setWatchlist(loadLS(LS_WL,[]));
   },[]);
@@ -1134,6 +1115,25 @@ export default function MetalVault(){
       if(arts.artists)setFollowedArtists(arts.artists);
       if(port.snapshots)setPortfolio(port);
       if(prof.data)setProfile(prof.data);
+
+      // Run pending Discogs sync if user just connected OAuth
+      try{
+        if(localStorage.getItem('mv_pending_sync')==='1'){
+          localStorage.removeItem('mv_pending_sync');
+          setDiscogsConnected(true);
+          setSyncStatus('syncing');
+          const sr=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'both'})});
+          const sd=await sr.json();
+          setSyncResult(sd);setSyncStatus('done');
+          // Reload fresh data
+          const[fc,fw]=await Promise.all([
+            fetch('/api/collection').then(r=>r.json()),
+            fetch('/api/watchlist').then(r=>r.json()),
+          ]);
+          if(fc.items)setCollection(fc.items);
+          if(fw.items)setWatchlist(fw.items);
+        }
+      }catch(se){console.error('pending sync failed',se);}
     }catch(e){console.error('loadUserData',e);}
   }
 
