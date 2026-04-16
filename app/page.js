@@ -9,7 +9,6 @@ const StatsTab      = dynamic(() => import('@/app/stats/StatsTab'),         { ss
 const ConcertsTab   = dynamic(() => import('@/app/concerts/ConcertsTab'),   { ssr: false });
 const CalendarTab   = dynamic(() => import('@/app/calendar/CalendarTab'),   { ssr: false });
 const BandsTab      = dynamic(() => import('@/app/artists/BandsTab'),       { ssr: false });
-const RecordFairTab = dynamic(() => import('@/app/fair/RecordFairTab'),      { ssr: false });
 
 // ── Design tokens ─────────────────────────────────────────────
 const C = {
@@ -935,9 +934,9 @@ function BottomNav({tab,onChange,watchCount,user}){
     {id:'feed',      icon:'🔥', label:'Feed'},
     {id:'search',    icon:'🔍', label:'Search'},
     {id:'collection',icon:'📦', label:'Vault'},
-    {id:'fair',      icon:'🎪', label:'Fair'},
-    {id:'stats',     icon:'📊', label:'Stats'},
+    {id:'calendar',  icon:'📅', label:'Cal'},
     {id:'concerts',  icon:'🎸', label:'Live'},
+    {id:'stats',     icon:'📊', label:'Stats'},
     {id:'profile',   icon:'👤', label:user?'Me':'Me'},
   ];
   return(
@@ -1416,14 +1415,6 @@ export default function MetalVault(){
             onAddCollection={addToCollection}
             watchlist={watchlist}
             collection={collection}
-          />
-        )}
-
-        {/* RECORD FAIR TAB */}
-        {tab==='fair'&&(
-          <RecordFairTab
-            collection={collection}
-            onAddToCollection={addToCollection}
           />
         )}
 
