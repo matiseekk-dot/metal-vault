@@ -1,10 +1,10 @@
-// ── Discogs OAuth 1.0a — Step 3: exchange tokens (canonical) ────
-// userId comes from the URL path, set in Step 1.
-// Uses HMAC-SHA1 for the access_token exchange and identity call.
+// ── Discogs OAuth 1.0a — Step 2: exchange tokens ────────────────
+// userId is read from the URL path (embedded in Step 1).
+// PLAINTEXT signature over HTTPS — the Discogs-documented flow.
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
-import { buildOAuthHeader } from '@/lib/oauth';
+import { accessTokenHeader, apiCallHeader } from '@/lib/oauth';
 
 export async function GET(request, { params }) {
   const { searchParams } = new URL(request.url);
@@ -22,7 +22,7 @@ export async function GET(request, { params }) {
   const admin  = getAdminClient();
 
   try {
-    // Retrieve the request token secret stored in Step 1
+    // Retrieve request token secret stored in Step 1
     const { data: stored } = await admin
       .from('discogs_tokens')
       .select('access_secret')
@@ -31,48 +31,36 @@ export async function GET(request, { params }) {
 
     const requestTokenSecret = stored?.access_secret || '';
 
-    // ── Exchange request token for access token (HMAC-SHA1) ──────
-    const ACCESS_TOKEN_URL = 'https://api.discogs.com/oauth/access_token';
-    const authHeader = buildOAuthHeader(
-      'POST',
-      ACCESS_TOKEN_URL,
-      { oauth_token: oauthToken, oauth_verifier: oauthVerifier },
-      key, secret,
-      oauthToken,          // tokenKey = request token
-      requestTokenSecret,  // tokenSecret = request token secret
-    );
-
-    const r = await fetch(ACCESS_TOKEN_URL, {
+    // Exchange request token for access token
+    const r = await fetch('https://api.discogs.com/oauth/access_token', {
       method: 'POST',
       headers: {
-        Authorization:  authHeader,
+        Authorization:  accessTokenHeader(key, secret, oauthToken, requestTokenSecret, oauthVerifier),
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent':   'MetalVault/1.0',
       },
     });
 
     const text = await r.text();
-    if (!r.ok) return NextResponse.redirect(appUrl + '/?discogs_error=' + encodeURIComponent(text.slice(0, 200)));
+    if (!r.ok) {
+      return NextResponse.redirect(
+        appUrl + '/?discogs_error=' + encodeURIComponent(text.slice(0, 200)),
+      );
+    }
 
     const p            = new URLSearchParams(text);
     const accessToken  = p.get('oauth_token');
     const accessSecret = p.get('oauth_token_secret');
     if (!accessToken) return NextResponse.redirect(appUrl + '/?discogs_error=no_access_token');
 
-    // ── Fetch Discogs username via /oauth/identity (HMAC-SHA1) ───
+    // Fetch Discogs username via /oauth/identity
     let username = null;
     try {
-      const IDENTITY_URL = 'https://api.discogs.com/oauth/identity';
-      const identityHeader = buildOAuthHeader(
-        'GET',
-        IDENTITY_URL,
-        {},
-        key, secret,
-        accessToken,   // tokenKey = access token
-        accessSecret,  // tokenSecret = access token secret
-      );
-      const ir = await fetch(IDENTITY_URL, {
-        headers: { Authorization: identityHeader, 'User-Agent': 'MetalVault/1.0' },
+      const ir = await fetch('https://api.discogs.com/oauth/identity', {
+        headers: {
+          Authorization: apiCallHeader(key, secret, accessToken, accessSecret),
+          'User-Agent':  'MetalVault/1.0',
+        },
       });
       if (ir.ok) username = (await ir.json()).username || null;
     } catch {}
@@ -85,9 +73,12 @@ export async function GET(request, { params }) {
       discogs_username: username,
     }, { onConflict: 'user_id' });
 
-    return NextResponse.redirect(appUrl + '/?discogs_connected=1&username=' + encodeURIComponent(username || ''));
-
+    return NextResponse.redirect(
+      appUrl + '/?discogs_connected=1&username=' + encodeURIComponent(username || ''),
+    );
   } catch (e) {
-    return NextResponse.redirect(appUrl + '/?discogs_error=' + encodeURIComponent(e.message.slice(0, 100)));
+    return NextResponse.redirect(
+      appUrl + '/?discogs_error=' + encodeURIComponent(e.message.slice(0, 100)),
+    );
   }
 }

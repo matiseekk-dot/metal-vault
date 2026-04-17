@@ -1,10 +1,9 @@
 // ── Discogs OAuth 1.0a — Step 1: get request token ───────────────
-// Uses HMAC-SHA1 (not PLAINTEXT) so the consumer secret is never
-// transmitted over the wire, even inside TLS-encrypted headers.
+// PLAINTEXT signature over HTTPS (the Discogs-documented approach).
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase-server';
-import { buildOAuthHeader } from '@/lib/oauth';
+import { createClient, getAdminClient } from '@/lib/supabase-server';
+import { requestTokenHeader } from '@/lib/oauth';
 
 export async function GET(request) {
   const supabase = await createClient();
@@ -26,25 +25,22 @@ export async function GET(request) {
     // userId in PATH — Discogs strips query params when appending oauth_token/verifier
     const callbackUrl = appUrl + '/api/discogs/oauth/callback/' + user.id;
 
-    const REQUEST_TOKEN_URL = 'https://api.discogs.com/oauth/request_token';
-    const authHeader = buildOAuthHeader(
-      'GET',
-      REQUEST_TOKEN_URL,
-      { oauth_callback: callbackUrl },
-      key, secret,
-      /* tokenKey= */ '', /* tokenSecret= */ '',
-    );
-
-    const r = await fetch(REQUEST_TOKEN_URL, {
+    const r = await fetch('https://api.discogs.com/oauth/request_token', {
+      method: 'GET',
       headers: {
-        Authorization:  authHeader,
+        Authorization:  requestTokenHeader(key, secret, callbackUrl),
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent':   'MetalVault/1.0',
       },
     });
 
     const text = await r.text();
-    if (!r.ok) return NextResponse.json({ error: 'Discogs: ' + text }, { status: r.status });
+    if (!r.ok) {
+      return NextResponse.json(
+        { error: 'Discogs ' + r.status + ': ' + text.slice(0, 300) },
+        { status: r.status },
+      );
+    }
 
     const params           = new URLSearchParams(text);
     const oauthToken       = params.get('oauth_token');
@@ -52,8 +48,7 @@ export async function GET(request) {
 
     if (!oauthToken) return NextResponse.json({ error: 'No token from Discogs' }, { status: 500 });
 
-    // Temporarily persist request secret (needed to sign the access_token exchange)
-    const { getAdminClient } = await import('@/lib/supabase-server');
+    // Persist request token secret — needed to sign Step 2
     await getAdminClient().from('discogs_tokens').upsert({
       user_id:          user.id,
       access_token:     oauthToken,
@@ -61,8 +56,9 @@ export async function GET(request) {
       discogs_username: null,
     }, { onConflict: 'user_id' });
 
-    return NextResponse.json({ authorizeUrl: 'https://www.discogs.com/oauth/authorize?oauth_token=' + oauthToken });
-
+    return NextResponse.json({
+      authorizeUrl: 'https://www.discogs.com/oauth/authorize?oauth_token=' + oauthToken,
+    });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

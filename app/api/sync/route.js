@@ -6,29 +6,17 @@ import { discogsApiHeaders } from '@/lib/oauth';
 
 const UA = { 'User-Agent': 'MetalVault/1.0 +https://metal-vault-six.vercel.app' };
 
-// Returns a per-request signer: (url, method?) => headers
-// Uses HMAC-SHA1 (OAuth) or personal token as fallback.
-function buildSigner(oauthToken) {
-  const token = process.env.DISCOGS_TOKEN;
-
-  if (oauthToken?.access_token && oauthToken?.access_secret
-      && process.env.DISCOGS_KEY && process.env.DISCOGS_SECRET) {
-    // HMAC-SHA1: each call is signed with the full URL (includes pagination params)
-    return (url, method = 'GET') => discogsApiHeaders(url, method, oauthToken);
-  }
-
-  // Personal token fallback — signature doesn't depend on URL
-  if (token) return (_url) => ({ ...UA, Authorization: 'Discogs token=' + token });
-  return null;
+// PLAINTEXT signature does not depend on the request URL or body,
+// so we compute headers once and reuse for every paginated call.
+function buildHeaders(oauthToken) {
+  return discogsApiHeaders(oauthToken);
 }
 
-async function fetchAllPages(baseUrl, signer) {
+async function fetchAllPages(baseUrl, headers) {
   const items = [];
   let page = 1, totalPages = 1;
   while (page <= totalPages && page <= 20) {
-    const fullUrl = baseUrl + `&page=${page}&per_page=100`;
-    const headers = signer(fullUrl, 'GET');
-    const r = await fetch(fullUrl, { headers, cache: 'no-store' });
+    const r = await fetch(baseUrl + `&page=${page}&per_page=100`, { headers, cache: 'no-store' });
     if (!r.ok) {
       if (r.status === 401) throw new Error('Discogs auth failed (401) — reconnect Discogs OAuth');
       if (r.status === 403) throw new Error('Discogs forbidden (403) — collection is private, OAuth needed');
@@ -115,8 +103,8 @@ export async function POST(req) {
     }
 
     // ── Build auth headers ──────────────────────────────────────
-    const signer = buildSigner(oauthToken);
-    if (!signer) {
+    const headers = buildHeaders(oauthToken);
+    if (!headers) {
       return NextResponse.json({ error: 'No Discogs auth configured' }, { status: 503 });
     }
 
@@ -127,7 +115,7 @@ export async function POST(req) {
       try {
         const raw = await fetchAllPages(
           `https://api.discogs.com/users/${username}/collection/folders/0/releases?sort=added&sort_order=desc`,
-          signer
+          headers
         );
         result.discogs_total = raw.length;
 
@@ -185,7 +173,7 @@ export async function POST(req) {
       try {
         const raw = await fetchAllPages(
           `https://api.discogs.com/users/${username}/wants?sort=added&sort_order=desc`,
-          signer
+          headers
         );
 
         const { data: existingWatch } = await admin
