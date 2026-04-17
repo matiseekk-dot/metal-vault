@@ -42,7 +42,7 @@ export async function GET(request) {
       item.format             || '',
       item.grade              || 'NM',
       item.label              || '',
-      '',
+      item.year               || '',
       purchased > 0 ? purchased.toFixed(2) : '',
       Number(item.current_price || 0).toFixed(2) || '',
       Number(item.median_price  || 0).toFixed(2) || '',

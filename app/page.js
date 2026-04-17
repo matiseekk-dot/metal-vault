@@ -1,20 +1,23 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import { loadLS, saveLS } from '@/lib/localStorage';
 import { useCollection } from '@/lib/hooks/useCollection';
-import { AlbumCard, VinylModal, StatsBar, BottomNav } from '@/app/components/ui';
+import { AlbumCard, VinylModal, StatsBar, BottomNav, AlbumCover } from '@/app/components/ui';
 import { CollectionTab, WatchlistTab } from '@/app/collection/CollectionTab';
 import ProfileTab from '@/app/profile/ProfileTab';
-import dynamic from 'next/dynamic';
+import OnboardingScreen from '@/app/components/OnboardingScreen';
+import nextDynamic from 'next/dynamic';
+export const dynamic = 'force-dynamic';
 
-const ScannerTab    = dynamic(() => import('@/app/scanner/ScannerTab'),    { ssr: false });
-const DiscogsImport = dynamic(() => import('@/app/import/DiscogsImport'),  { ssr: false });
-const SearchTab     = dynamic(() => import('@/app/search/SearchTab'),       { ssr: false });
-const StatsTab      = dynamic(() => import('@/app/stats/StatsTab'),         { ssr: false });
-const ConcertsTab   = dynamic(() => import('@/app/concerts/ConcertsTab'),   { ssr: false });
-const CalendarTab   = dynamic(() => import('@/app/calendar/CalendarTab'),   { ssr: false });
+const ScannerTab    = nextDynamic(() => import('@/app/scanner/ScannerTab'),    { ssr: false });
+const DiscogsImport = nextDynamic(() => import('@/app/import/DiscogsImport'),  { ssr: false });
+const SearchTab     = nextDynamic(() => import('@/app/search/SearchTab'),       { ssr: false });
+const StatsTab      = nextDynamic(() => import('@/app/stats/StatsTab'),         { ssr: false });
+const ConcertsTab   = nextDynamic(() => import('@/app/concerts/ConcertsTab'),   { ssr: false });
+const CalendarTab   = nextDynamic(() => import('@/app/calendar/CalendarTab'),   { ssr: false });
+const RecordFairTab = nextDynamic(() => import('@/app/fair/RecordFairTab'),       { ssr: false });
 
 const FILTERS = [
   { id:'all',      label:'⚡ All'       },
@@ -28,7 +31,7 @@ const ALL_GENRES = ['Heavy Metal','Death Metal','Black Metal','Thrash Metal','Do
   'Symphonic Metal','Sludge Metal','Industrial Metal','Folk Metal','Post-Metal'];
 
 export default function MetalVault() {
-  const supabase = createClient();
+  const supabase = useRef(createClient()).current;
 
   // Auth
   const [user,    setUser]    = useState(null);
@@ -57,6 +60,8 @@ export default function MetalVault() {
   const [discogsConnected,setDiscogsConnected]= useState(false);
   const [discogsError,    setDiscogsError]    = useState(null);
   const [selected,        setSelected]        = useState(null);
+  const [showOnboarding,  setShowOnboarding]  = useState(false);
+  const [feedRetryCount,  setFeedRetryCount]  = useState(0);
 
   // Collection hook — all collection/watchlist/vinyl state & actions
   const col = useCollection(user);
@@ -67,9 +72,17 @@ export default function MetalVault() {
       setUser(session?.user || null);
       if (session?.user) { col.loadUserData(session.user); loadProfile(session.user); }
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
-      if (session?.user) { col.loadUserData(session.user); loadProfile(session.user); }
+      if (session?.user) {
+        col.loadUserData(session.user);
+        loadProfile(session.user);
+        // Show onboarding for brand new sign-ups
+        if (event === 'SIGNED_IN') {
+          const seen = localStorage.getItem('mv_onboarding_done');
+          if (!seen) setShowOnboarding(true);
+        }
+      }
       else col.resetUserData();
     });
     return () => subscription.unsubscribe();
@@ -78,6 +91,11 @@ export default function MetalVault() {
   async function loadProfile(u) {
     const { data } = await supabase.from('profiles').select('*').eq('id', u.id).single();
     if (data) setProfile(data);
+    try {
+      const r = await fetch('/api/discogs/connection-status');
+      const d = await r.json();
+      if (d.connected) setDiscogsConnected(true);
+    } catch {}
   }
 
   // Push status + OAuth return params
@@ -116,11 +134,12 @@ export default function MetalVault() {
 
   // Feed
   useEffect(() => {
+    setFeedLoading(true); setFeedError('');
     fetch('/api/releases')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error('Server error ' + r.status); return r.json(); })
       .then(d => { setReleases(d.releases||[]); setSource(d.source||''); setFeedLoading(false); })
       .catch(e => { setFeedError(e.message); setFeedLoading(false); });
-  }, []);
+  }, [feedRetryCount]);
 
   const openAlbum = (album) => { setSelected(album); col.setVinylError(''); col.fetchVinyl(album); };
 
@@ -133,8 +152,14 @@ export default function MetalVault() {
         body: JSON.stringify({ type: 'both' }),
       });
       const d = await r.json();
+      // Handle API-level errors (400/503 etc.) that still return JSON
+      if (!r.ok || d.error) {
+        setSyncResult({ _error: d.error || 'Sync failed' });
+        setSyncStatus('error');
+        return;
+      }
       setSyncResult(d); setSyncStatus('done');
-      // Reload ALL user data so collection/watchlist/portfolio are in sync
+      setDiscogsConnected(true);
       await col.loadUserData(user);
       // Switch to Vault tab so user sees their records immediately
       if (d.added > 0 || d.updated > 0) setTab('collection');
@@ -198,7 +223,7 @@ export default function MetalVault() {
       return true;
     })
     .filter(r => !search || r.artist.toLowerCase().includes(search.toLowerCase()) || r.album.toLowerCase().includes(search.toLowerCase()))
-    .filter(r => genreInterests.length===0 || (r.genres||[]).some(g => genreInterests.includes(g)))
+    .filter(r => genreInterests.length===0 || genreInterests.includes(r.genre) || (r.genres||[]).some(g => genreInterests.includes(g)))
     .sort((a,b) => {
       if (sort==='date_desc') return new Date(b.releaseDate)-new Date(a.releaseDate);
       if (sort==='date_asc')  return new Date(a.releaseDate)-new Date(b.releaseDate);
@@ -263,7 +288,20 @@ export default function MetalVault() {
               </div>
             )}
             {feedLoading && <div style={{ textAlign:'center', padding:'80px 24px', color:C.dim, ...MONO }}><div style={{ fontSize:32, marginBottom:12 }}>⟳</div>Loading…</div>}
-            {feedError   && <div style={{ margin:'16px', background:'#1a0000', border:'1px solid '+C.accent+'44', borderRadius:8, padding:'12px 14px', color:'#f87171', fontSize:12, ...MONO }}>⚠ {feedError}</div>}
+            {feedError   && (
+              <div style={{ margin:'16px', background:'#1a0000', border:'1px solid '+C.accent+'44', borderRadius:10, padding:'16px' }}>
+                <div style={{ color:'#f87171', fontSize:12, ...MONO, marginBottom:10 }}>
+                  {navigator?.onLine === false ? '📡 No internet connection' : '⚠ ' + feedError}
+                </div>
+                <div style={{ fontSize:10, color:C.dim, ...MONO, marginBottom:12 }}>
+                  {navigator?.onLine === false ? 'Connect to WiFi or mobile data and try again.' : 'Could not load releases from Discogs.'}
+                </div>
+                <button onClick={()=>setFeedRetryCount(n=>n+1)}
+                  style={{ background:C.accent, border:'none', borderRadius:8, color:'#fff', padding:'9px 18px', cursor:'pointer', ...BEBAS, fontSize:15, letterSpacing:'0.08em' }}>
+                  ↺ Retry
+                </button>
+              </div>
+            )}
             {!feedLoading && !feedError && (
               <div style={{ display:'flex', flexDirection:'column', gap:8, padding:'10px 16px 16px' }}>
                 {filtered.map(album=>(
@@ -277,19 +315,21 @@ export default function MetalVault() {
         {tab==='watchlist' && (
           <WatchlistTab watchlist={col.watchlist}
             onRemove={async(id)=>{ if(user)await fetch('/api/watchlist?album_id='+id,{method:'DELETE'}); col.setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id)); }}
-            onAlbumClick={openAlbum} user={user}/>
+            onAlbumClick={openAlbum} user={user} AlbumCover={AlbumCover}/>
         )}
 
         {tab==='collection' && (
           <CollectionTab user={user} collection={col.collection} watchlist={col.watchlist}
             onRemoveWatch={async(id)=>{ if(user)await fetch('/api/watchlist?album_id='+id,{method:'DELETE'}); col.setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id)); }}
             onAddToWatchlist={async(artist,album)=>{ const item={artist,album:album.title,album_id:album.id,cover:album.cover}; col.setWatchlist(w=>[...w,{...item,id:album.id}]); if(user)await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)}); }}
-            onAlbumClick={openAlbum} onRemove={col.removeFromCollection} onUpdate={col.setCollection} portfolio={col.portfolio}/>
+            onAlbumClick={openAlbum} onRemove={col.removeFromCollection} onUpdate={col.setCollection} portfolio={col.portfolio} AlbumCover={AlbumCover}
+            onManualAdd={async(item)=>{ await col.addToCollection(item); }}/>
         )}
 
         {tab==='search'   && <SearchTab onWatch={col.toggleWatch} onAddCollection={item=>col.addToCollection(item)} watchlist={col.watchlist} collection={col.collection}/>}
-        {tab==='calendar' && <CalendarTab releases={releases} followedArtists={col.followedArtists}/>}
         {tab==='concerts' && <ConcertsTab/>}
+        {tab==='fair'     && <RecordFairTab collection={col.collection} onAddToCollection={item=>col.addToCollection(item)}/>}
+        {tab==='calendar' && <CalendarTab releases={releases} followedArtists={col.followedArtists}/>}
         {tab==='stats'    && <StatsTab collection={col.collection} watchlist={col.watchlist} collectionSummary={col.collectionSummary}/>}
 
         {tab==='profile' && discogsError && (
@@ -318,6 +358,21 @@ export default function MetalVault() {
       </div>
 
       <BottomNav tab={tab} onChange={setTab} user={user}/>
+
+      {showOnboarding && (
+        <OnboardingScreen
+          onDone={() => {
+            setShowOnboarding(false);
+            try { localStorage.setItem('mv_onboarding_done', '1'); } catch {}
+          }}
+          onConnectDiscogs={async () => {
+            setShowOnboarding(false);
+            try { localStorage.setItem('mv_onboarding_done', '1'); } catch {}
+            await connectDiscogs();
+          }}
+          isConnected={discogsConnected}
+        />
+      )}
 
       {(tab==='feed'||tab==='search'||tab==='collection') && (
         <button onClick={()=>setShowScanner(true)} style={{ position:'fixed', bottom:80, right:16, zIndex:90, width:56, height:56, borderRadius:16, background:'linear-gradient(135deg,#dc2626,#991b1b)', border:'none', color:'#fff', cursor:'pointer', fontSize:24, boxShadow:'0 4px 24px rgba(220,38,38,0.5)', display:'flex', alignItems:'center', justifyContent:'center' }}>📷</button>

@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { getAdminClient } from '@/lib/supabase-server';
+import { createClient, getAdminClient } from '@/lib/supabase-server';
 
 async function sendPush(subscription, payload) {
   const webpush = (await import('web-push')).default;

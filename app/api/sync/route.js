@@ -37,7 +37,7 @@ async function fetchAllPages(baseUrl, headers) {
 function normalizeItem(r) {
   const info = r.basic_information || r;
   return {
-    discogs_id:     String(info.id || r.id),
+    discogs_id:     info.id || r.id,  // BIGINT — no String() cast
     artist:         (info.artists?.[0]?.name || 'Unknown').replace(/\s*\(\d+\)$/, ''),
     album:          info.title || '',
     cover:          info.cover_image || info.thumb || null,
@@ -125,11 +125,11 @@ export async function POST(req) {
           .select('id, discogs_id, purchase_price, grade')
           .eq('user_id', user.id);
         const existingMap = {};
-        (existing||[]).forEach(e => { existingMap[e.discogs_id] = e; });
+        (existing||[]).forEach(e => { existingMap[String(e.discogs_id)] = e; });
 
         for (const r of raw) {
           const item = normalizeItem(r);
-          const ex   = existingMap[item.discogs_id];
+          const ex   = existingMap[String(item.discogs_id)];
 
           if (ex) {
             await admin.from('collection').update({
@@ -208,6 +208,24 @@ export async function POST(req) {
         result.errors.push({ source: 'wantlist', error: e.message });
       }
     }
+
+    // Update portfolio snapshot so the value-over-time chart reflects the sync
+    try {
+      const { data: allItems } = await admin
+        .from('collection').select('purchase_price, current_price, median_price')
+        .eq('user_id', user.id);
+      if (allItems?.length) {
+        const totalValue = allItems.reduce((s,i)=>s+(Number(i.median_price||i.current_price||i.purchase_price)||0),0);
+        const totalPaid  = allItems.reduce((s,i)=>s+(Number(i.purchase_price)||0),0);
+        await admin.from('portfolio_snapshots').upsert({
+          user_id:       user.id,
+          snapshot_date: new Date().toISOString().split('T')[0],
+          total_value:   totalValue,
+          total_paid:    totalPaid,
+          item_count:    allItems.length,
+        }, { onConflict: 'user_id,snapshot_date' });
+      }
+    } catch {}
 
     return NextResponse.json({ success: true, ...result });
   } catch (e) {

@@ -227,9 +227,10 @@ export function BottomNav({tab,onChange,watchCount,user}){
     {id:'search',    icon:'🔍', label:'Search'},
     {id:'collection',icon:'📦', label:'Vault'},
     {id:'calendar',  icon:'📅', label:'Cal'},
+    {id:'fair',      icon:'🎪', label:'Fair'},
     {id:'concerts',  icon:'🎸', label:'Live'},
     {id:'stats',     icon:'📊', label:'Stats'},
-    {id:'profile',   icon:'👤', label:user?'Me':'Me'},
+    {id:'profile',   icon:'👤', label:'Me'},
   ];
   return(
     <div style={{
@@ -237,7 +238,7 @@ export function BottomNav({tab,onChange,watchCount,user}){
       borderTop:'1px solid '+C.border,zIndex:100,
       paddingBottom:'env(safe-area-inset-bottom,0px)',
       boxShadow:'0 -4px 20px #00000088',
-      display:'grid',gridTemplateColumns:'repeat(7,1fr)',
+      display:'grid',gridTemplateColumns:'repeat(8,1fr)',
       overflow:'hidden',
     }}>
       {tabs.map(t=>(

@@ -68,6 +68,34 @@ export default function ProfileTab({
         </div>
       </div>
 
+      {/* Public Profile Banner — prominent CTA */}
+      {!profile?.is_public && (
+        <div style={{ background: 'linear-gradient(135deg,#0d1a2e,#1a0a2e)', border: '1px solid #1e40af', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#60a5fa', ...MONO, marginBottom: 3 }}>🌐 Share your collection</div>
+            <div style={{ fontSize: 10, color: '#4a7ab5', ...MONO, lineHeight: 1.5 }}>Enable public profile to show off your vault</div>
+          </div>
+          <button onClick={() => setIsPublic(true)}
+            style={{ background: '#1e40af', border: 'none', borderRadius: 8, color: '#fff', padding: '8px 14px', cursor: 'pointer', ...MONO, fontSize: 11, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            Go public →
+          </button>
+        </div>
+      )}
+      {profile?.is_public && profile?.username && (
+        <div style={{ background: '#001a00', border: '1px solid #166534', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: '#4ade80', ...MONO }}>✓ Public profile active</div>
+            <button onClick={() => navigator.clipboard?.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}/p/${profile.username}`).then(() => alert('Link copied!'))}
+              style={{ background: '#0d2a0d', border: '1px solid #1a3d1a', borderRadius: 6, color: '#4ade80', padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10 }}>
+              📋 Copy link
+            </button>
+          </div>
+          <div style={{ fontSize: 10, color: '#2d6b2d', ...MONO, wordBreak: 'break-all' }}>
+            {typeof window !== 'undefined' ? window.location.origin : ''}/p/{profile.username}
+          </div>
+        </div>
+      )}
+
       {/* Profile settings */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
         <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 12 }}>Profile settings</div>
@@ -177,11 +205,13 @@ export default function ProfileTab({
                 fontSize: 10, color: '#4ade80', ...MONO, lineHeight: 1.7,
                 background: '#0d1f0d', border: '1px solid #1a3d1a', borderRadius: 6, padding: '8px 10px',
               }}>
-                ✓ Added {syncResult.added} new · Updated {syncResult.updated} · Watchlist +{syncResult.watchAdded}
+                ✓ Added {syncResult.added ?? 0} new · Updated {syncResult.updated ?? 0} · Watchlist +{syncResult.watchAdded ?? 0}
               </div>
             )}
-            {syncStatus === 'error' && (
-              <div style={{ fontSize: 10, color: '#f87171', ...MONO }}>⚠️ Sync failed — try again</div>
+            {(syncStatus === 'error' || syncResult?._error) && (
+              <div style={{ fontSize: 10, color: '#f87171', ...MONO, lineHeight: 1.5 }}>
+                ⚠️ {syncResult?._error || 'Sync failed — try again'}
+              </div>
             )}
           </div>
         ) : (

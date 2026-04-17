@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+export const dynamic = 'force-dynamic';
+import { useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 
 const C = {
@@ -15,7 +16,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [sent,    setSent]    = useState(false);
   const [error,   setError]   = useState('');
-  const supabase = createClient();
+  const supabase = useRef(createClient()).current;
 
   const signInWithGoogle = async () => {
     setLoading(true); setError('');

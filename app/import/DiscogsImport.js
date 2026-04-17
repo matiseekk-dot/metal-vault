@@ -74,11 +74,14 @@ export default function DiscogsImport({ onImportCollection, onImportWatchlist, u
         try {
           await onImportCollection({
             discogs_id:     item.discogs_id,
-            artist:         item.artist,
+            artist:         (item.artist || '').replace(/\s*\(\d+\)$/, ''),  // remove "(2)" disambiguation
             album:          item.album,
             cover:          item.cover,
             format:         item.format,
             label:          item.label,
+            year:           item.year    || null,
+            genres:         item.genres  || [],
+            styles:         item.styles  || [],
             purchase_price: item.purchase_price ? parseFloat(item.purchase_price) : null,
           });
           collImported++;

@@ -2,6 +2,15 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 
+// Send push notification to all user's devices
+async function sendPushToUser(userId, payload) {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
+  try {
+    const { notifyUser } = await import('@/app/api/push/notify/route');
+    await notifyUser(userId, payload);
+  } catch {}
+}
+
 // Send email via Resend REST API — no SDK constructor, build-safe
 async function sendEmail({ to, subject, html }) {
   const key = process.env.RESEND_API_KEY;
@@ -96,6 +105,16 @@ export async function GET(request) {
         }
 
         if (newReleases.length === 0) continue;
+
+        // Send push notification
+        await sendPushToUser(userId, {
+          title: `🔥 ${newReleases.length} new release${newReleases.length > 1 ? 's' : ''} this week`,
+          body:  newReleases.slice(0, 3).map(r => `${r.artist} — ${r.album}`).join(' · '),
+          icon:  newReleases[0]?.cover || '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          url:   '/?tab=feed',
+          tag:   'new-releases-' + new Date().toISOString().split('T')[0],
+        });
 
         // Send email digest
         if (userData.email && process.env.RESEND_API_KEY) {

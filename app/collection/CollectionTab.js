@@ -176,11 +176,76 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
 }
 
 // ── CollectionTab ─────────────────────────────────────────────────
+// ── ManualAddForm ─────────────────────────────────────────────
+function ManualAddForm({ onAdd, onClose }) {
+  const [form, setForm] = useState({ artist: '', album: '', format: 'Vinyl', label: '', year: '', purchase_price: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSubmit = async () => {
+    if (!form.artist.trim() || !form.album.trim()) { setError('Artist and album are required'); return; }
+    setSaving(true);
+    await onAdd({
+      artist: form.artist.trim(), album: form.album.trim(),
+      format: form.format || 'Vinyl', label: form.label.trim() || null,
+      year:   form.year ? parseInt(form.year) : null,
+      purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null,
+      cover: null, discogs_id: null,
+    });
+    setSaving(false);
+  };
+
+  const lbl = { display: 'block', fontSize: 9, color: C.dim, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 4 };
+  const fld = { ...inputSt, padding: '9px 12px', marginBottom: 10 };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#000000cc', zIndex: 250, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: C.bg2, borderRadius: '16px 16px 0 0', padding: '16px', maxHeight: '90vh', overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom,24px)' }}>
+        <div style={{ width: 40, height: 4, background: C.border2, borderRadius: 2, margin: '0 auto 16px' }} />
+        <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.06em', marginBottom: 16 }}>ADD RECORD MANUALLY</div>
+        <label style={lbl}>Artist *</label>
+        <input value={form.artist} onChange={e => set('artist', e.target.value)} placeholder="e.g. Metallica" style={fld} autoFocus />
+        <label style={lbl}>Album *</label>
+        <input value={form.album} onChange={e => set('album', e.target.value)} placeholder="e.g. Master of Puppets" style={fld} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div>
+            <label style={lbl}>Format</label>
+            <select value={form.format} onChange={e => set('format', e.target.value)} style={{ ...fld, cursor: 'pointer', marginBottom: 0 }}>
+              {['Vinyl','CD','Cassette','Box Set','Digital','Other'].map(f => <option key={f}>{f}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Year</label>
+            <input type="number" value={form.year} onChange={e => set('year', e.target.value)} placeholder="e.g. 1986" style={{ ...fld, marginBottom: 0 }} />
+          </div>
+        </div>
+        <label style={lbl}>Label</label>
+        <input value={form.label} onChange={e => set('label', e.target.value)} placeholder="e.g. Elektra Records" style={fld} />
+        <label style={lbl}>Purchase price ($)</label>
+        <input type="number" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)} placeholder="0.00" style={fld} />
+        {error && <div style={{ color: '#f87171', fontSize: 11, ...MONO, marginBottom: 8 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '12px', background: 'none', border: '1px solid ' + C.border, borderRadius: 10, color: C.dim, cursor: 'pointer', ...MONO, fontSize: 12 }}>Cancel</button>
+          <button onClick={handleSubmit} disabled={saving}
+            style={{ flex: 2, padding: '12px', background: 'linear-gradient(135deg,' + C.accent + ',' + C.accent2 + ')', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer', ...BEBAS, fontSize: 18, letterSpacing: '0.06em' }}>
+            {saving ? 'SAVING…' : 'SAVE RECORD'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CollectionTab({
   user, collection, watchlist = [], onRemoveWatch, onRemove, onUpdate,
-  portfolio, onAlbumClick, onAddToWatchlist, AlbumCover,
+  portfolio, onAlbumClick, onAddToWatchlist, AlbumCover, onManualAdd,
 }) {
   const [view, setView]                   = useState('vinyl');
+  const [vaultSearch,   setVaultSearch]   = useState('');
+  const [vaultFilter,   setVaultFilter]   = useState('all');
+  const [showAddManual, setShowAddManual] = useState(false);
   const [showAlertForm, setShowAlertForm] = useState(null);
   const [targetPrice, setTargetPrice]     = useState('');
   const [saving, setSaving]               = useState(false);
@@ -282,6 +347,33 @@ export function CollectionTab({
 
       {view === 'vinyl' && (
         <div style={{ padding: '16px' }}>
+          {/* Search + Add */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <input value={vaultSearch} onChange={e => setVaultSearch(e.target.value)}
+              placeholder="Search artist, album…"
+              style={{ ...inputSt, flex: 1, padding: '9px 12px', fontSize: 14 }} />
+            <button onClick={() => setShowAddManual(true)}
+              style={{ background: C.accent, border: 'none', borderRadius: 8, color: '#fff', padding: '0 16px', cursor: 'pointer', ...BEBAS, fontSize: 16, flexShrink: 0 }}>
+              + ADD
+            </button>
+          </div>
+          {/* Filter pills */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto' }}>
+            {[['all','⚡ All'],['vinyl','💿 Vinyl'],['cd','💽 CD'],['limited','💎 Limited'],['no_price','💳 No price']].map(([id, label]) => (
+              <button key={id} onClick={() => setVaultFilter(id)}
+                style={{ padding: '5px 11px', borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer', fontSize: 10, ...MONO, flexShrink: 0,
+                  background: vaultFilter === id ? C.accent + '22' : C.bg3,
+                  color: vaultFilter === id ? C.accent : C.dim,
+                  border: '1px solid ' + (vaultFilter === id ? C.accent + '66' : C.border),
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* Manual add modal */}
+          {showAddManual && <ManualAddForm
+            onAdd={async (item) => { if (onManualAdd) await onManualAdd(item); setShowAddManual(false); }}
+            onClose={() => setShowAddManual(false)} />}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO }}>My records ({collection.length})</div>
             <select onChange={e => {
@@ -332,11 +424,33 @@ export function CollectionTab({
           {collection.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: C.dim, ...MONO, fontSize: 12 }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>📦</div>
-              Collection is empty — add records from album modal
+              Collection is empty — tap + ADD or sync with Discogs
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {collection.map(item => (
+              {(() => {
+                const visibleItems = collection.filter(item => {
+                  const q = vaultSearch.toLowerCase();
+                  if (q && !item.artist?.toLowerCase().includes(q) && !item.album?.toLowerCase().includes(q)) return false;
+                  if (vaultFilter === 'vinyl')    return (item.format || '').toLowerCase().includes('vinyl') || !item.format;
+                  if (vaultFilter === 'cd')       return (item.format || '').toLowerCase().includes('cd');
+                  if (vaultFilter === 'limited')  return (item.format || '').toLowerCase().includes('limited');
+                  if (vaultFilter === 'no_price') return !item.purchase_price;
+                  return true;
+                });
+                if (visibleItems.length === 0) return (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: C.dim, ...MONO, fontSize: 12 }}>
+                    <div style={{ fontSize: 32, marginBottom: 10 }}>🔍</div>
+                    No records match
+                    <div style={{ marginTop: 12 }}>
+                      <button onClick={() => { setVaultSearch(''); setVaultFilter('all'); }}
+                        style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.accent, padding: '6px 14px', cursor: 'pointer', ...MONO, fontSize: 10 }}>
+                        Clear filters
+                      </button>
+                    </div>
+                  </div>
+                );
+                return visibleItems.map(item => (
                 <div key={item.id} style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 10, padding: '12px 14px' }}>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                     {AlbumCover && <AlbumCover src={item.cover} artist={item.artist} size={48} />}
@@ -428,7 +542,8 @@ export function CollectionTab({
                     )
                   )}
                 </div>
-              ))}
+              ));
+              })()}
             </div>
           )}
         </div>

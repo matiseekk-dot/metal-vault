@@ -1,13 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
-
-const sb = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { getAdminClient } from '@/lib/supabase-server';
 
 export async function generateMetadata({ params }) {
   const { token } = await params;
-  const { data } = await sb.from('share_tokens').select('label').eq('token', token).single();
+  const { data } = await getAdminClient().from('share_tokens').select('label').eq('token', token).single();
   return { title: (data?.label || 'Collection') + ' · Metal Vault' };
 }
 
@@ -19,7 +14,7 @@ const GRADE_COLOR = {'M':'#4ade80','NM':'#4ade80','VG+':'#f5c842','VG':'#f5c842'
 export default async function SharePage({ params }) {
   const { token } = await params;
 
-  const { data: share } = await sb.from('share_tokens').select('user_id,label').eq('token', token).single();
+  const { data: share } = await getAdminClient().from('share_tokens').select('user_id,label').eq('token', token).single();
   if (!share) return (
     <div style={{minHeight:'100vh',background:C.bg,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Space Mono,monospace',color:'#555'}}>
       <div style={{textAlign:'center'}}>

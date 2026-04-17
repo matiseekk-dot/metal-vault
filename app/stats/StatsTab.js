@@ -295,7 +295,7 @@ export default function StatsTab({collection,watchlist}){
   const artistMap={};collection.forEach(c=>{artistMap[c.artist]=(artistMap[c.artist]||0)+1;});
   const topArtist=Object.entries(artistMap).sort((a,b)=>b[1]-a[1])[0];
 
-  const genreMap={};collection.forEach(c=>{const g=c.genre||c.styles?.[0]||'Metal';genreMap[g]=(genreMap[g]||0)+1;});
+  const genreMap={};collection.forEach(c=>{const g=c.genre||(c.genres||[])[0]||c.styles?.[0]||'Metal';genreMap[g]=(genreMap[g]||0)+1;});
   const genreData=Object.entries(genreMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([label,value])=>({label,value}));
 
   const COLORS=['#dc2626','#f5c842','#4ade80','#60a5fa','#a78bfa','#f97316'];
@@ -466,6 +466,59 @@ export default function StatsTab({collection,watchlist}){
           <BarChart data={genreData} colorFn={i=>COLORS[i%COLORS.length]}/>
         </div>
       )}
+
+
+      {/* Yearly spending */}
+      {collection.length > 0 && (() => {
+        const byYear = {};
+        collection.forEach(i => {
+          const y = i.date_added
+            ? new Date(i.date_added).getFullYear()
+            : i.added_at
+              ? new Date(i.added_at).getFullYear()
+              : null;
+          if (!y) return;
+          if (!byYear[y]) byYear[y] = { spent: 0, count: 0 };
+          byYear[y].spent += Number(i.purchase_price) || 0;
+          byYear[y].count++;
+        });
+        const years = Object.entries(byYear)
+          .sort((a, b) => b[0] - a[0])
+          .filter(([, v]) => v.count > 0);
+        if (!years.length) return null;
+        const maxSpent = Math.max(...years.map(([, v]) => v.spent), 1);
+        return (
+          <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
+            <div style={{ fontSize: 10, color: C.accent, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14 }}>
+              📅 Spending by year
+            </div>
+            {years.map(([year, data]) => (
+              <div key={year} style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: C.text, ...MONO }}>{year}</span>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, color: C.dim, ...MONO }}>{data.count} record{data.count !== 1 ? 's' : ''}</span>
+                    <span style={{ fontSize: 13, color: C.gold, ...MONO, fontWeight: 'bold' }}>
+                      {data.spent > 0 ? '$' + data.spent.toFixed(0) : '—'}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ height: 8, background: C.bg3, borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 4,
+                    width: data.spent > 0 ? (data.spent / maxSpent * 100) + '%' : '0%',
+                    background: 'linear-gradient(90deg, ' + C.accent + ', ' + C.gold + ')',
+                    transition: 'width 0.6s ease',
+                  }} />
+                </div>
+              </div>
+            ))}
+            <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 4, textAlign: 'right' }}>
+              Total all time: ${collection.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0).toFixed(0)}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Pro teaser */}
       <div style={{background:'linear-gradient(135deg,#0a0a1a,#14142a)',
