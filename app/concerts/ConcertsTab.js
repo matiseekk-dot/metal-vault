@@ -49,10 +49,6 @@ function Stars({value,onChange}){
   );
 }
 
-const inputSt = {
-  width:'100%',background:C.bg3,border:`1px solid ${C.border}`,borderRadius:8,
-  color:C.text,padding:'11px 12px',fontSize:16,...MONO,outline:'none',boxSizing:'border-box',
-};
 
 export default function ConcertsTab() {
   const [concerts,setConcerts] = useState([]);

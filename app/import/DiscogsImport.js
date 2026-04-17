@@ -3,11 +3,6 @@ import { useState } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 
 
-const inputSt = {
-  width:'100%', background:C.bg3, border:`1px solid ${C.border}`,
-  borderRadius:8, color:C.text, padding:'11px 14px', fontSize:16,
-  ...MONO, outline:'none', boxSizing:'border-box',
-};
 
 function PreviewRow({ item }) {
   return (
