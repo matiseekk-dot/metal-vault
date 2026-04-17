@@ -1,103 +1,127 @@
-// ── ProfileTab — extracted from app/page.js ─────────────────────
+// ── ProfileTab — extracted from app/page.js, cleaned ───────────
 'use client';
 import { useState } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 
-function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onShowImport,pushEnabled,pushLoading,onTogglePush,discogsConnected,onConnectDiscogs,onSyncDiscogs,syncStatus,syncResult,shareToken,onGetShareToken}){
-  const [username,setUsername]=useState(profile?.username||'');
-  const [isPublic,setIsPublic]=useState(profile?.is_public||false);
-  const [saving,setSaving]=useState(false);
-  const [msg,setMsg]=useState('');
+export default function ProfileTab({
+  user, profile, followedArtists,
+  onSignOut, onUpdateProfile, onShowImport,
+  pushEnabled, pushLoading, onTogglePush,
+  discogsConnected, onConnectDiscogs, onSyncDiscogs,
+  syncStatus, syncResult,
+  shareToken, onGetShareToken,
+}) {
+  const [username, setUsername] = useState(profile?.username || '');
+  const [isPublic, setIsPublic] = useState(profile?.is_public || false);
+  const [saving,   setSaving]   = useState(false);
+  const [msg,      setMsg]      = useState('');
 
-  const saveProfile=async()=>{
-    setSaving(true);setMsg('');
-    const r=await fetch('/api/profile',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username,is_public:isPublic}),
+  const saveProfile = async () => {
+    setSaving(true); setMsg('');
+    const r = await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, is_public: isPublic }),
     });
-    const d=await r.json();
+    const d = await r.json();
     setSaving(false);
-    setMsg(d.error||'✓ Saved');
-    if(!d.error)onUpdateProfile({username,is_public:isPublic,discogs_username:discogsUser.trim()||null});
+    setMsg(d.error || '✓ Saved');
+    if (!d.error) onUpdateProfile({ username, is_public: isPublic });
   };
 
-  if(!user)return(
-    <div style={{textAlign:'center',padding:'60px 24px',color:C.dim,...MONO}}>
-      <div style={{fontSize:40,marginBottom:12}}>👤</div>
-      <div style={{fontSize:13,marginBottom:20,lineHeight:1.7}}>Sign in to manage your profile</div>
-      <button onClick={()=>window.location.href='/login'}
-        style={{background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')',border:'none',borderRadius:10,
-          color:'#fff',padding:'13px 24px',...BEBAS,fontSize:18,letterSpacing:'0.1em',cursor:'pointer'}}>
+  if (!user) return (
+    <div style={{ textAlign: 'center', padding: '60px 24px', color: C.dim, ...MONO }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
+      <div style={{ fontSize: 13, marginBottom: 20, lineHeight: 1.7 }}>Sign in to manage your profile</div>
+      <button onClick={() => window.location.href = '/login'}
+        style={{
+          background: 'linear-gradient(135deg,' + C.accent + ',' + C.accent2 + ')',
+          border: 'none', borderRadius: 10, color: '#fff', padding: '13px 24px',
+          ...BEBAS, fontSize: 18, letterSpacing: '0.1em', cursor: 'pointer',
+        }}>
         SIGN IN
       </button>
     </div>
   );
 
-  return(
-    <div style={{padding:'16px'}}>
+  return (
+    <div style={{ padding: '16px' }}>
+
       {/* User info */}
-      <div style={{display:'flex',gap:14,alignItems:'center',marginBottom:24,padding:'16px',
-        background:C.bg2,border:'1px solid '+C.border,borderRadius:12}}>
-        <div style={{width:52,height:52,borderRadius:'50%',background:'linear-gradient(135deg,'+C.accent+',#450a0a)',
-          display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,overflow:'hidden',flexShrink:0}}>
+      <div style={{
+        display: 'flex', gap: 14, alignItems: 'center', marginBottom: 24, padding: '16px',
+        background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12,
+      }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: '50%',
+          background: 'linear-gradient(135deg,' + C.accent + ',#450a0a)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 24, overflow: 'hidden', flexShrink: 0,
+        }}>
           {user.user_metadata?.avatar_url
-            ?<img src={user.user_metadata.avatar_url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
-            :<span style={{...BEBAS}}>{(user.email||'?')[0].toUpperCase()}</span>
-          }
+            ? <img src={user.user_metadata.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <span style={{ ...BEBAS }}>{(user.email || '?')[0].toUpperCase()}</span>}
         </div>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{...BEBAS,fontSize:20,color:C.text,lineHeight:1}}>{user.user_metadata?.full_name||'Collector'}</div>
-          <div style={{fontSize:11,color:C.dim,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis'}}>{user.email}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ ...BEBAS, fontSize: 20, color: C.text, lineHeight: 1 }}>{user.user_metadata?.full_name || 'Collector'}</div>
+          <div style={{ fontSize: 11, color: C.dim, ...MONO, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</div>
         </div>
       </div>
 
       {/* Profile settings */}
-      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:12}}>Profile settings</div>
+      <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 12 }}>Profile settings</div>
 
-        <label style={{fontSize:10,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',display:'block',marginBottom:4}}>
+        <label style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
           Username (@)
         </label>
-        <input value={username} onChange={e=>setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,''))}
-          placeholder="e.g. metal_collector" style={{...inputSt,marginBottom:12}}/>
+        <input value={username} onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+          placeholder="e.g. metal_collector" style={{ ...inputSt, marginBottom: 12 }} />
 
-        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
-          <button onClick={()=>setIsPublic(p=>!p)}
-            style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
-              background:isPublic?C.accent:C.bg3,position:'relative',transition:'background 0.2s'}}>
-            <span style={{position:'absolute',top:2,width:20,height:20,borderRadius:'50%',background:'#fff',
-              transition:'left 0.2s',left:isPublic?'calc(100% - 22px)':'2px'}}/>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <button onClick={() => setIsPublic(p => !p)}
+            style={{
+              width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+              background: isPublic ? C.accent : C.bg3, position: 'relative', transition: 'background 0.2s',
+            }}>
+            <span style={{
+              position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%',
+              background: '#fff', transition: 'left 0.2s',
+              left: isPublic ? 'calc(100% - 22px)' : '2px',
+            }} />
           </button>
-          <span style={{fontSize:12,color:C.muted,...MONO}}>
-            Public profile {username?`(metal-vault.app/p/${username})`:''} 
+          <span style={{ fontSize: 12, color: C.muted, ...MONO }}>
+            Public profile {username ? `(metal-vault.app/p/${username})` : ''}
           </span>
         </div>
 
-        {username&&isPublic&&(
-          <div style={{background:'#001a00',border:'1px solid #166534',borderRadius:6,padding:'8px 12px',marginBottom:12,fontSize:10,color:'#4ade80',...MONO}}>
-            🌐 {process.env.NEXT_PUBLIC_APP_URL||'https://your-app.vercel.app'}/p/{username}
+        {username && isPublic && (
+          <div style={{ background: '#001a00', border: '1px solid #166534', borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontSize: 10, color: '#4ade80', ...MONO }}>
+            🌐 {process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app'}/p/{username}
           </div>
         )}
 
         <button onClick={saveProfile} disabled={saving}
-          style={{width:'100%',padding:'11px',background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')',
-            border:'none',borderRadius:8,color:'#fff',cursor:'pointer',...BEBAS,fontSize:16,letterSpacing:'0.08em'}}>
-          {saving?'SAVING…':'SAVE PROFILE'}
+          style={{
+            width: '100%', padding: '11px',
+            background: 'linear-gradient(135deg,' + C.accent + ',' + C.accent2 + ')',
+            border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer',
+            ...BEBAS, fontSize: 16, letterSpacing: '0.08em',
+          }}>
+          {saving ? 'SAVING…' : 'SAVE PROFILE'}
         </button>
-        {msg&&<div style={{fontSize:11,color:msg.startsWith('✓')?'#4ade80':'#f87171',...MONO,marginTop:8,textAlign:'center'}}>{msg}</div>}
+        {msg && <div style={{ fontSize: 11, color: msg.startsWith('✓') ? '#4ade80' : '#f87171', ...MONO, marginTop: 8, textAlign: 'center' }}>{msg}</div>}
       </div>
 
       {/* Followed artists */}
-      {followedArtists.length>0&&(
-        <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-          <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:10}}>
+      {followedArtists.length > 0 && (
+        <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
+          <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 10 }}>
             Followed artists ({followedArtists.length})
           </div>
-          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-            {followedArtists.map(a=>(
-              <span key={a.id} style={{fontSize:11,padding:'5px 10px',borderRadius:20,
-                background:C.bg3,color:C.muted,border:'1px solid '+C.border,...MONO}}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {followedArtists.map(a => (
+              <span key={a.id} style={{ fontSize: 11, padding: '5px 10px', borderRadius: 20, background: C.bg3, color: C.muted, border: '1px solid ' + C.border, ...MONO }}>
                 {a.artist_name} 🔔
               </span>
             ))}
@@ -106,142 +130,127 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
       )}
 
       {/* Push notifications */}
-      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:4}}>Push Notifications</div>
-            <div style={{fontSize:11,color:C.dim,...MONO}}>Price alerts on your phone</div>
+            <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 4 }}>Push Notifications</div>
+            <div style={{ fontSize: 11, color: C.dim, ...MONO }}>Price alerts on your phone</div>
           </div>
           <button onClick={onTogglePush} disabled={pushLoading}
-            style={{width:52,height:28,borderRadius:14,border:'none',cursor:'pointer',flexShrink:0,
-              background:pushEnabled?C.accent:'#333',position:'relative',transition:'background 0.2s',opacity:pushLoading?0.6:1}}>
-            <span style={{position:'absolute',top:3,width:22,height:22,borderRadius:'50%',background:'#fff',
-              transition:'left 0.2s',left:pushEnabled?'calc(100% - 25px)':'3px'}}/>
+            style={{
+              width: 52, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer', flexShrink: 0,
+              background: pushEnabled ? C.accent : '#333', position: 'relative',
+              transition: 'background 0.2s', opacity: pushLoading ? 0.6 : 1,
+            }}>
+            <span style={{
+              position: 'absolute', top: 3, width: 22, height: 22, borderRadius: '50%',
+              background: '#fff', transition: 'left 0.2s',
+              left: pushEnabled ? 'calc(100% - 25px)' : '3px',
+            }} />
           </button>
         </div>
-        {pushEnabled&&<div style={{fontSize:10,color:'#4ade80',...MONO,marginTop:6}}>✓ Enabled — you will receive price alerts</div>}
+        {pushEnabled && <div style={{ fontSize: 10, color: '#4ade80', ...MONO, marginTop: 6 }}>✓ Enabled — you will receive price alerts</div>}
       </div>
 
       {/* Discogs OAuth */}
-      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
-        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Discogs Account</div>
-        {discogsConnected?(
+      <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>Discogs Account</div>
+        {discogsConnected ? (
           <div>
-            {/* Connected state — show sync button */}
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-              <div style={{fontSize:12,color:'#4ade80',...MONO}}>✓ Discogs connected</div>
-              <button onClick={onSyncDiscogs}
-                disabled={syncStatus==='syncing'}
-                style={{padding:'6px 14px',background:syncStatus==='syncing'?C.bg3:'#0d1f0d',
-                  border:'1px solid '+(syncStatus==='syncing'?C.border:'#1a3d1a'),
-                  borderRadius:6,color:syncStatus==='syncing'?C.dim:'#4ade80',
-                  cursor:syncStatus==='syncing'?'default':'pointer',...MONO,fontSize:11}}>
-                {syncStatus==='syncing'?'⏳ Syncing…':'↺ Sync collection'}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: '#4ade80', ...MONO }}>✓ Discogs connected</div>
+              <button onClick={onSyncDiscogs} disabled={syncStatus === 'syncing'}
+                style={{
+                  padding: '6px 14px',
+                  background: syncStatus === 'syncing' ? C.bg3 : '#0d1f0d',
+                  border: '1px solid ' + (syncStatus === 'syncing' ? C.border : '#1a3d1a'),
+                  borderRadius: 6,
+                  color: syncStatus === 'syncing' ? C.dim : '#4ade80',
+                  cursor: syncStatus === 'syncing' ? 'default' : 'pointer',
+                  ...MONO, fontSize: 11,
+                }}>
+                {syncStatus === 'syncing' ? '⏳ Syncing…' : '↺ Sync collection'}
               </button>
             </div>
-            {syncStatus==='done'&&syncResult&&(
-              <div style={{fontSize:10,color:'#4ade80',...MONO,lineHeight:1.7,
-                background:'#0d1f0d',border:'1px solid #1a3d1a',borderRadius:6,padding:'8px 10px'}}>
+            {syncStatus === 'done' && syncResult && (
+              <div style={{
+                fontSize: 10, color: '#4ade80', ...MONO, lineHeight: 1.7,
+                background: '#0d1f0d', border: '1px solid #1a3d1a', borderRadius: 6, padding: '8px 10px',
+              }}>
                 ✓ Added {syncResult.added} new · Updated {syncResult.updated} · Watchlist +{syncResult.watchAdded}
               </div>
             )}
-            {syncStatus==='error'&&(
-              <div style={{fontSize:10,color:'#f87171',...MONO}}>⚠️ Sync failed — try again</div>
+            {syncStatus === 'error' && (
+              <div style={{ fontSize: 10, color: '#f87171', ...MONO }}>⚠️ Sync failed — try again</div>
             )}
           </div>
-        ):(
+        ) : (
           <div>
-            {/* Not connected — explain the flow */}
-            <div style={{fontSize:11,color:C.dim,...MONO,lineHeight:1.7,marginBottom:10}}>
+            <div style={{ fontSize: 11, color: C.dim, ...MONO, lineHeight: 1.7, marginBottom: 10 }}>
               Connect your Discogs account to automatically sync your collection and wantlist.
               Works for all users — each person authorizes their own account.
             </div>
             <button onClick={onConnectDiscogs}
-              style={{width:'100%',padding:'12px',
-                background:'linear-gradient(135deg,#1a1a00,#2a2800)',
-                border:'1px solid #f5c842',borderRadius:8,color:'#f5c842',
-                cursor:'pointer',...BEBAS,fontSize:16,letterSpacing:'0.06em',
-                display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+              style={{
+                width: '100%', padding: '12px',
+                background: 'linear-gradient(135deg,#1a1a00,#2a2800)',
+                border: '1px solid #f5c842', borderRadius: 8, color: '#f5c842',
+                cursor: 'pointer', ...BEBAS, fontSize: 16, letterSpacing: '0.06em',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}>
               🔗 Connect Discogs Account
             </button>
-            <div style={{fontSize:9,color:C.dim,...MONO,marginTop:8,lineHeight:1.6,textAlign:'center'}}>
+            <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 8, lineHeight: 1.6, textAlign: 'center' }}>
               Redirects to discogs.com → authorize → returns here → syncs automatically
-            </div>
-            
-            {/* Manual sync fallback */}
-            <div style={{fontSize:9,color:C.dim,...MONO,marginTop:16,marginBottom:8,textAlign:'center'}}>
-              OAuth issues? Use manual sync (for username: matiseekk)
-            </div>
-            <button onClick={async()=>{
-              if(!user?.id) return;
-              try {
-                // Direct insert to discogs_tokens with known username
-                const r = await fetch('/api/discogs/manual-sync', {
-                  method: 'POST',
-                  headers: {'Content-Type': 'application/json'},
-                  body: JSON.stringify({user_id: user.id, username: 'matiseekk'})
-                });
-                if (r.ok) {
-                  const d = await r.json();
-                  if (d.success) {
-                    // Trigger sync
-                    onSyncDiscogs?.();
-                  }
-                }
-              } catch(e) {
-                console.error('Manual sync error:', e);
-              }
-            }}
-              style={{width:'100%',padding:'10px',
-                background:'#2a0a0a',border:'1px solid #666',borderRadius:8,color:'#888',
-                cursor:'pointer',...MONO,fontSize:11}}>
-              🔧 Manual Sync (matiseekk)
-            </button>
             </div>
           </div>
         )}
       </div>
 
       {/* Import */}
-      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
-        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Import from Discogs</div>
+      <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>Import from Discogs</div>
         <button onClick={onShowImport}
-          style={{width:'100%',padding:'10px',background:C.accent+'22',border:'1px solid '+C.accent+'44',borderRadius:8,color:C.accent,cursor:'pointer',...MONO,fontSize:12}}>
+          style={{
+            width: '100%', padding: '10px',
+            background: C.accent + '22', border: '1px solid ' + C.accent + '44',
+            borderRadius: 8, color: C.accent, cursor: 'pointer', ...MONO, fontSize: 12,
+          }}>
           ⬇ Open Discogs Import
         </button>
       </div>
 
       {/* Export */}
-      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
-        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Export Collection</div>
-        <div style={{display:'flex',gap:8}}>
+      <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>Export Collection</div>
+        <div style={{ display: 'flex', gap: 8 }}>
           <a href="/api/collection/export?format=csv" download
-            style={{flex:1,padding:'9px',background:C.bg3,border:'1px solid '+C.border,borderRadius:7,color:C.muted,textDecoration:'none',textAlign:'center',fontSize:11,...MONO}}>
+            style={{ flex: 1, padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, textDecoration: 'none', textAlign: 'center', fontSize: 11, ...MONO }}>
             📊 CSV / Excel
           </a>
           <a href="/api/collection/export?format=json" download
-            style={{flex:1,padding:'9px',background:C.bg3,border:'1px solid '+C.border,borderRadius:7,color:C.muted,textDecoration:'none',textAlign:'center',fontSize:11,...MONO}}>
-            {'{ }' } JSON
+            style={{ flex: 1, padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, textDecoration: 'none', textAlign: 'center', fontSize: 11, ...MONO }}>
+            {'{ }'} JSON
           </a>
         </div>
       </div>
 
       {/* Share */}
-      <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:12}}>
-        <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:8}}>Share Collection</div>
-        {shareToken?(
+      <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>Share Collection</div>
+        {shareToken ? (
           <div>
-            <div style={{fontSize:10,color:'#60a5fa',...MONO,wordBreak:'break-all',marginBottom:8,lineHeight:1.5}}>
-              {typeof window!=='undefined'?window.location.origin:''}/share/{shareToken}
+            <div style={{ fontSize: 10, color: '#60a5fa', ...MONO, wordBreak: 'break-all', marginBottom: 8, lineHeight: 1.5 }}>
+              {typeof window !== 'undefined' ? window.location.origin : ''}/share/{shareToken}
             </div>
-            <button onClick={()=>navigator.clipboard?.writeText((typeof window!=='undefined'?window.location.origin:'')+'/share/'+shareToken).then(()=>alert('Copied!'))}
-              style={{width:'100%',padding:'8px',background:C.bg3,border:'1px solid '+C.border,borderRadius:7,color:C.muted,cursor:'pointer',fontSize:11,...MONO}}>
+            <button onClick={() => navigator.clipboard?.writeText((typeof window !== 'undefined' ? window.location.origin : '') + '/share/' + shareToken).then(() => alert('Copied!'))}
+              style={{ width: '100%', padding: '8px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, cursor: 'pointer', fontSize: 11, ...MONO }}>
               📋 Copy share link
             </button>
           </div>
-        ):(
+        ) : (
           <button onClick={onGetShareToken}
-            style={{width:'100%',padding:'10px',background:C.bg3,border:'1px solid '+C.border,borderRadius:8,color:C.muted,cursor:'pointer',...MONO,fontSize:12}}>
+            style={{ width: '100%', padding: '10px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 8, color: C.muted, cursor: 'pointer', ...MONO, fontSize: 12 }}>
             🔗 Generate share link
           </button>
         )}
@@ -249,11 +258,13 @@ function ProfileTab({user,profile,followedArtists,onSignOut,onUpdateProfile,onSh
 
       {/* Sign out */}
       <button onClick={onSignOut}
-        style={{width:'100%',padding:'12px',background:'none',border:'1px solid '+C.border,
-          borderRadius:10,color:C.dim,cursor:'pointer',...MONO,fontSize:12}}>
+        style={{
+          width: '100%', padding: '12px',
+          background: 'none', border: '1px solid ' + C.border,
+          borderRadius: 10, color: C.dim, cursor: 'pointer', ...MONO, fontSize: 12,
+        }}>
         Sign out
       </button>
     </div>
   );
 }
-

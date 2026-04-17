@@ -6,7 +6,7 @@ import { loadLS, saveLS } from '@/lib/localStorage';
 import { useCollection } from '@/lib/hooks/useCollection';
 import { AlbumCard, VinylModal, StatsBar, BottomNav } from '@/app/components/ui';
 import { CollectionTab, WatchlistTab } from '@/app/collection/CollectionTab';
-import { ProfileTab } from '@/app/profile/ProfileTab';
+import ProfileTab from '@/app/profile/ProfileTab';
 import dynamic from 'next/dynamic';
 
 const ScannerTab    = dynamic(() => import('@/app/scanner/ScannerTab'),    { ssr: false });

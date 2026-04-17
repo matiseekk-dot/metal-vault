@@ -12,7 +12,7 @@ function formatDate(dateStr) {
 }
 
 // ── Badge ─────────────────────────────────────────────────────
-function Badge({type,small}){
+export function Badge({type,small}){
   const s=BADGE_STYLES[type];if(!s)return null;
   return(
     <span style={{display:'inline-flex',alignItems:'center',gap:3,padding:small?'2px 6px':'3px 8px',
@@ -25,7 +25,7 @@ function Badge({type,small}){
 
 
 // ── AlbumCover ────────────────────────────────────────────────
-function AlbumCover({src,artist='',size=64}){
+export function AlbumCover({src,artist='',size=64}){
   const [err,setErr]=useState(false);
   const bg=GENRE_COLOR(artist);
   if(!src||err)return(
@@ -45,7 +45,7 @@ function AlbumCover({src,artist='',size=64}){
 
 
 // ── StatsBar ──────────────────────────────────────────────────
-function StatsBar({releases}){
+export function StatsBar({releases}){
   const today=new Date();
   const newCount = releases.filter(r=>{
     const d=new Date(r.releaseDate);
@@ -67,7 +67,7 @@ function StatsBar({releases}){
 
 
 // ── AlbumCard ─────────────────────────────────────────────────
-function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,onFollowToggle,user}){
+export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,onFollowToggle,user}){
   const today=new Date();
   const rd=new Date(album.releaseDate);
   const isPreorder=(rd>today)||album.preorder===true;
@@ -135,7 +135,7 @@ function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,o
 
 
 // ── VinylModal ────────────────────────────────────────────────
-function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vinylData,loading,error}){
+export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vinylData,loading,error}){
   return(
     <div style={{position:'fixed',inset:0,background:'#000000bb',zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -221,7 +221,7 @@ function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vin
 
 
 // ── BottomNav ─────────────────────────────────────────────────
-function BottomNav({tab,onChange,watchCount,user}){
+export function BottomNav({tab,onChange,watchCount,user}){
   const tabs=[
     {id:'feed',      icon:'🔥', label:'Feed'},
     {id:'search',    icon:'🔍', label:'Search'},
