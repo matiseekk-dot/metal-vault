@@ -55,6 +55,7 @@ export default function MetalVault() {
   const [pushLoading,     setPushLoading]     = useState(false);
   const [shareToken,      setShareToken]      = useState(null);
   const [discogsConnected,setDiscogsConnected]= useState(false);
+  const [discogsError,    setDiscogsError]    = useState(null);
   const [selected,        setSelected]        = useState(null);
 
   // Collection hook — all collection/watchlist/vinyl state & actions
@@ -91,6 +92,12 @@ export default function MetalVault() {
       setDiscogsConnected(true);
       window.history.replaceState({}, '', '/');
       try { localStorage.setItem('mv_pending_sync', '1'); } catch {}
+    }
+    const err = params.get('discogs_error');
+    if (err) {
+      setDiscogsError(decodeURIComponent(err));
+      setTab('profile');
+      window.history.replaceState({}, '', '/');
     }
     if (!user) col.setWatchlist(loadLS('mv_watchlist_v2', []));
   }, []); // eslint-disable-line
@@ -282,6 +289,13 @@ export default function MetalVault() {
         {tab==='concerts' && <ConcertsTab/>}
         {tab==='stats'    && <StatsTab collection={col.collection} watchlist={col.watchlist} collectionSummary={col.collectionSummary}/>}
 
+        {tab==='profile' && discogsError && (
+          <div style={{margin:'12px 16px',padding:'14px',background:'#2a0000',border:'1px solid #7f1d1d',borderRadius:10,color:'#f87171',fontSize:12,fontFamily:"'Space Mono',monospace",lineHeight:1.6}}>
+            <div style={{fontSize:10,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:8,color:'#fca5a5'}}>⚠ Discogs connection failed</div>
+            <div style={{wordBreak:'break-word',color:'#fee2e2'}}>{discogsError}</div>
+            <button onClick={()=>setDiscogsError(null)} style={{marginTop:10,background:'none',border:'1px solid #7f1d1d',borderRadius:6,color:'#f87171',padding:'6px 12px',cursor:'pointer',fontSize:10,fontFamily:"'Space Mono',monospace"}}>Dismiss</button>
+          </div>
+        )}
         {tab==='profile' && (
           user ? (
             <ProfileTab user={user} profile={profile} followedArtists={col.followedArtists}
