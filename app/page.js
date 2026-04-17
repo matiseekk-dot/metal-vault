@@ -124,20 +124,23 @@ export default function MetalVault() {
 
   const openAlbum = (album) => { setSelected(album); col.setVinylError(''); col.fetchVinyl(album); };
 
-  const runSync = () => {
+  const runSync = async () => {
     setSyncStatus('syncing'); setSyncResult(null);
-    fetch('/api/sync', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'both' }) })
-      .then(r => r.json())
-      .then(async d => {
-        setSyncResult(d); setSyncStatus('done');
-        const [coll, wl] = await Promise.all([
-          fetch('/api/collection').then(r => r.json()),
-          fetch('/api/watchlist').then(r => r.json()),
-        ]);
-        if (coll.items) col.setCollection(coll.items);
-        if (wl.items)   col.setWatchlist(wl.items);
-      })
-      .catch(() => setSyncStatus('error'));
+    try {
+      const r = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'both' }),
+      });
+      const d = await r.json();
+      setSyncResult(d); setSyncStatus('done');
+      // Reload ALL user data so collection/watchlist/portfolio are in sync
+      await col.loadUserData(user);
+      // Switch to Vault tab so user sees their records immediately
+      if (d.added > 0 || d.updated > 0) setTab('collection');
+    } catch {
+      setSyncStatus('error');
+    }
   };
 
   const togglePush = async () => {
