@@ -75,23 +75,31 @@ export default function ProfileTab({
             <div style={{ fontSize: 11, color: '#60a5fa', ...MONO, marginBottom: 3 }}>🌐 Share your collection</div>
             <div style={{ fontSize: 10, color: '#4a7ab5', ...MONO, lineHeight: 1.5 }}>Enable public profile to show off your vault</div>
           </div>
-          <button onClick={() => setIsPublic(true)}
+          <button onClick={async () => {
+              setIsPublic(true);
+              // Auto-save public setting
+              await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, is_public: true }) });
+              onUpdateProfile({ ...profile, is_public: true });
+            }}
             style={{ background: '#1e40af', border: 'none', borderRadius: 8, color: '#fff', padding: '8px 14px', cursor: 'pointer', ...MONO, fontSize: 11, flexShrink: 0, whiteSpace: 'nowrap' }}>
             Go public →
           </button>
         </div>
       )}
-      {profile?.is_public && profile?.username && (
+      {(profile?.is_public || isPublic) && (profile?.username || username) && (
         <div style={{ background: '#001a00', border: '1px solid #166534', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ fontSize: 11, color: '#4ade80', ...MONO }}>✓ Public profile active</div>
-            <button onClick={() => navigator.clipboard?.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}/p/${profile.username}`).then(() => alert('Link copied!'))}
+            <button onClick={() => {
+                const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${profile?.username || username}`;
+                navigator.clipboard?.writeText(link).then(() => alert('Link copied!'));
+              }}
               style={{ background: '#0d2a0d', border: '1px solid #1a3d1a', borderRadius: 6, color: '#4ade80', padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10 }}>
               📋 Copy link
             </button>
           </div>
           <div style={{ fontSize: 10, color: '#2d6b2d', ...MONO, wordBreak: 'break-all' }}>
-            {typeof window !== 'undefined' ? window.location.origin : ''}/p/{profile.username}
+            {typeof window !== 'undefined' ? window.location.origin : ''}/p/{profile?.username || username}
           </div>
         </div>
       )}

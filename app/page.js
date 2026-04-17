@@ -17,13 +17,12 @@ const SearchTab     = nextDynamic(() => import('@/app/search/SearchTab'),       
 const StatsTab      = nextDynamic(() => import('@/app/stats/StatsTab'),         { ssr: false });
 const ConcertsTab   = nextDynamic(() => import('@/app/concerts/ConcertsTab'),   { ssr: false });
 const CalendarTab   = nextDynamic(() => import('@/app/calendar/CalendarTab'),   { ssr: false });
-const RecordFairTab = nextDynamic(() => import('@/app/fair/RecordFairTab'),       { ssr: false });
 
 const FILTERS = [
-  { id:'all',      label:'⚡ All'       },
-  { id:'new',      label:'🔥 New'       },
-  { id:'preorder', label:'⏳ Pre-order' },
-  { id:'limited',  label:'💎 Limited'  },
+  { id:'all',      label:'🔥 All'       },
+  { id:'preorder', label:'⏳ Upcoming'  },
+  { id:'new',      label:'🆕 Released'  },
+  { id:'limited',  label:'💎 Limited'   },
   { id:'vinyl',    label:'💿 Has Vinyl' },
 ];
 const ALL_GENRES = ['Heavy Metal','Death Metal','Black Metal','Thrash Metal','Doom Metal',
@@ -328,7 +327,6 @@ export default function MetalVault() {
 
         {tab==='search'   && <SearchTab onWatch={col.toggleWatch} onAddCollection={item=>col.addToCollection(item)} watchlist={col.watchlist} collection={col.collection}/>}
         {tab==='concerts' && <ConcertsTab/>}
-        {tab==='fair'     && <RecordFairTab collection={col.collection} onAddToCollection={item=>col.addToCollection(item)}/>}
         {tab==='calendar' && <CalendarTab releases={releases} followedArtists={col.followedArtists}/>}
         {tab==='stats'    && <StatsTab collection={col.collection} watchlist={col.watchlist} collectionSummary={col.collectionSummary}/>}
 

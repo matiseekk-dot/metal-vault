@@ -66,7 +66,7 @@ export async function GET(request) {
     } catch (e) {
       results.errors.push('col:'+item.id+':'+e.message.slice(0,30));
     }
-    await new Promise(r => setTimeout(r, 1100)); // Discogs rate limit
+    await new Promise(r => setTimeout(r, 600)); // Discogs rate limit ~100/min max
   }
 
   // ── 2. Check price alerts (collection) ───────────────────────
@@ -126,7 +126,7 @@ export async function GET(request) {
     } catch (e) {
       results.errors.push('alert:'+alert.id+':'+e.message.slice(0,30));
     }
-    await new Promise(r => setTimeout(r, 1100));
+    await new Promise(r => setTimeout(r, 600));
   }
 
   // ── 3. Check wantlist price thresholds ───────────────────────

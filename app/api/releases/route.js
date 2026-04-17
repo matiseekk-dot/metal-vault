@@ -15,8 +15,7 @@ function parseDate(str) {
   const s = String(str).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   if (/^\d{4}-\d{2}$/.test(s))        return s + '-01';
-  if (/^\d{4}$/.test(s))              return s;  // year-only → keep as year
-  // "15 Apr 2026" or "Apr 2026"
+  if (/^\d{4}$/.test(s))              return s;
   const d = new Date(s);
   if (!isNaN(d)) return d.toISOString().split('T')[0];
   return '';
@@ -30,13 +29,35 @@ async function getDetail(id, token) {
   } catch { return null; }
 }
 
+// Best metal genre from Discogs styles/genres arrays
+function pickGenre(full, item) {
+  const METAL = [
+    'Death Metal','Black Metal','Thrash Metal','Doom Metal','Progressive Metal',
+    'Power Metal','Heavy Metal','Metalcore','Groove Metal','Sludge Metal',
+    'Symphonic Metal','Folk Metal','Industrial Metal','Post-Metal','Grindcore',
+    'Nu-Metal','Speed Metal','Stoner Metal','Viking Metal','Melodic Death Metal',
+  ];
+  const all = [
+    ...(full?.styles || []),
+    ...(full?.genres || []),
+    ...(item.style   || []),
+    ...(item.genre   || []),
+  ];
+  return (
+    all.find(g => METAL.some(m => g?.toLowerCase().includes(m.toLowerCase()))) ||
+    all[0] ||
+    'Metal'
+  );
+}
+
+// Mock for when Discogs is not configured
 const MOCK = [
-  {id:'m1',artist:'Opeth',album:'The Last Will and Testament',cover:null,releaseDate:'2024-11-01',genre:'Progressive Metal',preorder:false,limited:false},
-  {id:'m2',artist:'Knocked Loose',album:"You Won't Go Before You're Supposed To",cover:null,releaseDate:'2024-05-10',genre:'Metalcore',preorder:false,limited:false},
-  {id:'m3',artist:'Ghost',album:'Skeleta',cover:null,releaseDate:'2025-03-07',genre:'Heavy Metal',preorder:false,limited:false},
-  {id:'m4',artist:'Mastodon',album:'The Toilet of Venus',cover:null,releaseDate:'2025-01-10',genre:'Progressive Metal',preorder:false,limited:false},
-  {id:'m5',artist:'Darkthrone',album:'It Beckons Us All',cover:null,releaseDate:'2024-03-22',genre:'Black Metal',preorder:false,limited:false},
-  {id:'m6',artist:'Gojira',album:'Fortitude',cover:null,releaseDate:'2021-04-30',genre:'Death Metal',preorder:false,limited:false},
+  {id:'m1',artist:'Power Trip',     album:'Nightmare Logic',         cover:null,releaseDate:'2026-05-15',genre:'Thrash Metal',    preorder:true, limited:false},
+  {id:'m2',artist:'Tomb Mold',      album:'Planetary Clairvoyance',  cover:null,releaseDate:'2026-05-22',genre:'Death Metal',     preorder:true, limited:false},
+  {id:'m3',artist:'Wallowing',      album:'Beholden to the Sword',   cover:null,releaseDate:'2026-06-06',genre:'Doom Metal',      preorder:true, limited:true},
+  {id:'m4',artist:'Spectral Wound', album:'Songs of Blood and Mire', cover:null,releaseDate:'2026-06-20',genre:'Black Metal',     preorder:true, limited:false},
+  {id:'m5',artist:'Frozen Soul',    album:'Glacial Domination',      cover:null,releaseDate:'2026-04-25',genre:'Death Metal',     preorder:false,limited:false},
+  {id:'m6',artist:'Enforcer',       album:'Nostalgia',               cover:null,releaseDate:'2026-04-18',genre:'Heavy Metal',     preorder:false,limited:true},
 ];
 
 const METAL_STYLES = [
@@ -52,23 +73,29 @@ export async function GET() {
   const todayStr = new Date().toISOString().split('T')[0];
   const today    = new Date(todayStr);
   const curYear  = today.getFullYear();
-  // 45-day window: items added to Discogs after this date are "very recent"
-  const recentCutoff = new Date(today.getTime() - 45*24*60*60*1000).toISOString().split('T')[0];
+  const nextYear = curYear + 1;
+
+  // "Recent" window: 60 days back — so we show what just came out too
+  const recentFrom = new Date(today.getTime() - 60 * 24 * 60 * 60 * 1000)
+    .toISOString().split('T')[0];
 
   try {
-    // ── Search queries ──────────────────────────────────────────
-    // A: current year, sorted by date_added → catches recently announced / pre-orders
-    // B: current year, sorted by year desc → standard new releases
-    // C: last year, date_added → still-relevant 2025 releases
+    // ── Strategy: search for UPCOMING and RECENT releases ──────
+    // Primary: current year + next year, sorted by date_added desc
+    // (Labels add pre-orders to Discogs as they announce them)
+    // Secondary: current year sorted by year desc (standard new releases)
     const fetches = [
-      ...METAL_STYLES.slice(0,6).map(style =>
-        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear}&sort=date_added&sort_order=desc&per_page=15&page=1`
+      // Next year — pure pre-orders/announcements
+      ...METAL_STYLES.slice(0, 6).map(style =>
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${nextYear}&sort=date_added&sort_order=desc&per_page=20&page=1`
       ),
-      ...METAL_STYLES.slice(0,4).map(style =>
-        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear}&sort=year&sort_order=desc&per_page=10&page=1`
+      // Current year, recently added — catches new announcements + recent releases
+      ...METAL_STYLES.slice(0, 8).map(style =>
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear}&sort=date_added&sort_order=desc&per_page=20&page=1`
       ),
-      ...METAL_STYLES.slice(0,3).map(style =>
-        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear-1}&sort=date_added&sort_order=desc&per_page=8&page=1`
+      // Current year page 2 — more coverage
+      ...METAL_STYLES.slice(0, 4).map(style =>
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear}&sort=date_added&sort_order=desc&per_page=20&page=2`
       ),
     ];
 
@@ -94,84 +121,90 @@ export async function GET() {
       }
     }
 
-    // ── Fetch release details for top 60 ───────────────────────
+    // ── Fetch release details ───────────────────────────────────
     const detailed = await Promise.all(
-      candidates.slice(0, 60).map(async ({ id, artist, album, item }) => {
+      candidates.slice(0, 120).map(async ({ id, artist, album, item }) => {
         const full = await getDetail(id, token);
 
-        // Date resolution:
-        // 1. Use full release `released` field (most accurate)
-        // 2. Fall back to search result `year` (just year, no fake month)
+        // ── Date: prefer full.released when it's specific and current/future ──
+        // item.year = year of THIS pressing (always current/next year since we searched that)
+        // full.released = can be original album date for represses
         const rawReleased = full?.released || '';
-        const releaseDate = parseDate(rawReleased) ||
-          (item.year ? String(item.year) : '');
+        const parsedFull  = parseDate(rawReleased);
+        const pressYear   = item.year ? String(item.year) : '';
 
-        // Pre-order detection:
-        // - Definitive: full date (YYYY-MM-DD) is in the future
-        // - Year-only: if year > current year, it's preorder
-        // - Likely: item was added recently (last 45d) AND year = current year
-        const releaseTs = releaseDate && releaseDate.length === 10 ? new Date(releaseDate) : null;
-        const hasFutureDate = releaseTs && releaseTs > today;
-        const hasFutureYear = releaseDate && releaseDate.length === 4 && Number(releaseDate) > curYear;
-        const isRecentAddition = item.date_added && item.date_added.slice(0,10) >= recentCutoff;
-        const isCurrentYear = Number(item.year) === curYear;
-        const isPreorder = hasFutureDate || hasFutureYear || (isRecentAddition && isCurrentYear);
+        // Use full.released only when it's a specific date in current/future year
+        // (not an old repress date like 1994)
+        const useFullDate = parsedFull && parsedFull >= String(curYear) + '-01-01';
+        const releaseDate = useFullDate ? parsedFull : pressYear || parsedFull || '';
 
-        // Limited edition
+        // ── Determine if this is upcoming (future) or recently released ──
+        const relTs     = releaseDate?.length === 10 ? new Date(releaseDate) : null;
+        const isUpcoming = relTs ? relTs > today :
+                          (releaseDate?.length === 4 && Number(releaseDate) > curYear);
+        const isRecent  = relTs ? relTs >= new Date(recentFrom) && relTs <= today : false;
+
+        // Skip if release date is before our recent window AND it's a past year item
+        // (these are old represses we don't want)
+        if (!isUpcoming && !isRecent && pressYear && Number(pressYear) < curYear) return null;
+        if (!isUpcoming && !isRecent && relTs && relTs < new Date(recentFrom)) return null;
+
+        // ── Limited edition detection ──
         const fmts = [
           ...(full?.formats || []),
           ...(item.format || []).map(f => ({ descriptions: [f] })),
         ];
         const allDesc = fmts.flatMap(f => f.descriptions || []).join(' ').toLowerCase();
-        const isLimited = allDesc.includes('limited') || allDesc.includes('numbered');
+        const isLimited = allDesc.includes('limited') || allDesc.includes('numbered') ||
+                         allDesc.includes('colored')  || allDesc.includes('colour');
 
-        // Cover image
+        // ── Cover ──
         const cover = [full?.images?.[0]?.uri, item.cover_image]
           .find(u => u && !u.includes('spacer') && !u.includes('noimage')) || null;
 
-        // Clean artist name
         const cleanArtist = (full?.artists?.[0]?.name || artist).replace(/\s*\(\d+\)$/, '');
 
         return {
           id,
-          artist:       cleanArtist,
-          album:        full?.title || album,
+          artist:      cleanArtist,
+          album:       full?.title || album,
           cover,
           releaseDate,
-          genre:        full?.styles?.[0] || full?.genres?.[0] || item.style?.[0] || 'Metal',
-          preorder:     isPreorder,
-          limited:      isLimited,
-          label:        full?.labels?.[0]?.name || item.label?.[0] || '',
-          country:      full?.country || item.country || '',
-          discogsUrl:   'https://www.discogs.com/release/' + id,
+          genre:       pickGenre(full, item),
+          preorder:    isUpcoming,
+          limited:     isLimited,
+          label:       full?.labels?.[0]?.name || item.label?.[0] || '',
+          country:     full?.country || item.country || '',
+          discogsUrl:  'https://www.discogs.com/release/' + id,
           lowest_price: Number(full?.lowest_price) || 0,
-          median_price: 0,
-          spotifyUrl:   '',
-          // debug
-          _dateAdded:   item.date_added?.slice(0,10) || '',
-          _rawReleased: rawReleased,
+          spotifyUrl:  '',
         };
       })
     );
 
-    const valid = detailed.filter(r => r.artist && r.album);
-    if (!valid.length) throw new Error('No results');
+    // ── Filter: only upcoming + recently released (last 60 days) ──
+    const valid = detailed.filter(r => r && r.artist && r.album);
 
-    // ── Sort: preorders first, then newest ─────────────────────
+    if (!valid.length) throw new Error('No upcoming results — falling back to mock');
+
+    // ── Sort: upcoming by soonest first, then recent by newest first ──
     valid.sort((a, b) => {
-      if (a.preorder !== b.preorder) return a.preorder ? -1 : 1;
-      if (!a.releaseDate && b.releaseDate) return 1;
-      if (a.releaseDate && !b.releaseDate) return -1;
-      return b.releaseDate.localeCompare(a.releaseDate);
+      const aUp = a.preorder, bUp = b.preorder;
+      // Both upcoming: soonest release first
+      if (aUp && bUp) return (a.releaseDate || '9999').localeCompare(b.releaseDate || '9999');
+      // Upcoming before recent
+      if (aUp !== bUp) return aUp ? -1 : 1;
+      // Both recent: newest first
+      return (b.releaseDate || '').localeCompare(a.releaseDate || '');
     });
 
     return NextResponse.json({
       releases:  valid,
       source:    'discogs',
       count:     valid.length,
-      preorders: valid.filter(r => r.preorder).length,
+      upcoming:  valid.filter(r => r.preorder).length,
+      recent:    valid.filter(r => !r.preorder).length,
       today:     todayStr,
-      recentCutoff,
     });
 
   } catch (e) {

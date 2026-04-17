@@ -47,14 +47,14 @@ export function AlbumCover({src,artist='',size=64}){
 // ── StatsBar ──────────────────────────────────────────────────
 export function StatsBar({releases}){
   const today=new Date();
-  const newCount = releases.filter(r=>{
+  const upcoming = releases.filter(r=>r.preorder===true||(r.releaseDate&&new Date(r.releaseDate)>today)).length;
+  const recent   = releases.filter(r=>{
     const d=new Date(r.releaseDate);
-    return !isNaN(d)&&(today-d)/(1000*60*60*24)<365&&d<=today;
+    return !isNaN(d)&&(today-d)/(1000*60*60*24)<=60&&d<=today;
   }).length;
-  const preorders = releases.filter(r=>r.preorder===true||(r.releaseDate&&new Date(r.releaseDate)>today)).length;
   return(
     <div style={{display:'flex',borderBottom:'1px solid '+C.border,background:C.bg2}}>
-      {[{icon:'💿',val:releases.length,label:'releases'},{icon:'🆕',val:newCount,label:'← 365 days'},{icon:'⏳',val:preorders,label:'pre-order'}].map(s=>(
+      {[{icon:'🔥',val:releases.length,label:'releases'},{icon:'⏳',val:upcoming,label:'upcoming'},{icon:'🆕',val:recent,label:'released'}].map(s=>(
         <div key={s.label} style={{flex:1,textAlign:'center',padding:'10px 4px'}}>
           <div style={{fontSize:11,...MONO,color:C.dim}}>{s.icon}</div>
           <div style={{...BEBAS,fontSize:22,color:C.accent,lineHeight:1}}>{s.val}</div>
@@ -227,7 +227,6 @@ export function BottomNav({tab,onChange,watchCount,user}){
     {id:'search',    icon:'🔍', label:'Search'},
     {id:'collection',icon:'📦', label:'Vault'},
     {id:'calendar',  icon:'📅', label:'Cal'},
-    {id:'fair',      icon:'🎪', label:'Fair'},
     {id:'concerts',  icon:'🎸', label:'Live'},
     {id:'stats',     icon:'📊', label:'Stats'},
     {id:'profile',   icon:'👤', label:'Me'},
@@ -238,7 +237,7 @@ export function BottomNav({tab,onChange,watchCount,user}){
       borderTop:'1px solid '+C.border,zIndex:100,
       paddingBottom:'env(safe-area-inset-bottom,0px)',
       boxShadow:'0 -4px 20px #00000088',
-      display:'grid',gridTemplateColumns:'repeat(8,1fr)',
+      display:'grid',gridTemplateColumns:'repeat(7,1fr)',
       overflow:'hidden',
     }}>
       {tabs.map(t=>(

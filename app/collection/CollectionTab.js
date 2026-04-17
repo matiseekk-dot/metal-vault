@@ -305,7 +305,7 @@ export function CollectionTab({
                 {paid > 0 && <span style={{ fontSize: 10, color: C.dim, ...MONO }}>paid ${paid.toFixed(0)}</span>}
               </div>
               <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 5 }}>
-                {priceTracked > 0 ? 'Based on Discogs median · ' + priceTracked + '/' + collection.length + ' tracked' : '⏳ Tracking market prices…'}
+                {priceTracked > 0 ? 'Based on Discogs median · ' + priceTracked + '/' + collection.length + ' tracked' : '⏳ Prices update daily at 09:00 UTC'}
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
@@ -471,7 +471,7 @@ export function CollectionTab({
                             {now > 0  && <span style={{ fontSize: 10, color: '#aaa', ...MONO }}>→</span>}
                             {now > 0  && <span style={{ fontSize: 10, color: '#4ade80', ...MONO }}>📈 ${now.toFixed(0)}</span>}
                             {gain !== null && <span style={{ fontSize: 10, color: gainColor, ...MONO, fontWeight: 'bold' }}>{gain >= 0 ? '▲' : ''}{gain >= 0 ? '+' : ''}${gain.toFixed(0)} ({gainPct >= 0 ? '+' : ''}{gainPct.toFixed(0)}%)</span>}
-                            {now === 0 && paid > 0 && <span style={{ fontSize: 9, color: '#555', ...MONO }}>tracking…</span>}
+                            {now === 0 && paid > 0 && <span style={{ fontSize: 9, color: '#555', ...MONO }}>⏳ price pending</span>}
                           </>);
                         })()}
                       </div>
