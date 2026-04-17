@@ -1,6 +1,8 @@
-// ── Discogs OAuth 1.0a — Step 2: exchange tokens ────────────────
-// userId is read from the URL path (embedded in Step 1).
-// PLAINTEXT signature over HTTPS — the Discogs-documented flow.
+// ── Discogs OAuth callback — dynamic [userId] path ───────────────
+// Legacy route for backwards compatibility.
+// The CANONICAL route is /api/discogs/oauth/callback (no userId in path).
+// This route simply reads userId from the path and delegates to the
+// same logic — looking up by oauth_token from the query string.
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
@@ -10,10 +12,10 @@ export async function GET(request, { params }) {
   const { searchParams } = new URL(request.url);
   const oauthToken    = searchParams.get('oauth_token');
   const oauthVerifier = searchParams.get('oauth_verifier');
-  const userId        = params.userId;
   const appUrl        = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
+  // params.userId is available but we look up by oauth_token for robustness
 
-  if (!oauthToken || !oauthVerifier || !userId) {
+  if (!oauthToken || !oauthVerifier) {
     return NextResponse.redirect(appUrl + '/?discogs_error=missing_params');
   }
 
@@ -22,20 +24,32 @@ export async function GET(request, { params }) {
   const admin  = getAdminClient();
 
   try {
-    // Retrieve request token secret stored in Step 1
-    const { data: stored } = await admin
+    // Look up by oauth_token — same approach as canonical route
+    const { data: stored, error: dbError } = await admin
       .from('discogs_tokens')
-      .select('access_secret')
-      .eq('user_id', userId)
+      .select('user_id, access_secret')
+      .eq('access_token', oauthToken)
       .single();
 
-    const requestTokenSecret = stored?.access_secret || '';
+    if (dbError || !stored) {
+      const msg = dbError?.message || 'no_token_record';
+      return NextResponse.redirect(appUrl + '/?discogs_error=' + encodeURIComponent('DB lookup failed: ' + msg));
+    }
 
-    // Exchange request token for access token
+    const { user_id: userId } = stored;
+    const requestTokenSecret = (stored.access_secret || '').trim();
+
+    if (!requestTokenSecret) {
+      return NextResponse.redirect(appUrl + '/?discogs_error=empty_request_token_secret');
+    }
+
+    const computedSig = secret + '&' + requestTokenSecret;
+    const authHeader = accessTokenHeader(key, secret, oauthToken, requestTokenSecret, oauthVerifier);
+
     const r = await fetch('https://api.discogs.com/oauth/access_token', {
       method: 'POST',
       headers: {
-        Authorization:  accessTokenHeader(key, secret, oauthToken, requestTokenSecret, oauthVerifier),
+        Authorization:  authHeader,
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent':   'MetalVault/1.0',
       },
@@ -43,9 +57,10 @@ export async function GET(request, { params }) {
 
     const text = await r.text();
     if (!r.ok) {
-      return NextResponse.redirect(
-        appUrl + '/?discogs_error=' + encodeURIComponent(text.slice(0, 200)),
-      );
+      const diagMsg = text.slice(0, 300)
+        + ' | WE SENT SIG: ' + computedSig.slice(0, 36)
+        + '... (len=' + requestTokenSecret.length + ')';
+      return NextResponse.redirect(appUrl + '/?discogs_error=' + encodeURIComponent(diagMsg));
     }
 
     const p            = new URLSearchParams(text);
@@ -53,19 +68,14 @@ export async function GET(request, { params }) {
     const accessSecret = p.get('oauth_token_secret');
     if (!accessToken) return NextResponse.redirect(appUrl + '/?discogs_error=no_access_token');
 
-    // Fetch Discogs username via /oauth/identity
     let username = null;
     try {
       const ir = await fetch('https://api.discogs.com/oauth/identity', {
-        headers: {
-          Authorization: apiCallHeader(key, secret, accessToken, accessSecret),
-          'User-Agent':  'MetalVault/1.0',
-        },
+        headers: { Authorization: apiCallHeader(key, secret, accessToken, accessSecret), 'User-Agent': 'MetalVault/1.0' },
       });
       if (ir.ok) username = (await ir.json()).username || null;
     } catch {}
 
-    // Persist access token
     await admin.from('discogs_tokens').upsert({
       user_id:          userId,
       access_token:     accessToken,
@@ -73,12 +83,8 @@ export async function GET(request, { params }) {
       discogs_username: username,
     }, { onConflict: 'user_id' });
 
-    return NextResponse.redirect(
-      appUrl + '/?discogs_connected=1&username=' + encodeURIComponent(username || ''),
-    );
+    return NextResponse.redirect(appUrl + '/?discogs_connected=1&username=' + encodeURIComponent(username || ''));
   } catch (e) {
-    return NextResponse.redirect(
-      appUrl + '/?discogs_error=' + encodeURIComponent(e.message.slice(0, 100)),
-    );
+    return NextResponse.redirect(appUrl + '/?discogs_error=' + encodeURIComponent(e.message.slice(0, 200)));
   }
 }

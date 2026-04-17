@@ -22,8 +22,8 @@ export async function GET(request) {
   }
 
   try {
-    // userId in PATH — Discogs strips query params when appending oauth_token/verifier
-    const callbackUrl = appUrl + '/api/discogs/oauth/callback/' + user.id;
+    // Static callback URL — we look up the user by oauth_token in the callback handler
+    const callbackUrl = appUrl + '/api/discogs/oauth/callback';
 
     const r = await fetch('https://api.discogs.com/oauth/request_token', {
       method: 'GET',
@@ -43,8 +43,8 @@ export async function GET(request) {
     }
 
     const params           = new URLSearchParams(text);
-    const oauthToken       = params.get('oauth_token');
-    const oauthTokenSecret = params.get('oauth_token_secret');
+    const oauthToken       = params.get('oauth_token')?.trim();
+    const oauthTokenSecret = params.get('oauth_token_secret')?.trim();
 
     if (!oauthToken) return NextResponse.json({ error: 'No token from Discogs' }, { status: 500 });
 

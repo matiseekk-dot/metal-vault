@@ -21,7 +21,7 @@ export async function GET() {
       NEXT_PUBLIC_APP_URL: appUrl ? appUrl                          : '❌ MISSING',
     },
     expectedCallback: appUrl
-      ? appUrl + '/api/discogs/oauth/callback/<userId>'
+      ? appUrl + '/api/discogs/oauth/callback'
       : 'cannot compute — NEXT_PUBLIC_APP_URL not set',
     callbackForCurrentUser: appUrl && user
       ? appUrl + '/api/discogs/oauth/callback/' + user.id
@@ -31,6 +31,7 @@ export async function GET() {
     notes: [
       'The callback URL above must match the one registered at',
       'https://www.discogs.com/settings/developers → your app → Callback URL.',
+      'Register EXACTLY: ' + (appUrl || '?') + '/api/discogs/oauth/callback',
     ],
   };
 
