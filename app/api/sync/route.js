@@ -46,7 +46,7 @@ function normalizeItem(r) {
     year:           info.year || null,
     genres:         info.genres || [],
     styles:         info.styles || [],
-    discogsUrl:     `https://www.discogs.com/release/${info.id || r.id}`,
+    discogs_url:    `https://www.discogs.com/release/${info.id || r.id}`,
     date_added:     r.date_added || null,
     rating:         r.rating || null,
     purchase_price: r.notes?.find?.(n => n.field_id === 1)?.value
@@ -133,17 +133,18 @@ export async function POST(req) {
 
           if (ex) {
             await admin.from('collection').update({
-              cover:   item.cover   || undefined,
-              format:  item.format  || undefined,
-              label:   item.label   || undefined,
-              year:    item.year    || undefined,
-              genres:  item.genres,
-              styles:  item.styles,
+              cover:       item.cover       || undefined,
+              format:      item.format      || undefined,
+              label:       item.label       || undefined,
+              year:        item.year        || undefined,
+              genres:      item.genres,
+              styles:      item.styles,
+              discogs_url: item.discogs_url || undefined,
               ...(item.purchase_price && !ex.purchase_price ? { purchase_price: item.purchase_price } : {}),
             }).eq('id', ex.id);
             result.updated++;
           } else {
-            await admin.from('collection').insert({
+            const { error: insertErr } = await admin.from('collection').insert({
               user_id:        user.id,
               discogs_id:     item.discogs_id,
               artist:         item.artist,
@@ -154,13 +155,17 @@ export async function POST(req) {
               year:           item.year,
               genres:         item.genres,
               styles:         item.styles,
-              discogsUrl:     item.discogsUrl,
+              discogs_url:    item.discogs_url,
               date_added:     item.date_added,
               purchase_price: item.purchase_price,
               rating:         item.rating,
               added_at:       new Date().toISOString(),
             });
-            result.added++;
+            if (insertErr) {
+              result.errors.push({ source: 'insert', id: item.discogs_id, error: insertErr.message });
+            } else {
+              result.added++;
+            }
           }
         }
       } catch (e) {
@@ -191,8 +196,8 @@ export async function POST(req) {
               artist:       item.artist,
               album:        item.album,
               cover:        item.cover,
-              year:         item.year,
-              discogsUrl:   item.discogsUrl,
+              year:         item.year ? String(item.year) : null,
+              discogs_url:  item.discogs_url,
               release_date: item.year ? String(item.year) : null,
               added_at:     new Date().toISOString(),
             });
