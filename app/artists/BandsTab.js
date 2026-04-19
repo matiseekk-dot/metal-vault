@@ -34,9 +34,10 @@ function CompletionBar({ have, total, isComplete }) {
 // ── Single artist discography (expanded) ──────────────────────
 function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist, onComplete, isFollowed, onToggleFollow }) {
   const LS_WANTED = 'mv_wanted_v1';
-  const [wanted, setWanted] = useState(() => {
+  const [wanted,    setWanted]    = useState(() => {
     try { return JSON.parse(localStorage.getItem(LS_WANTED) || '{}'); } catch { return {}; }
   });
+  const [vinylOnly, setVinylOnly] = useState(true);
 
   const wantKey = (title) => (artistName + '::' + title).toLowerCase();
   const isWanted = (title) => wanted[wantKey(title)] === true;
@@ -55,11 +56,12 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
 
   const load = useCallback(() => {
     setLoading(true); setError(null); setData(null);
-    fetch('/api/artists/discography?artist=' + encodeURIComponent(artistName))
+    const url = '/api/artists/discography?artist=' + encodeURIComponent(artistName) + (vinylOnly ? '&vinyl=1' : '');
+    fetch(url)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(e => { setError(e.message); setLoading(false); });
-  }, [artistName]);
+  }, [artistName, vinylOnly]);
 
   useEffect(() => { load(); }, [load]);
 
