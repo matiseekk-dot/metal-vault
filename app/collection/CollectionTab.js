@@ -5,7 +5,7 @@
 // the feed also uses them; pass them in as props or import separately.
 
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { C, MONO, BEBAS, VINYL_GRADES, GRADE_COLOR, inputSt } from '@/lib/theme';
 import dynamic from 'next/dynamic';
 const BandsTab = dynamic(() => import('@/app/artists/BandsTab'), { ssr: false });
@@ -270,42 +270,71 @@ function VaultScore({ collection }) {
   );
 }
 
-// ── PriceEditForm — isolated component so typing doesn't re-render whole list ──
-function PriceEditForm({ itemId, currentPrice, onSave, onCancel }) {
+// ── PriceEditForm — iOS-safe with ref-based focus and inputMode ──
+// Uses React.memo to block parent re-renders from propagating.
+const PriceEditForm = memo(function PriceEditForm({ itemId, currentPrice, onSave, onCancel }) {
   const [val, setVal] = useState(currentPrice ? String(currentPrice) : '');
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef(null);
+
+  // iOS-safe focus: manual focus via ref after mount (autoFocus unreliable on iOS Safari)
+  useEffect(() => {
+    if (!inputRef.current) return;
+    // Small delay lets iOS finish mounting before focusing — this is the critical fix
+    const t = setTimeout(() => {
+      try {
+        inputRef.current?.focus();
+        // On iOS, also select content to make editing easier
+        inputRef.current?.select?.();
+      } catch {}
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
 
   const handleSave = async () => {
-    const n = parseFloat(val.trim());
-    if (!val.trim() || isNaN(n)) return;
-    await onSave(n);
+    if (saving) return;
+    const n = parseFloat(String(val).trim().replace(',', '.'));
+    if (!String(val).trim() || isNaN(n)) return;
+    setSaving(true);
+    try { await onSave(n); } catch {}
+    setSaving(false);
   };
 
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+      {/* type="text" + inputMode="decimal" = numeric keypad on iOS without number input bugs */}
       <input
-        type="number"
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        pattern="[0-9]*[.,]?[0-9]*"
         value={val}
         onChange={e => setVal(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && handleSave()}
+        onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
         placeholder="Paid ($)"
-        autoFocus
+        enterKeyHint="done"
+        autoComplete="off"
+        autoCorrect="off"
         style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.accent + '66',
-          borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 16,
-          fontFamily: "Space Mono, monospace", outline: 'none' }}
+          borderRadius: 6, color: C.text, padding: '8px 10px', fontSize: 16,
+          fontFamily: 'Space Mono, monospace', outline: 'none',
+          WebkitAppearance: 'none', MozAppearance: 'textfield' }}
       />
-      <button onClick={handleSave}
+      <button onClick={handleSave} disabled={saving}
         style={{ background: C.accent, border: 'none', borderRadius: 6,
-          color: '#fff', padding: '7px 14px', cursor: 'pointer',
-          fontFamily: "'Bebas Neue',sans-serif", fontSize: 16 }}>
-        OK
+          color: '#fff', padding: '8px 14px', cursor: 'pointer',
+          fontFamily: "'Bebas Neue',sans-serif", fontSize: 16,
+          opacity: saving ? 0.6 : 1 }}>
+        {saving ? '…' : 'OK'}
       </button>
       <button onClick={onCancel}
         style={{ background: 'none', border: '1px solid ' + C.border,
-          borderRadius: 6, color: C.dim, padding: '7px 8px',
+          borderRadius: 6, color: C.dim, padding: '8px 8px',
           cursor: 'pointer', fontSize: 13 }}>✕</button>
     </div>
   );
-}
+}, (prev, next) => prev.itemId === next.itemId && prev.currentPrice === next.currentPrice);
+// ^ Custom compare: only re-render if item changed — ignores inline function refs
 
 // ── ManualAddForm ─────────────────────────────────────────────
 function ManualAddForm({ onAdd, onClose }) {

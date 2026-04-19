@@ -65,15 +65,21 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
 
   useEffect(() => { load(); }, [load]);
 
-  // Notify parent when complete
+  // Notify parent complete/incomplete — treats ♥ wanted as target if user marked any
   useEffect(() => {
     if (!data?.albums?.length) return;
     const normCol = collection
       .filter(i => norm(i.artist) === norm(artistName))
       .map(i => norm(i.album));
-    const have = data.albums.filter(a => normCol.some(c => titleMatch(c, a.normTitle))).length;
-    if (have === data.albums.length && data.albums.length > 0) onComplete(artistName);
-  }, [data]);
+    const wantedInDiscog = data.albums.filter(a => isWanted(a.title));
+    const hasAnyWanted = wantedInDiscog.length > 0;
+    const targetList = hasAnyWanted
+      ? data.albums.filter(a => isWanted(a.title) || normCol.some(c => titleMatch(c, a.normTitle)))
+      : data.albums;
+    const have = targetList.filter(a => normCol.some(c => titleMatch(c, a.normTitle))).length;
+    const done = have === targetList.length && targetList.length > 0;
+    onComplete(artistName, done ? 100 : 0);
+  }, [data, wanted, collection]);
 
   if (loading) return (
     <div style={{ padding:'16px', textAlign:'center', color:C.dim, ...MONO, fontSize:11 }}>
@@ -143,7 +149,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
             💿 Vinyl only {vinylOnly ? '✓' : ''}
           </button>
         </div>
-        <CompletionBar have={haveCount} total={enriched.length} isComplete={isComplete}/>
+        <CompletionBar have={haveCount} total={targetAlbums.length} isComplete={isComplete}/>
         {isComplete ? (
           <div style={{ fontSize:11, color:C.gold, ...MONO, marginTop:6, display:'flex', alignItems:'center', gap:6 }}>
             🏆 {hasAnyWanted ? 'All wanted albums collected!' : 'Full discography collected!'}
@@ -259,10 +265,12 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
     } catch {}
   }, []);
 
-  // Called by ArtistDiscography when artist is 100% complete
-  const handleComplete = useCallback((artistName) => {
+  // Called by ArtistDiscography with 100 (complete) or 0 (incomplete)
+  const handleComplete = useCallback((artistName, pct = 100) => {
     setCompletion(prev => {
-      const next = { ...prev, [artistName]: 100 };
+      const next = { ...prev };
+      if (pct >= 100) next[artistName] = 100;
+      else delete next[artistName];
       try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
