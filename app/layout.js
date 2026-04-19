@@ -44,9 +44,30 @@ export default function RootLayout({ children }) {
           __html: `
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                  .then(r => console.log('SW registered'))
-                  .catch(e => console.log('SW error', e));
+                navigator.serviceWorker.register('/sw.js').then(reg => {
+                  // Check for SW updates every time app loads
+                  reg.update();
+
+                  // When a new SW is waiting, activate it immediately
+                  reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    newWorker.addEventListener('statechange', () => {
+                      if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        // New version available — tell SW to skip waiting
+                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                      }
+                    });
+                  });
+                }).catch(() => {});
+
+                // When SW controller changes (new SW took over), reload the page
+                let refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                  if (!refreshing) {
+                    refreshing = true;
+                    window.location.reload();
+                  }
+                });
               });
             }
           `

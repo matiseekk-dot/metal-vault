@@ -1,15 +1,13 @@
 // ── Metal Vault Service Worker ────────────────────────────────
-// Caches app shell + API responses for full offline support.
-// Vinyl Fair mode: collection + watchlist work without internet.
+// Auto-updates on every new deploy — no manual cache clearing needed.
 
-const CACHE_APP  = 'mv-app-v3';
-const CACHE_DATA = 'mv-data-v3';
-const CACHE_IMG  = 'mv-img-v3';
+const VERSION    = 'mv-v4';  // bump this on every deploy
+const CACHE_APP  = VERSION + '-app';
+const CACHE_DATA = VERSION + '-data';
+const CACHE_IMG  = VERSION + '-img';
 
-// App shell — cache on install
-const APP_SHELL = ['/', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
+const APP_SHELL = ['/', '/manifest.json', '/icons/icon-192.png'];
 
-// API routes to cache (stale-while-revalidate)
 const CACHE_API = [
   '/api/collection',
   '/api/watchlist',
@@ -18,72 +16,82 @@ const CACHE_API = [
   '/api/artists',
 ];
 
-// ── Install: cache app shell ───────────────────────────────────
+// ── Install ───────────────────────────────────────────────────
 self.addEventListener('install', e => {
+  // Skip waiting immediately — don't wait for old SW to die
+  self.skipWaiting();
   e.waitUntil(
-    caches.open(CACHE_APP)
-      .then(c => c.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_APP).then(c => c.addAll(APP_SHELL)).catch(() => {})
   );
 });
 
-// ── Activate: clean old caches ─────────────────────────────────
+// ── Activate — delete ALL old caches ─────────────────────────
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
         keys
           .filter(k => k !== CACHE_APP && k !== CACHE_DATA && k !== CACHE_IMG)
-          .map(k => caches.delete(k))
+          .map(k => {
+            console.log('[SW] Deleting old cache:', k);
+            return caches.delete(k);
+          })
       )
-    ).then(() => self.clients.claim())
+    ).then(() => {
+      // Take control of all open tabs immediately
+      return self.clients.claim();
+    })
   );
 });
 
-// ── Fetch strategy ─────────────────────────────────────────────
+// ── Fetch ─────────────────────────────────────────────────────
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-
   const url = new URL(e.request.url);
 
-  // Skip non-same-origin
-  if (url.origin !== self.location.origin) {
-    // Cache album cover images from Discogs/Spotify
-    if (url.hostname.includes('discogs.com') || url.hostname.includes('scdn.co')) {
-      e.respondWith(cacheFirst(e.request, CACHE_IMG, 7 * 24 * 60 * 60)); // 7 days
-    }
+  // External: cache Discogs/Spotify images for 7 days
+  if (url.hostname.includes('discogs.com') || url.hostname.includes('scdn.co')) {
+    e.respondWith(cacheFirst(e.request, CACHE_IMG, 7 * 24 * 60 * 60));
     return;
   }
 
-  // API routes: stale-while-revalidate for data routes
+  if (url.origin !== self.location.origin) return;
+
+  // API data: stale-while-revalidate
   if (url.pathname.startsWith('/api/')) {
-    const isCacheable = CACHE_API.some(p => url.pathname.startsWith(p));
-    if (isCacheable) {
-      e.respondWith(staleWhileRevalidate(e.request, CACHE_DATA));
-    }
-    return; // Other API routes: network only
+    const cacheable = CACHE_API.some(p => url.pathname.startsWith(p));
+    if (cacheable) e.respondWith(staleWhileRevalidate(e.request, CACHE_DATA));
+    return;
   }
 
-  // App shell: cache first, fallback to network
-  e.respondWith(cacheFirst(e.request, CACHE_APP));
+  // App shell: network first, fallback to cache (always gets latest code)
+  e.respondWith(networkFirst(e.request, CACHE_APP));
 });
 
-// ── Cache strategies ──────────────────────────────────────────
+// Network first — tries network, falls back to cache
+async function networkFirst(request, cacheName) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(cacheName);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    return cached || new Response('Offline', { status: 503 });
+  }
+}
 
-// Cache first — serve from cache if available, fallback to network
+// Cache first — serve cached, refresh in background
 async function cacheFirst(request, cacheName, maxAgeSeconds) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   if (cached) {
-    // Check max age if specified
     if (maxAgeSeconds) {
-      const dateHeader = cached.headers.get('date');
-      if (dateHeader) {
-        const ageMs = Date.now() - new Date(dateHeader).getTime();
-        if (ageMs > maxAgeSeconds * 1000) {
-          // Expired — fetch fresh in background
-          fetch(request).then(res => { if (res.ok) cache.put(request, res.clone()); }).catch(() => {});
-        }
+      const date = cached.headers.get('date');
+      if (date && (Date.now() - new Date(date).getTime()) > maxAgeSeconds * 1000) {
+        fetch(request).then(r => { if (r.ok) cache.put(request, r.clone()); }).catch(() => {});
       }
     }
     return cached;
@@ -97,21 +105,16 @@ async function cacheFirst(request, cacheName, maxAgeSeconds) {
   }
 }
 
-// Stale-while-revalidate — serve cached immediately, update cache in background
+// Stale-while-revalidate — instant cached response, update in background
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
-
-  // Fetch fresh in background always
-  const fetchPromise = fetch(request).then(response => {
-    if (response.ok) cache.put(request, response.clone());
-    return response;
+  const fetchPromise = fetch(request).then(r => {
+    if (r.ok) cache.put(request, r.clone());
+    return r;
   }).catch(() => null);
-
-  // Return cached immediately, or wait for network if nothing cached
   return cached || fetchPromise || new Response(
-    JSON.stringify({ error: 'Offline', offline: true }),
-    { status: 503, headers: { 'Content-Type': 'application/json' } }
+    JSON.stringify({ offline: true }), { status: 503, headers: { 'Content-Type': 'application/json' } }
   );
 }
 
@@ -119,29 +122,19 @@ async function staleWhileRevalidate(request, cacheName) {
 self.addEventListener('push', e => {
   let data = {};
   try { data = e.data?.json() || {}; } catch { data = { title: 'Metal Vault', body: e.data?.text() }; }
-
   e.waitUntil(self.registration.showNotification(data.title || 'Metal Vault', {
-    body:     data.body    || '',
-    icon:     data.icon    || '/icons/icon-192.png',
-    badge:    data.badge   || '/icons/icon-192.png',
-    vibrate:  [200, 100, 200],
-    data:     { url: data.url || '/' },
-    tag:      data.tag     || 'metal-vault',
-    renotify: true,
-    actions:  [
-      { action: 'view',    title: '👁 View' },
-      { action: 'dismiss', title: 'Dismiss' },
-    ],
+    body: data.body || '', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png',
+    vibrate: [200, 100, 200], data: { url: data.url || '/' },
+    tag: data.tag || 'metal-vault', renotify: true,
   }));
 });
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  if (e.action === 'dismiss') return;
   const url = e.notification.data?.url || '/';
   e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-      for (const client of clientList) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const client of list) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.navigate(url); return client.focus();
         }
@@ -151,8 +144,7 @@ self.addEventListener('notificationclick', e => {
   );
 });
 
-// ── Background sync message ────────────────────────────────────
-// Clients can send { type: 'SKIP_WAITING' } to force SW update
+// ── Messages ──────────────────────────────────────────────────
 self.addEventListener('message', e => {
   if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
