@@ -243,7 +243,9 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
 // ── Main BandsTab ──────────────────────────────────────────────
 const LS_KEY = 'mv_complete_artists';
 
-export default function BandsTab({ collection, watchlist, onAddToWatchlist }) {
+export default function BandsTab({ collection, watchlist, onAddToWatchlist, followedArtists = [], onToggleFollow, onBatchFollow }) {
+  const [followingAll, setFollowingAll] = useState(false);
+  const [manageMode,   setManageMode]   = useState(false);
   const [expanded,   setExpanded]   = useState(null);
   const [search,     setSearch]     = useState('');
   // Map: artistName → completion pct (loaded from localStorage)
