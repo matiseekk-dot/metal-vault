@@ -127,7 +127,7 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
             <div key={id} style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, overflow: 'hidden' }}>
               <div style={{ padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center' }}>
                 <div onClick={() => onAlbumClick(album)}
-                  style={{ display: 'flex', gap: 12, flex: 1, alignItems: 'center', cursor: 'pointer' }}>
+                  style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0, alignItems: 'center', cursor: 'pointer' }}>
                   {AlbumCover && <AlbumCover src={album.cover} artist={album.artist} size={52} />}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ ...BEBAS, fontSize: 17, color: C.text, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{album.artist}</div>
@@ -150,12 +150,11 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                     {hasAlert && <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginTop: 2 }}>🔔 Alert: ≤${hasAlert}</div>}
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end', minWidth: 36 }}>
                   {hasAlert && <div style={{ fontSize: 10, color: '#f5c842', ...MONO }}>🔔 ≤${hasAlert}</div>}
                   <button onClick={() => onRemove(id)}
-                    style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', fontSize: 18, padding: '2px' }}
-                    onMouseEnter={e => e.currentTarget.style.color = C.accent}
-                    onMouseLeave={e => e.currentTarget.style.color = '#444'}>×</button>
+                    style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer',
+                      fontSize: 24, padding: '6px 8px', lineHeight: 1, minWidth: 36, minHeight: 36 }}>×</button>
                 </div>
               </div>
               <button onClick={() => { setAlertItem(alertItem === id ? null : id); setAlertPrice(''); }}
