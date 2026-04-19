@@ -322,6 +322,7 @@ export function CollectionTab({
   user, collection, watchlist = [], onRemoveWatch, onRemove, onUpdate,
   portfolio, onAlbumClick, onAddToWatchlist, AlbumCover, onManualAdd,
   premium, onUpgrade, onRefreshPrices,
+  followedArtists = [], onToggleFollow,
 }) {
   const [view, setView]                   = useState('vinyl');
   const [vaultSearch,    setVaultSearch]   = useState('');
@@ -330,6 +331,7 @@ export function CollectionTab({
   const [refreshing,     setRefreshing]    = useState(false);
   const [refreshResult,  setRefreshResult] = useState(null);
   const [expandedId,     setExpandedId]    = useState(null);
+  const [priceInput,     setPriceInput]    = useState(''); // controlled input for purchase price
   const [showAlertForm, setShowAlertForm] = useState(null);
   const [targetPrice, setTargetPrice]     = useState('');
   const [saving, setSaving]               = useState(false);
@@ -587,7 +589,19 @@ export function CollectionTab({
                           {now === 0 && paid > 0 && <span style={{ fontSize: 8, color: '#444', ...MONO }}>⏳</span>}
                         </div>
                       </div>
-                      <div style={{ fontSize: 14, color: C.dim, flexShrink: 0, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>⌄</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        {onToggleFollow && (
+                          <button
+                            onClick={e => { e.stopPropagation(); onToggleFollow(item.artist); }}
+                            title={followedArtists.some(a => a.artist_name === item.artist) ? 'Unfollow artist' : 'Follow artist'}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14,
+                              color: followedArtists.some(a => a.artist_name === item.artist) ? C.accent : C.ultra,
+                              padding: '2px 4px', lineHeight: 1 }}>
+                            {followedArtists.some(a => a.artist_name === item.artist) ? '🔔' : '🔕'}
+                          </button>
+                        )}
+                        <div style={{ fontSize: 14, color: C.dim, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>⌄</div>
+                      </div>
                     </div>
 
                     {/* ── Expanded detail ── */}
@@ -615,19 +629,31 @@ export function CollectionTab({
                         {/* Set price */}
                         {showAlertForm === item.id + '_price' ? (
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-                            <input type="number" defaultValue={item.purchase_price || ''} id={'pp_' + item.id} placeholder="Paid ($)" style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 14, ...MONO, outline: 'none' }} />
+                            <input
+                              type="number"
+                              value={priceInput}
+                              onChange={e => setPriceInput(e.target.value)}
+                              placeholder="Paid ($)"
+                              autoFocus
+                              style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.accent + '66', borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 14, ...MONO, outline: 'none' }}
+                            />
                             <button onClick={async () => {
-                              const val = document.getElementById('pp_' + item.id)?.value;
-                              if (!val) return;
-                              await fetch('/api/collection?id=' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ purchase_price: parseFloat(val) }) });
+                              const val = priceInput.trim();
+                              if (!val || isNaN(parseFloat(val))) return;
+                              await fetch('/api/collection?id=' + item.id, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ purchase_price: parseFloat(val) }),
+                              });
                               const fresh = await fetch('/api/collection').then(r => r.json());
                               if (fresh.items) onUpdate(fresh.items);
+                              setPriceInput('');
                               setShowAlertForm(null);
                             }} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>OK</button>
-                            <button onClick={() => setShowAlertForm(null)} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                            <button onClick={() => { setShowAlertForm(null); setPriceInput(''); }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
                           </div>
                         ) : !item.purchase_price && (
-                          <button onClick={() => setShowAlertForm(item.id + '_price')} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, marginBottom: 8 }}>+ Set purchase price</button>
+                          <button onClick={() => { setPriceInput(item.purchase_price ? String(item.purchase_price) : ''); setShowAlertForm(item.id + '_price'); }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, marginBottom: 8 }}>+ Set purchase price</button>
                         )}
                         {/* Alert + Delete */}
                         <div style={{ display: 'flex', gap: 6 }}>

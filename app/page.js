@@ -169,11 +169,16 @@ export default function MetalVault() {
   // Feed
   useEffect(() => {
     setFeedLoading(true); setFeedError('');
-    fetch('/api/releases')
+    // Pass followed artists so API can include their upcoming releases
+    const artists = col.followedArtists.map(a => a.artist_name).filter(Boolean);
+    const url = artists.length > 0
+      ? '/api/releases?artists=' + encodeURIComponent(artists.join(','))
+      : '/api/releases';
+    fetch(url)
       .then(r => { if (!r.ok) throw new Error('Server error ' + r.status); return r.json(); })
       .then(d => { setReleases(d.releases||[]); setSource(d.source||''); setFeedLoading(false); })
       .catch(e => { setFeedError(e.message); setFeedLoading(false); });
-  }, [feedRetryCount]);
+  }, [feedRetryCount, col.followedArtists.length]); // re-fetch when user follows/unfollows
 
   const openAlbum = (album) => { setSelected(album); col.setVinylError(''); col.fetchVinyl(album); };
 
@@ -441,6 +446,7 @@ export default function MetalVault() {
             onAlbumClick={openAlbum} onRemove={col.removeFromCollection} onUpdate={col.setCollection} portfolio={col.portfolio} AlbumCover={AlbumCover}
             onManualAdd={async(item)=>{ await col.addToCollection(item); }}
             premium={premium} onUpgrade={triggerUpgrade}
+            followedArtists={col.followedArtists} onToggleFollow={col.toggleFollow}
             onRefreshPrices={async()=>{
               const r = await fetch('/api/collection/refresh-prices',{method:'POST'});
               const d = await r.json();

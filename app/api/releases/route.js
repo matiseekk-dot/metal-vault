@@ -65,7 +65,12 @@ const METAL_STYLES = [
   'Doom Metal','Progressive Metal','Power Metal','Metalcore',
 ];
 
-export async function GET() {
+export async function GET(request) {
+  // Optional ?artists=Metallica,Opeth for personalised following results
+  const artistParam = new URL(request.url).searchParams.get('artists') || '';
+  const followedArtists = artistParam
+    ? artistParam.split(',').map(a => a.trim()).filter(Boolean).slice(0, 20)
+    : [];
   const token = auth();
   if (!token) return NextResponse.json({ releases: MOCK, source: 'mock' });
 
@@ -84,7 +89,15 @@ export async function GET() {
     // Primary: current year + next year, sorted by date_added desc
     // (Labels add pre-orders to Discogs as they announce them)
     // Secondary: current year sorted by year desc (standard new releases)
+    // Personalised: search specifically for followed artists
+    const artistSearches = followedArtists.flatMap(artist => [
+      `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${curYear}&sort=date_added&sort_order=desc&per_page=10&page=1`,
+      `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${nextYear}&sort=date_added&sort_order=desc&per_page=5&page=1`,
+    ]);
+
     const fetches = [
+      // Followed artists first — most relevant results
+      ...artistSearches,
       // Next year — pure pre-orders/announcements
       ...METAL_STYLES.slice(0, 6).map(style =>
         `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${nextYear}&sort=date_added&sort_order=desc&per_page=20&page=1`

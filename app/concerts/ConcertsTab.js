@@ -153,15 +153,92 @@ export default function ConcertsTab() {
           ))}
         </div>
 
-        {/* Add button */}
-        <button onClick={()=>{if(showForm)resetForm();setShowForm(f=>!f);}}
-          style={{width:'100%',padding:'12px',
-            background:showForm?C.bg3:`linear-gradient(135deg,${C.accent},${C.accent2})`,
-            border:showForm?`1px solid ${C.border}`:'none',
-            borderRadius:10,color:showForm?C.muted:'#fff',cursor:'pointer',
-            ...BEBAS,fontSize:17,letterSpacing:'0.1em',marginBottom:12}}>
-          {showForm?(editId?'↑ CANCEL EDIT':'↑ CANCEL'):(editId?'✏ EDITING':'+ ADD CONCERT')}
-        </button>
+        {/* Add + Export/Import row */}
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <button onClick={()=>{if(showForm)resetForm();setShowForm(f=>!f);}}
+            style={{flex:1,padding:'12px',
+              background:showForm?C.bg3:`linear-gradient(135deg,${C.accent},${C.accent2})`,
+              border:showForm?`1px solid ${C.border}`:'none',
+              borderRadius:10,color:showForm?C.muted:'#fff',cursor:'pointer',
+              ...BEBAS,fontSize:17,letterSpacing:'0.1em'}}>
+            {showForm?(editId?'↑ CANCEL EDIT':'↑ CANCEL'):(editId?'✏ EDITING':'+ ADD CONCERT')}
+          </button>
+          {concerts.length > 0 && (
+            <button onClick={()=>{
+              const headers = ['Band','Year','Genre','Rating','Price','Venue','Note'];
+              const rows = concerts.map(c => {
+                const v = venues.find(x=>x.id===c.venueId);
+                return [c.band,c.year||'',c.genre||'',c.rating||'',c.price||'',v?v.name:'',c.note||'']
+                  .map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',');
+              });
+              const csv = [headers.join(','),...rows].join('\n');
+              const a = document.createElement('a');
+              a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+              a.download = 'metal-vault-concerts.csv';
+              a.click();
+            }}
+            title="Export concerts to CSV"
+            style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:10,color:C.muted,
+              padding:'0 14px',cursor:'pointer',...MONO,fontSize:12,flexShrink:0}}>
+              ↓ CSV
+            </button>
+          )}
+          <label title="Import concerts from CSV" style={{flexShrink:0,cursor:'pointer'}}>
+            <div style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:10,color:C.muted,
+              padding:'12px 14px',...MONO,fontSize:12,lineHeight:1}}>
+              ↑ CSV
+            </div>
+            <input type="file" accept=".csv" style={{display:'none'}} onChange={e=>{
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = ev => {
+                try {
+                  const lines = ev.target.result.replace(/\r\n/g,'\n').split('\n').filter(l=>l.trim());
+                  if (lines.length < 2) return;
+                  const hdrs = lines[0].split(',').map(h=>h.replace(/"/g,'').toLowerCase().trim());
+                  const bandIdx  = hdrs.indexOf('band');
+                  const yearIdx  = hdrs.indexOf('year');
+                  const genreIdx = hdrs.indexOf('genre');
+                  const rateIdx  = hdrs.indexOf('rating');
+                  const priceIdx = hdrs.indexOf('price');
+                  const noteIdx  = hdrs.indexOf('note');
+                  const venueIdx = hdrs.indexOf('venue');
+                  if (bandIdx === -1) { alert('CSV must have a "Band" column'); return; }
+                  const imported = [];
+                  for (const line of lines.slice(1)) {
+                    const cols = line.split(',').map(c=>c.replace(/^"|"$/g,'').trim());
+                    const band = cols[bandIdx];
+                    if (!band) continue;
+                    imported.push({
+                      id: Date.now() + Math.random(),
+                      band,
+                      year:   yearIdx  >= 0 ? cols[yearIdx]  || '' : '',
+                      genre:  genreIdx >= 0 ? cols[genreIdx] || 'Metal' : 'Metal',
+                      rating: rateIdx  >= 0 ? Number(cols[rateIdx]) || 0 : 0,
+                      price:  priceIdx >= 0 ? cols[priceIdx] || '' : '',
+                      note:   noteIdx  >= 0 ? cols[noteIdx]  || '' : '',
+                      venueId: null,
+                    });
+                  }
+                  if (!imported.length) { alert('No valid rows found'); return; }
+                  const merged = [...concerts];
+                  const existing = new Set(concerts.map(c=>(c.band+c.year).toLowerCase()));
+                  let added = 0;
+                  for (const c of imported) {
+                    if (!existing.has((c.band+c.year).toLowerCase())) {
+                      merged.unshift(c); added++;
+                    }
+                  }
+                  save(merged);
+                  alert(`Imported ${added} concerts (${imported.length - added} duplicates skipped)`);
+                } catch(err) { alert('Import failed: ' + err.message); }
+              };
+              reader.readAsText(file);
+              e.target.value = '';
+            }}/>
+          </label>
+        </div>
 
         {/* Form */}
         {showForm&&(

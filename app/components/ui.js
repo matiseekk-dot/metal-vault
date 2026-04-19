@@ -75,8 +75,13 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
   const isLimited=album.limited===true||vinylData?.hasLimited===true;
   // Compact vertical card for 2-column grid
   return(
-    <div onClick={onClick} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,
-      overflow:'hidden',cursor:'pointer',WebkitTapHighlightColor:'transparent',position:'relative'}}
+    <div onClick={onClick} style={{
+        background:C.bg2,
+        border:'1px solid '+(isFollowed ? C.accent+'55' : C.border),
+        borderRadius:12, overflow:'hidden', cursor:'pointer',
+        WebkitTapHighlightColor:'transparent', position:'relative',
+        boxShadow: isFollowed ? '0 0 0 1px '+C.accent+'22' : 'none',
+      }}
       onTouchStart={e=>e.currentTarget.style.background=C.bg3}
       onTouchEnd={e=>e.currentTarget.style.background=C.bg2}
       onTouchCancel={e=>e.currentTarget.style.background=C.bg2}>
