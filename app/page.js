@@ -8,6 +8,7 @@ import { AlbumCard, VinylModal, StatsBar, BottomNav, AlbumCover } from '@/app/co
 import { CollectionTab, WatchlistTab } from '@/app/collection/CollectionTab';
 import ProfileTab from '@/app/profile/ProfileTab';
 import OnboardingScreen from '@/app/components/OnboardingScreen';
+import UpgradeModal from '@/app/components/UpgradeModal';
 import nextDynamic from 'next/dynamic';
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,10 @@ export default function MetalVault() {
   const [selected,        setSelected]        = useState(null);
   const [showOnboarding,  setShowOnboarding]  = useState(false);
   const [feedRetryCount,  setFeedRetryCount]  = useState(0);
+  const [feedTab,         setFeedTab]         = useState('following'); // following | all
+  const [premium,         setPremium]         = useState(null); // null=loading, false=free, true=pro
+  const [showUpgrade,     setShowUpgrade]     = useState(false);
+  const [upgradeReason,   setUpgradeReason]   = useState('');
 
   // Collection hook — all collection/watchlist/vinyl state & actions
   const col = useCollection(user);
@@ -69,13 +74,14 @@ export default function MetalVault() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user || null);
-      if (session?.user) { col.loadUserData(session.user); loadProfile(session.user); }
+      if (session?.user) { col.loadUserData(session.user); loadProfile(session.user); loadPremium(); }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
       if (session?.user) {
         col.loadUserData(session.user);
         loadProfile(session.user);
+        loadPremium();
         // Show onboarding for brand new sign-ups
         if (event === 'SIGNED_IN') {
           const seen = localStorage.getItem('mv_onboarding_done');
@@ -96,6 +102,28 @@ export default function MetalVault() {
       if (d.connected) setDiscogsConnected(true);
     } catch {}
   }
+
+  async function loadPremium() {
+    try {
+      const r = await fetch('/api/stripe/status');
+      const d = await r.json();
+      setPremium(d.premium || false);
+      // If came back from successful checkout
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('premium') === 'success') {
+        setPremium(true);
+        window.history.replaceState({}, '', '/');
+        setTab('profile');
+      }
+    } catch { setPremium(false); }
+  }
+
+  // Listen for upgrade trigger from hooks
+  useEffect(() => {
+    const handler = e => triggerUpgrade(e.detail?.reason || '');
+    window.addEventListener('mv:upgrade', handler);
+    return () => window.removeEventListener('mv:upgrade', handler);
+  }, []); // eslint-disable-line
 
   // Push status + OAuth return params
   useEffect(() => {
@@ -162,6 +190,15 @@ export default function MetalVault() {
       await col.loadUserData(user);
       // Switch to Vault tab so user sees their records immediately
       if (d.added > 0 || d.updated > 0) setTab('collection');
+      // Auto-fetch prices in background after sync (non-blocking)
+      if ((d.added || 0) > 0) {
+        fetch('/api/collection/refresh-prices', { method: 'POST' })
+          .then(r => r.json())
+          .then(async result => {
+            if (result.updated > 0) await col.loadUserData(user);
+          })
+          .catch(() => {});
+      }
     } catch {
       setSyncStatus('error');
     }
@@ -204,13 +241,44 @@ export default function MetalVault() {
     if (d.token) setShareToken(d.token);
   };
 
+  const startCheckout = async (plan = 'monthly') => {
+    try {
+      const r = await fetch('/api/stripe/checkout', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+      const d = await r.json();
+      if (d.url) window.location.href = d.url;
+      else alert(d.error || 'Failed to open checkout');
+    } catch { alert('Checkout failed'); }
+  };
+
+  const openPortal = async () => {
+    try {
+      const r = await fetch('/api/stripe/portal', { method: 'POST' });
+      const d = await r.json();
+      if (d.url) window.location.href = d.url;
+    } catch {}
+  };
+
+  const triggerUpgrade = (reason = '') => {
+    setUpgradeReason(reason);
+    setShowUpgrade(true);
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut(); setUser(null); col.resetUserData(); setProfile(null);
   };
 
   const today = new Date();
+  const followedNames = new Set(col.followedArtists.map(a => a.artist_name?.toLowerCase()));
+
   const filtered = releases
     .filter(r => {
+      // Following tab: only artists the user follows
+      if (feedTab === 'following' && followedNames.size > 0) {
+        if (!followedNames.has(r.artist?.toLowerCase())) return false;
+      }
       const rd = new Date(r.releaseDate);
       const isPreorder = (rd > today) || r.preorder === true;
       const isNew = (today-rd)/864e5 < 45 && !isPreorder;
@@ -236,26 +304,56 @@ export default function MetalVault() {
   return (
     <div style={{ minHeight:'100vh', background:C.bg, maxWidth:600, margin:'0 auto' }}>
 
-      <div style={{ background:C.bg, borderBottom:'1px solid '+C.border, padding:'14px 16px 12px', position:'sticky', top:0, zIndex:50 }}>
-        <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between' }}>
-          <div>
-            <div style={{ ...BEBAS, fontSize:30, letterSpacing:'0.08em', color:C.text, lineHeight:1 }}>METAL VAULT</div>
+      <div style={{ background:C.bg, borderBottom:'1px solid '+C.border, padding:'12px 16px 10px', position:'sticky', top:0, zIndex:50 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
+            <div style={{ ...BEBAS, fontSize:28, letterSpacing:'0.08em', color:C.text, lineHeight:1 }}>METAL VAULT</div>
             <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.2em', textTransform:'uppercase' }}>
               {tab==='feed'?'RELEASES':tab==='collection'?'COLLECTION':tab==='profile'?'PROFILE':tab.toUpperCase()}
             </div>
           </div>
-          {user && <div style={{ fontSize:10, color:'#4ade80', ...MONO }}>✓ {user.email?.split('@')[0]}</div>}
+          {/* Live collection value — the #1 reason to open the app */}
+          {user && col.collectionSummary && col.collectionSummary.totalCurrent > 0 ? (
+            <button onClick={()=>setTab('stats')} style={{ background:'none', border:'none', cursor:'pointer', textAlign:'right', padding:0 }}>
+              <div style={{ ...BEBAS, fontSize:22, color:C.gold, lineHeight:1, letterSpacing:'0.04em' }}>
+                ${col.collectionSummary.totalCurrent.toFixed(0)}
+              </div>
+              {col.collectionSummary.gain !== 0 && (
+                <div style={{ fontSize:9, color: col.collectionSummary.gain >= 0 ? '#4ade80' : '#f87171', ...MONO, textAlign:'right' }}>
+                  {col.collectionSummary.gain >= 0 ? '+' : ''}${col.collectionSummary.gain.toFixed(0)}
+                </div>
+              )}
+            </button>
+          ) : user ? (
+            <div style={{ fontSize:10, color:'#4ade80', ...MONO }}>✓ {user.email?.split('@')[0]}</div>
+          ) : null}
         </div>
-        {source==='mock' && <div style={{ fontSize:9, color:'#555', ...MONO, marginTop:2 }}>⚠ Demo mode — configure SPOTIFY_CLIENT_ID</div>}
+        {source==='mock' && <div style={{ fontSize:9, color:'#555', ...MONO, marginTop:2 }}>⚠ Demo mode — add Discogs API keys</div>}
       </div>
 
       <div style={{ paddingBottom:100 }}>
         {tab==='feed' && (
           <>
             {!feedLoading && releases.length>0 && <StatsBar releases={releases}/>}
-            <div style={{ display:'flex', gap:6, padding:'10px 16px', overflow:'auto', borderBottom:'1px solid '+C.border }}>
+            {/* Following / All tabs */}
+            <div style={{ display:'flex', borderBottom:'1px solid '+C.border }}>
+              {[
+                { id:'following', label: col.followedArtists.length > 0 ? `Following (${col.followedArtists.length})` : 'Following' },
+                { id:'all',       label: 'All Metal' },
+              ].map(t => (
+                <button key={t.id} onClick={()=>setFeedTab(t.id)} style={{
+                  flex:1, padding:'10px 0', background:'none', border:'none',
+                  borderBottom: feedTab===t.id ? '2px solid '+C.accent : '2px solid transparent',
+                  color: feedTab===t.id ? C.text : C.dim,
+                  cursor:'pointer', fontSize:12, ...MONO,
+                }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:6, padding:'8px 16px', overflow:'auto', borderBottom:'1px solid '+C.border }}>
               {FILTERS.map(f => (
-                <button key={f.id} onClick={()=>setFilter(f.id)} style={{ padding:'6px 12px', borderRadius:20, whiteSpace:'nowrap', background:filter===f.id?C.accent+'22':C.bg3, color:filter===f.id?C.accent:C.dim, border:'1px solid '+(filter===f.id?C.accent+'66':C.border), cursor:'pointer', fontSize:11, ...MONO }}>
+                <button key={f.id} onClick={()=>setFilter(f.id)} style={{ padding:'5px 10px', borderRadius:20, whiteSpace:'nowrap', background:filter===f.id?C.accent+'22':C.bg3, color:filter===f.id?C.accent:C.dim, border:'1px solid '+(filter===f.id?C.accent+'66':C.border), cursor:'pointer', fontSize:10, ...MONO }}>
                   {f.label}
                 </button>
               ))}
@@ -301,8 +399,20 @@ export default function MetalVault() {
                 </button>
               </div>
             )}
-            {!feedLoading && !feedError && (
-              <div style={{ display:'flex', flexDirection:'column', gap:8, padding:'10px 16px 16px' }}>
+            {!feedLoading && !feedError && feedTab==='following' && followedNames.size===0 && (
+              <div style={{ textAlign:'center', padding:'60px 24px', color:C.dim, ...MONO }}>
+                <div style={{ fontSize:48, marginBottom:16 }}>🎸</div>
+                <div style={{ fontSize:14, color:C.muted, marginBottom:8 }}>No followed artists yet</div>
+                <div style={{ fontSize:11, lineHeight:1.6 }}>
+                  Follow artists from album cards in the feed<br/>to see their upcoming releases here.
+                </div>
+                <button onClick={()=>setFeedTab('all')} style={{ marginTop:20, background:C.accent, border:'none', borderRadius:10, color:'#fff', padding:'10px 24px', cursor:'pointer', ...BEBAS, fontSize:16, letterSpacing:'0.08em' }}>
+                  Browse All Metal →
+                </button>
+              </div>
+            )}
+            {!feedLoading && !feedError && (feedTab!=='following' || followedNames.size>0) && (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, padding:'10px 16px 16px' }}>
                 {filtered.map(album=>(
                   <AlbumCard key={album.id} album={album} isWatched={isWatched(album.id)} onWatchToggle={col.toggleWatch} onClick={()=>openAlbum(album)} vinylData={col.vinylCache[album.id]||null} isFollowed={isFollowed(album.artist)} onFollowToggle={col.toggleFollow} user={user}/>
                 ))}
@@ -322,7 +432,14 @@ export default function MetalVault() {
             onRemoveWatch={async(id)=>{ if(user)await fetch('/api/watchlist?album_id='+id,{method:'DELETE'}); col.setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id)); }}
             onAddToWatchlist={async(artist,album)=>{ const item={artist,album:album.title,album_id:album.id,cover:album.cover}; col.setWatchlist(w=>[...w,{...item,id:album.id}]); if(user)await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)}); }}
             onAlbumClick={openAlbum} onRemove={col.removeFromCollection} onUpdate={col.setCollection} portfolio={col.portfolio} AlbumCover={AlbumCover}
-            onManualAdd={async(item)=>{ await col.addToCollection(item); }}/>
+            onManualAdd={async(item)=>{ await col.addToCollection(item); }}
+            premium={premium} onUpgrade={triggerUpgrade}
+            onRefreshPrices={async()=>{
+              const r = await fetch('/api/collection/refresh-prices',{method:'POST'});
+              const d = await r.json();
+              if(d.updated>0) await col.loadUserData(user);
+              return d.message;
+            }}/>
         )}
 
         {tab==='search'   && <SearchTab onWatch={col.toggleWatch} onAddCollection={item=>col.addToCollection(item)} watchlist={col.watchlist} collection={col.collection}/>}
@@ -344,7 +461,8 @@ export default function MetalVault() {
               pushEnabled={pushEnabled} pushLoading={pushLoading} onTogglePush={togglePush}
               discogsConnected={discogsConnected} onConnectDiscogs={connectDiscogs}
               onSyncDiscogs={runSync} syncStatus={syncStatus} syncResult={syncResult}
-              shareToken={shareToken} onGetShareToken={getShareToken}/>
+              shareToken={shareToken} onGetShareToken={getShareToken}
+              premium={premium} onUpgrade={()=>triggerUpgrade()} onOpenPortal={openPortal}/>
           ) : (
             <div style={{ textAlign:'center', padding:'80px 24px' }}>
               <div style={{ ...BEBAS, fontSize:40, color:C.text, marginBottom:8, lineHeight:1 }}>METAL VAULT</div>
@@ -356,6 +474,14 @@ export default function MetalVault() {
       </div>
 
       <BottomNav tab={tab} onChange={setTab} user={user}/>
+
+      {showUpgrade && (
+        <UpgradeModal
+          reason={upgradeReason}
+          onClose={() => setShowUpgrade(false)}
+          onCheckout={async (plan) => { setShowUpgrade(false); await startCheckout(plan); }}
+        />
+      )}
 
       {showOnboarding && (
         <OnboardingScreen
@@ -404,7 +530,7 @@ export default function MetalVault() {
           onWatchToggle={col.toggleWatch} isWatched={isWatched(selected.id)}
           onAddToCollection={item=>col.addToCollection(item,()=>setSelected(null))}
           vinylData={col.vinylCache[selected.id]||null}
-          loading={col.vinylLoading} error={col.vinylError}/>
+          loading={col.vinylLoading} error={col.vinylError} premium={premium}/>
       )}
     </div>
   );

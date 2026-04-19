@@ -71,61 +71,56 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
   const today=new Date();
   const rd=new Date(album.releaseDate);
   const isPreorder=(rd>today)||album.preorder===true;
-  const isNew=(today-rd)/(1000*60*60*24)<365&&!isPreorder;
+  const isNew=(today-rd)/(1000*60*60*24)<60&&!isPreorder;
   const isLimited=album.limited===true||vinylData?.hasLimited===true;
-  const badges=[vinylData?.hasVinyl!==false&&'VINYL',isLimited&&'LIMITED',isPreorder&&'PREORDER',isNew&&'NEW'].filter(Boolean);
+  // Compact vertical card for 2-column grid
   return(
     <div onClick={onClick} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,
-      padding:'12px 14px',display:'flex',gap:12,alignItems:'flex-start',cursor:'pointer',WebkitTapHighlightColor:'transparent'}}
-      onMouseEnter={e=>e.currentTarget.style.borderColor=C.border2}
-      onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}
+      overflow:'hidden',cursor:'pointer',WebkitTapHighlightColor:'transparent',position:'relative'}}
       onTouchStart={e=>e.currentTarget.style.background=C.bg3}
       onTouchEnd={e=>e.currentTarget.style.background=C.bg2}>
-      <AlbumCover src={album.cover} artist={album.artist} size={64}/>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{...BEBAS,fontSize:19,letterSpacing:'0.04em',color:C.text,lineHeight:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-          {album.artist}
+      {/* Cover — full width */}
+      <div style={{position:'relative',paddingTop:'100%',background:'#111'}}>
+        <div style={{position:'absolute',inset:0}}>
+          <AlbumCover src={album.cover} artist={album.artist} size='100%'/>
         </div>
-        <div style={{fontSize:12,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-          {album.album}
+        {/* Badges overlay */}
+        <div style={{position:'absolute',top:6,left:6,display:'flex',gap:3,flexWrap:'wrap'}}>
+          {isPreorder&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#dc262688',color:'#fff',...MONO}}>PRE</span>}
+          {isLimited&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#f5c84288',color:'#fff',...MONO}}>LTD</span>}
+          {isNew&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#4ade8088',color:'#fff',...MONO}}>NEW</span>}
         </div>
-        <div style={{display:'flex',gap:4,marginTop:6,flexWrap:'wrap'}}>
-          {badges.map(b=><Badge key={b} type={b} small/>)}
-          {vinylData?.count>0&&(
-            <span style={{fontSize:9,padding:'2px 6px',borderRadius:10,background:C.bg3,color:C.dim,border:'1px solid '+C.border,...MONO}}>
-              {vinylData.count} variant{vinylData.count!==1?'s':''}
-            </span>
-          )}
-        </div>
-        <div style={{fontSize:10,color:C.dim,...MONO,marginTop:5}}>
-          {isPreorder?('🗓 '+formatDate(album.releaseDate||'')):formatDate(album.releaseDate||'')}
-        </div>
-        {(album.lowest_price||album.median_price)?(
-          <div style={{display:'flex',gap:6,alignItems:'center',marginTop:4,flexWrap:'wrap'}}>
-            {album.lowest_price>0&&(
-              <span style={{fontSize:10,color:'#4ade80',...MONO}}>from ${Number(album.lowest_price).toFixed(0)}</span>
-            )}
-            {album.median_price>0&&(
-              <span style={{fontSize:10,color:'#aaa',...MONO}}>median ${Number(album.median_price).toFixed(0)}</span>
-            )}
-          </div>
-        ):(
-          <div style={{fontSize:9,color:'#444',...MONO,marginTop:3}}>price unknown</div>
-        )}
-      </div>
-      <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
+        {/* Watch button */}
         <button onClick={e=>{e.stopPropagation();onWatchToggle(album);}}
-          style={{background:'none',border:'none',cursor:'pointer',fontSize:20,padding:'2px 0',
-            color:isWatched?'#f5c842':C.ultra,transition:'color 0.15s'}}
-          title={isWatched?'Remove from watchlist':'Add to watchlist'}>
+          style={{position:'absolute',top:4,right:4,background:'#00000066',border:'none',
+            borderRadius:6,cursor:'pointer',fontSize:16,padding:'3px 5px',
+            color:isWatched?'#f5c842':'#ffffff88',lineHeight:1}}>
           {isWatched?'★':'☆'}
         </button>
+      </div>
+      {/* Text */}
+      <div style={{padding:'8px 10px 10px'}}>
+        <div style={{...BEBAS,fontSize:14,letterSpacing:'0.04em',color:C.text,lineHeight:1.1,
+          overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>
+          {album.artist}
+        </div>
+        <div style={{fontSize:10,color:C.muted,...MONO,marginTop:2,
+          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          {album.album}
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
+          <div style={{fontSize:9,color:isPreorder?C.accent:C.dim,...MONO}}>
+            {isPreorder?'🗓 '+formatDate(album.releaseDate||''):formatDate(album.releaseDate||'')}
+          </div>
+          {album.lowest_price>0&&(
+            <span style={{fontSize:10,color:'#4ade80',...MONO}}>${Number(album.lowest_price).toFixed(0)}</span>
+          )}
+        </div>
         {user&&(
           <button onClick={e=>{e.stopPropagation();onFollowToggle(album.artist);}}
-            style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:'2px 0',
-              color:isFollowed?C.accent:C.ultra,transition:'color 0.15s'}}
-            title={isFollowed?'Unfollow artist':'Follow artist'}>
-            {isFollowed?'🔔':'🔕'}
+            style={{marginTop:4,background:'none',border:'none',cursor:'pointer',fontSize:10,padding:0,
+              color:isFollowed?C.accent:C.dim,...MONO,display:'flex',alignItems:'center',gap:3}}>
+            {isFollowed?'🔔 following':'+ follow'}
           </button>
         )}
       </div>
@@ -135,7 +130,21 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
 
 
 // ── VinylModal ────────────────────────────────────────────────
-export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vinylData,loading,error}){
+export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vinylData,loading,error,premium}){
+  const [history, setHistory] = useState(null);
+  const [histLoading, setHistLoading] = useState(false);
+
+  const loadHistory = async (discogsId) => {
+    if (!premium) return;
+    setHistLoading(true);
+    try {
+      const r = await fetch('/api/price-history?discogs_id=' + discogsId);
+      const d = await r.json();
+      if (d.history) setHistory(d.history);
+    } catch {}
+    setHistLoading(false);
+  };
+
   return(
     <div style={{position:'fixed',inset:0,background:'#000000bb',zIndex:200,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -211,6 +220,70 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Price History — Pro feature */}
+          {vinylData?.listings?.length > 0 && vinylData.listings[0]?.id && (
+            <div style={{padding:'0 16px 16px'}}>
+              {!premium ? (
+                <div style={{background:'linear-gradient(135deg,#0a0a1a,#14142a)',border:'1px solid #3333aa55',borderRadius:10,padding:'12px 14px'}}>
+                  <div style={{fontSize:10,color:'#818cf8',...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:4}}>📈 Price History</div>
+                  <div style={{fontSize:11,color:'#6366f1',...MONO,marginBottom:8}}>See how this vinyl's value changed over time.</div>
+                  <div style={{fontSize:10,color:'#4f46e5',...MONO}}>🔒 Metal Vault Pro feature</div>
+                </div>
+              ) : history === null && !histLoading ? (
+                <button onClick={()=>loadHistory(vinylData.listings[0].id)}
+                  style={{width:'100%',background:C.bg3,border:'1px solid '+C.border,borderRadius:10,padding:'10px',color:C.dim,cursor:'pointer',...MONO,fontSize:11}}>
+                  📈 Load price history
+                </button>
+              ) : histLoading ? (
+                <div style={{textAlign:'center',padding:'16px',color:C.dim,...MONO,fontSize:11}}>⏳ Loading history…</div>
+              ) : history && history.length >= 2 ? (
+                <div style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:10,padding:'12px 14px'}}>
+                  <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:10}}>📈 Price History ({history.length} days)</div>
+                  {(() => {
+                    const vals = history.map(h => Number(h.median_price || h.lowest_price) || 0).filter(v=>v>0);
+                    if (!vals.length) return null;
+                    const max = Math.max(...vals);
+                    const min = Math.min(...vals);
+                    const range = max - min || 1;
+                    const W=280, H=70, PL=32, PR=8, PT=6, PB=16;
+                    const pts = history
+                      .map(h => Number(h.median_price || h.lowest_price) || 0)
+                      .filter(v=>v>0)
+                      .map((v,i,arr) => {
+                        const x = PL + (i/(arr.length-1||1))*(W-PL-PR);
+                        const y = PT + ((max-v)/range)*(H-PT-PB);
+                        return x+','+y;
+                      }).join(' ');
+                    const first = vals[0], last = vals[vals.length-1];
+                    const change = last - first;
+                    return (
+                      <div>
+                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                          <span style={{fontSize:11,color:C.dim,...MONO}}>${min.toFixed(0)} – ${max.toFixed(0)}</span>
+                          <span style={{fontSize:12,color:change>=0?'#4ade80':'#f87171',...MONO,fontWeight:'bold'}}>
+                            {change>=0?'+':''}{change.toFixed(0)} ({change>=0?'+':''}{((change/first)*100).toFixed(0)}%)
+                          </span>
+                        </div>
+                        <svg viewBox={'0 0 '+W+' '+H} style={{width:'100%',height:'auto'}}>
+                          <defs>
+                            <linearGradient id="phg" x1="0" x2="0" y1="0" y2="1">
+                              <stop offset="0%" stopColor={change>=0?'#4ade80':'#f87171'} stopOpacity="0.3"/>
+                              <stop offset="100%" stopColor={change>=0?'#4ade80':'#f87171'} stopOpacity="0"/>
+                            </linearGradient>
+                          </defs>
+                          <polygon points={PL+','+(H-PB)+' '+pts+' '+(W-PR)+','+(H-PB)} fill="url(#phg)"/>
+                          <polyline points={pts} fill="none" stroke={change>=0?'#4ade80':'#f87171'} strokeWidth="1.5"/>
+                        </svg>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : history && history.length < 2 ? (
+                <div style={{fontSize:10,color:C.dim,...MONO,textAlign:'center',padding:'8px'}}>📈 Not enough history yet — check back after the daily cron runs</div>
+              ) : null}
             </div>
           )}
         </div>

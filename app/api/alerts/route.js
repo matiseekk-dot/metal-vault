@@ -26,6 +26,26 @@ export async function POST(request) {
   const user = await getUser(supabase);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // ── Alert limits: free = 1, pro = unlimited ─────────────────
+  const { data: profile } = await supabase
+    .from('profiles').select('subscription_status, subscription_end').eq('id', user.id).single();
+  const premium = profile?.subscription_status === 'active' ||
+                  profile?.subscription_status === 'trialing' ||
+                 (profile?.subscription_status === 'past_due' && profile?.subscription_end &&
+                  Date.now() < new Date(profile.subscription_end).getTime() + 3*24*60*60*1000);
+  if (!premium) {
+    const { count } = await supabase
+      .from('price_alerts').select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id).eq('is_active', true);
+    if ((count || 0) >= 1) {
+      return NextResponse.json({
+        error:   'ALERT_LIMIT_REACHED',
+        message: 'Free plan includes 1 price alert. Upgrade to Pro for unlimited alerts.',
+        count, limit: 1,
+      }, { status: 403 });
+    }
+  }
+
   const body = await request.json();
   const { data, error } = await supabase
     .from('price_alerts')

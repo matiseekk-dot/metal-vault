@@ -59,6 +59,7 @@ export async function POST(request) {
   const user = await getUser(supabase);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Free plan: unlimited records (paywall is on price alerts, not collection size)
   const body = await request.json();
   const { data, error } = await supabase
     .from('collection')

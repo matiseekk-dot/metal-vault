@@ -10,6 +10,7 @@ export default function ProfileTab({
   discogsConnected, onConnectDiscogs, onSyncDiscogs,
   syncStatus, syncResult,
   shareToken, onGetShareToken,
+  premium, onUpgrade, onOpenPortal,
 }) {
   const [username, setUsername] = useState(profile?.username || '');
   const [isPublic, setIsPublic] = useState(profile?.is_public || false);
@@ -67,6 +68,48 @@ export default function ProfileTab({
           <div style={{ fontSize: 11, color: C.dim, ...MONO, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</div>
         </div>
       </div>
+
+      {/* ── Premium Status ───────────────────────────────────── */}
+      {premium === true && (
+        <div style={{ background: 'linear-gradient(135deg,#1a0800,#2a1000)', border: '1px solid #f5c842', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ ...BEBAS, fontSize: 18, color: '#f5c842', letterSpacing: '0.08em', lineHeight: 1 }}>⭐ METAL VAULT PRO</div>
+              <div style={{ fontSize: 10, color: '#a16207', ...MONO, marginTop: 3 }}>
+                {profile?.subscription_status === 'trialing' ? '7-day free trial active' : 'Active subscription'}
+                {profile?.subscription_end && (
+                  <span> · renews {new Date(profile.subscription_end).toLocaleDateString('pl-PL')}</span>
+                )}
+              </div>
+            </div>
+            <button onClick={onOpenPortal}
+              style={{ background: '#2a1a00', border: '1px solid #f5c842', borderRadius: 8, color: '#f5c842', padding: '7px 12px', cursor: 'pointer', ...MONO, fontSize: 10 }}>
+              Manage
+            </button>
+          </div>
+        </div>
+      )}
+      {premium === false && (
+        <div style={{ background: 'linear-gradient(135deg,#0a0a0a,#1a0a00)', border: '1px solid #3f3f3f', borderRadius: 12, padding: '16px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+            <div>
+              <div style={{ ...BEBAS, fontSize: 20, color: C.text, letterSpacing: '0.06em', lineHeight: 1 }}>FREE PLAN</div>
+              <div style={{ fontSize: 10, color: C.dim, ...MONO, marginTop: 3 }}>Unlimited vinyl awaits</div>
+            </div>
+            <button onClick={onUpgrade}
+              style={{ background: 'linear-gradient(135deg,#dc2626,#991b1b)', border: 'none', borderRadius: 8, color: '#fff', padding: '9px 16px', cursor: 'pointer', ...BEBAS, fontSize: 15, letterSpacing: '0.06em', flexShrink: 0 }}>
+              UPGRADE →
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {[['📦','Unlimited records'],['🔔','1 price alert free'],['📈','No price history'],['⭐','Pro unlocks all']].map(([icon, text]) => (
+              <div key={text} style={{ fontSize: 10, color: C.dim, ...MONO, display: 'flex', gap: 5, alignItems: 'center' }}>
+                <span>{icon}</span><span>{text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Public Profile Banner — prominent CTA */}
       {!profile?.is_public && (

@@ -133,17 +133,26 @@ export async function GET(request) {
 
           await sendEmail({
                   to: userData.email,
-            subject: `🔥 ${newReleases.length} nowych premier w tym tygodniu`,
+            subject: `🔥 Metal Vault: ${newReleases.length} nowych premier od Twoich artystów`,
             html: `
-              <div style="font-family: monospace; background: #0a0a0a; color: #f0f0f0; padding: 24px; border-radius: 8px; max-width: 500px;">
-                <h1 style="color: #dc2626; font-size: 28px; margin: 0 0 4px;">METAL VAULT</h1>
-                <p style="color: #888; font-size: 11px; letter-spacing: 0.2em; margin: 0 0 24px;">TYGODNIOWE PREMIERY</p>
-                <table style="width: 100%; border-collapse: collapse;">
+              <div style="font-family: 'Courier New', monospace; background: #0a0a0a; color: #f0f0f0; padding: 28px 24px; max-width: 520px; margin: 0 auto;">
+                <div style="border-bottom: 2px solid #dc2626; padding-bottom: 16px; margin-bottom: 20px;">
+                  <div style="font-size: 32px; font-weight: bold; letter-spacing: 0.06em; color: #f0f0f0; line-height: 1;">METAL VAULT</div>
+                  <div style="font-size: 10px; color: #dc2626; letter-spacing: 0.25em; text-transform: uppercase; margin-top: 4px;">TYGODNIOWE PREMIERY</div>
+                </div>
+                <div style="font-size: 13px; color: #888; margin-bottom: 20px;">
+                  Ten tydzień: <span style="color: #f5c842; font-weight: bold;">${newReleases.length} nowe wydanie${newReleases.length > 1 ? 'a' : ''}</span> od śledzonych przez Ciebie artystów.
+                </div>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
                   ${albumRows}
                 </table>
-                <p style="color: #444; font-size: 10px; margin-top: 20px; text-align: center;">
-                  Metal Vault · Weekly digest of new releases from followed artists
-                </p>
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app'}/?tab=feed"
+                   style="display: block; background: #dc2626; color: #fff; text-decoration: none; text-align: center; padding: 14px; border-radius: 8px; font-size: 14px; font-weight: bold; letter-spacing: 0.08em; margin-bottom: 20px;">
+                  🔥 OTWÓRZ FEED →
+                </a>
+                <div style="font-size: 10px; color: #333; text-align: center; line-height: 1.6;">
+                  Metal Vault · <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app'}/api/unsubscribe" style="color: #555;">Wypisz się</a>
+                </div>
               </div>
             `,
           });

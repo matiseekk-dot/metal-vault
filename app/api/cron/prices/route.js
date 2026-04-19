@@ -57,11 +57,22 @@ export async function GET(request) {
       );
       if (!r.ok) continue;
       const d = await r.json();
+      const lowest = d.lowest_price?.value  || null;
+      const median  = d.median?.value        || null;
       await sb.from('collection').update({
-        current_price:    d.lowest_price?.value  || null,
-        median_price:     d.median?.value        || null,
+        current_price:    lowest,
+        median_price:     median,
         last_price_check: new Date().toISOString(),
       }).eq('id', item.id);
+      // Save price history snapshot (deduped by date)
+      if (lowest || median) {
+        await sb.from('price_history').upsert({
+          discogs_id:    item.discogs_id,
+          snapshot_date: new Date().toISOString().split('T')[0],
+          lowest_price:  lowest,
+          median_price:  median,
+        }, { onConflict: 'discogs_id,snapshot_date' });
+      }
       results.collectionUpdated++;
     } catch (e) {
       results.errors.push('col:'+item.id+':'+e.message.slice(0,30));

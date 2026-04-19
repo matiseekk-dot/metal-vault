@@ -176,6 +176,86 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
 }
 
 // ── CollectionTab ─────────────────────────────────────────────────
+// ── VaultScore — gamified completeness indicator ─────────────
+function VaultScore({ collection }) {
+  if (!collection.length) return null;
+
+  const total = collection.length;
+  const withCover    = collection.filter(i => i.cover).length;
+  const withPrice    = collection.filter(i => i.purchase_price).length;
+  const withGrade    = collection.filter(i => i.grade).length;
+  const withMktPrice = collection.filter(i => i.median_price || i.current_price).length;
+
+  // Score = weighted average of completeness dimensions
+  const score = Math.round(
+    (withCover    / total * 25) +
+    (withPrice    / total * 25) +
+    (withGrade    / total * 25) +
+    (withMktPrice / total * 25)
+  );
+
+  const color = score >= 75 ? '#4ade80' : score >= 40 ? '#f5c842' : '#f97316';
+
+  // Find the biggest gap to suggest next action
+  const gaps = [
+    { pct: withCover / total,    label: 'covers missing',         action: 'sync Discogs to import covers' },
+    { pct: withPrice / total,    label: 'no purchase price',      action: 'add purchase prices' },
+    { pct: withGrade / total,    label: 'not graded',             action: 'grade your records' },
+    { pct: withMktPrice / total, label: 'no market price',        action: 'tap "Fetch prices now"' },
+  ].sort((a, b) => a.pct - b.pct);
+  const biggestGap = gaps[0];
+  const gapCount   = Math.round((1 - biggestGap.pct) * total);
+
+  return (
+    <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+          🏆 Vault Score
+        </div>
+        <div style={{ ...BEBAS, fontSize: 26, color, lineHeight: 1, letterSpacing: '0.04em' }}>
+          {score}<span style={{ fontSize: 13, color: C.dim }}>/100</span>
+        </div>
+      </div>
+      {/* Progress bar */}
+      <div style={{ height: 6, background: C.bg3, borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{ height: '100%', width: score + '%', borderRadius: 3, transition: 'width 0.8s ease',
+          background: `linear-gradient(90deg, ${color}, ${color}88)` }} />
+      </div>
+      {/* Dimension dots */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        {[
+          { label: 'Covers',  pct: withCover / total },
+          { label: 'Paid',    pct: withPrice / total },
+          { label: 'Grade',   pct: withGrade / total },
+          { label: 'Market',  pct: withMktPrice / total },
+        ].map(d => (
+          <div key={d.label} style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{ fontSize: 8, color: C.dim, ...MONO, marginBottom: 3 }}>{d.label}</div>
+            <div style={{ height: 3, background: C.bg3, borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: Math.round(d.pct * 100) + '%',
+                background: d.pct > 0.7 ? '#4ade80' : d.pct > 0.3 ? '#f5c842' : '#f97316',
+                borderRadius: 2, transition: 'width 0.6s' }} />
+            </div>
+            <div style={{ fontSize: 8, color: C.dim, ...MONO, marginTop: 2 }}>{Math.round(d.pct * 100)}%</div>
+          </div>
+        ))}
+      </div>
+      {/* Next action hint */}
+      {gapCount > 0 && score < 95 && (
+        <div style={{ fontSize: 10, color: C.dim, ...MONO, lineHeight: 1.5 }}>
+          💡 <span style={{ color: C.muted }}>{gapCount} records {biggestGap.label}</span>
+          {' — '}{biggestGap.action}
+        </div>
+      )}
+      {score >= 95 && (
+        <div style={{ fontSize: 10, color: '#4ade80', ...MONO }}>
+          🤘 Perfect vault! Every record is fully documented.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ManualAddForm ─────────────────────────────────────────────
 function ManualAddForm({ onAdd, onClose }) {
   const [form, setForm] = useState({ artist: '', album: '', format: 'Vinyl', label: '', year: '', purchase_price: '' });
@@ -241,11 +321,15 @@ function ManualAddForm({ onAdd, onClose }) {
 export function CollectionTab({
   user, collection, watchlist = [], onRemoveWatch, onRemove, onUpdate,
   portfolio, onAlbumClick, onAddToWatchlist, AlbumCover, onManualAdd,
+  premium, onUpgrade, onRefreshPrices,
 }) {
   const [view, setView]                   = useState('vinyl');
-  const [vaultSearch,   setVaultSearch]   = useState('');
-  const [vaultFilter,   setVaultFilter]   = useState('all');
-  const [showAddManual, setShowAddManual] = useState(false);
+  const [vaultSearch,    setVaultSearch]   = useState('');
+  const [vaultFilter,    setVaultFilter]   = useState('all');
+  const [showAddManual,  setShowAddManual] = useState(false);
+  const [refreshing,     setRefreshing]    = useState(false);
+  const [refreshResult,  setRefreshResult] = useState(null);
+  const [expandedId,     setExpandedId]    = useState(null);
   const [showAlertForm, setShowAlertForm] = useState(null);
   const [targetPrice, setTargetPrice]     = useState('');
   const [saving, setSaving]               = useState(false);
@@ -305,7 +389,33 @@ export function CollectionTab({
                 {paid > 0 && <span style={{ fontSize: 10, color: C.dim, ...MONO }}>paid ${paid.toFixed(0)}</span>}
               </div>
               <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 5 }}>
-                {priceTracked > 0 ? 'Based on Discogs median · ' + priceTracked + '/' + collection.length + ' tracked' : '⏳ Prices update daily at 09:00 UTC'}
+                {priceTracked > 0
+                  ? 'Based on Discogs median · ' + priceTracked + '/' + collection.length + ' tracked'
+                  : refreshResult
+                    ? '✓ ' + refreshResult
+                    : '⏳ No prices yet'}
+                {priceTracked < collection.length && !refreshing && (
+                  <button onClick={async () => {
+                    setRefreshing(true); setRefreshResult(null);
+                    const result = await onRefreshPrices?.();
+                    if (result) setRefreshResult(result);
+                    setRefreshing(false);
+                  }} style={{
+                    display: 'block', marginTop: 6,
+                    background: 'linear-gradient(135deg,#dc2626,#991b1b)',
+                    border: 'none', borderRadius: 8,
+                    color: '#fff', padding: '8px 16px',
+                    cursor: 'pointer', ...MONO, fontSize: 11,
+                    letterSpacing: '0.05em',
+                  }}>
+                    ↺ Fetch prices now ({collection.length - priceTracked} pending)
+                  </button>
+                )}
+                {refreshing && (
+                  <div style={{ marginTop: 6, fontSize: 11, color: C.accent, ...MONO }}>
+                    ⏳ Fetching prices… this takes ~{Math.ceil(collection.length / 10 * 0.6)}s
+                  </div>
+                )}
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
@@ -370,6 +480,9 @@ export function CollectionTab({
               </button>
             ))}
           </div>
+          {/* Free plan: unlimited records */}
+          {/* Vault Score */}
+          {collection.length >= 3 && <VaultScore collection={collection} />}
           {/* Manual add modal */}
           {showAddManual && <ManualAddForm
             onAdd={async (item) => { if (onManualAdd) await onManualAdd(item); setShowAddManual(false); }}
@@ -450,99 +563,89 @@ export function CollectionTab({
                     </div>
                   </div>
                 );
-                return visibleItems.map(item => (
-                <div key={item.id} style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    {AlbumCover && <AlbumCover src={item.cover} artist={item.artist} size={48} />}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ ...BEBAS, fontSize: 17, color: C.text, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.artist}</div>
-                      <div style={{ fontSize: 11, color: C.muted, ...MONO, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.album}</div>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-                        {item.grade && item.grade !== 'NM' && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: GRADE_COLOR[item.grade] + '22', color: GRADE_COLOR[item.grade], ...MONO }}>{item.grade}</span>}
-                        {item.format && item.format !== 'Vinyl' && <span style={{ fontSize: 9, color: C.dim, ...MONO, padding: '1px 5px', background: C.bg3, borderRadius: 4 }}>{item.format}</span>}
-                        {(() => {
-                          const paid = Number(item.purchase_price) || 0;
-                          const now  = Number(item.median_price || item.current_price) || 0;
-                          const gain = paid > 0 && now > 0 ? now - paid : null;
-                          const gainPct   = gain !== null ? Math.max(-999, Math.min(999, (gain / paid) * 100)) : null;
-                          const gainColor = gain >= 0 ? '#4ade80' : '#f87171';
-                          return (<>
-                            {paid > 0 && <span style={{ fontSize: 10, color: '#f5c842', ...MONO }}>💳 ${paid.toFixed(0)}</span>}
-                            {now > 0  && <span style={{ fontSize: 10, color: '#aaa', ...MONO }}>→</span>}
-                            {now > 0  && <span style={{ fontSize: 10, color: '#4ade80', ...MONO }}>📈 ${now.toFixed(0)}</span>}
-                            {gain !== null && <span style={{ fontSize: 10, color: gainColor, ...MONO, fontWeight: 'bold' }}>{gain >= 0 ? '▲' : ''}{gain >= 0 ? '+' : ''}${gain.toFixed(0)} ({gainPct >= 0 ? '+' : ''}{gainPct.toFixed(0)}%)</span>}
-                            {now === 0 && paid > 0 && <span style={{ fontSize: 9, color: '#555', ...MONO }}>⏳ price pending</span>}
-                          </>);
-                        })()}
-                      </div>
-
-                      {/* Purchase price edit */}
-                      {showAlertForm === item.id + '_price' ? (
-                        <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <span style={{ fontSize: 10, color: C.dim, ...MONO, flexShrink: 0 }}>Paid ($)</span>
-                          <input type="number" defaultValue={item.purchase_price || ''} id={'pp_' + item.id}
-                            placeholder="0.00" style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '6px 10px', fontSize: 14, ...MONO, outline: 'none' }} />
-                          <button onClick={async () => {
-                            const val = document.getElementById('pp_' + item.id)?.value;
-                            if (!val) return;
-                            await fetch('/api/collection?id=' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ purchase_price: parseFloat(val) }) });
-                            const fresh = await fetch('/api/collection').then(r => r.json());
-                            if (fresh.items) onUpdate(fresh.items);
-                            setShowAlertForm(null);
-                          }} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '6px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>OK</button>
-                          <button onClick={() => setShowAlertForm(null)} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 8px', cursor: 'pointer', ...MONO, fontSize: 10 }}>✕</button>
+                return visibleItems.map(item => {
+                  const isExpanded = expandedId === item.id;
+                  const paid = Number(item.purchase_price) || 0;
+                  const now  = Number(item.median_price || item.current_price) || 0;
+                  const gain = paid > 0 && now > 0 ? now - paid : null;
+                  const gainPct = gain !== null ? Math.max(-999, Math.min(999, (gain / paid) * 100)) : null;
+                  return (
+                  <div key={item.id} style={{ background: C.bg2, border: '1px solid ' + (isExpanded ? C.accent + '44' : C.border), borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.2s' }}>
+                    {/* ── Collapsed row — always visible ── */}
+                    <div onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                      style={{ display: 'flex', gap: 10, padding: '10px 12px', alignItems: 'center', cursor: 'pointer' }}>
+                      {AlbumCover && <AlbumCover src={item.cover} artist={item.artist} size={44} />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ ...BEBAS, fontSize: 15, color: C.text, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.artist}</div>
+                        <div style={{ fontSize: 10, color: C.muted, ...MONO, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.album}</div>
+                        <div style={{ display: 'flex', gap: 4, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {item.grade && item.grade !== 'NM' && <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: GRADE_COLOR[item.grade] + '22', color: GRADE_COLOR[item.grade], ...MONO }}>{item.grade}</span>}
+                          {item.format && item.format !== 'Vinyl' && <span style={{ fontSize: 8, color: C.dim, ...MONO, padding: '1px 4px', background: C.bg3, borderRadius: 3 }}>{item.format}</span>}
+                          {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>${paid.toFixed(0)}</span>}
+                          {now > 0  && <span style={{ fontSize: 9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO }}>→${now.toFixed(0)}{gain !== null ? (gain >= 0 ? ' ▲' : ' ▼') : ''}</span>}
+                          {now === 0 && paid > 0 && <span style={{ fontSize: 8, color: '#444', ...MONO }}>⏳</span>}
                         </div>
-                      ) : (!item.purchase_price && (
-                        <button onClick={() => setShowAlertForm(item.id + '_price')}
-                          style={{ marginTop: 6, background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '4px 10px', cursor: 'pointer', ...MONO, fontSize: 9 }}>
-                          + Set purchase price
-                        </button>
-                      ))}
-
-                      {/* Grade selector */}
-                      <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-                        {VINYL_GRADES.map(g => (
-                          <button key={g} onClick={async () => {
-                            await fetch('/api/collection?id=' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grade: g }) });
-                            const fresh = await fetch('/api/collection').then(r => r.json());
-                            if (fresh.items) onUpdate(fresh.items);
-                          }} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, cursor: 'pointer', border: '1px solid ' + (item.grade === g ? GRADE_COLOR[g] : C.border), background: item.grade === g ? GRADE_COLOR[g] + '22' : C.bg3, color: item.grade === g ? GRADE_COLOR[g] : C.dim, ...MONO }}>
-                            {g}
-                          </button>
-                        ))}
-                        <span style={{ fontSize: 9, color: C.dim, ...MONO, alignSelf: 'center', marginLeft: 2 }}>grade</span>
                       </div>
+                      <div style={{ fontSize: 14, color: C.dim, flexShrink: 0, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>⌄</div>
                     </div>
 
-                    <button onClick={() => onRemove(item.id)}
-                      style={{ background: 'none', border: 'none', color: C.ultra, cursor: 'pointer', fontSize: 18, padding: '0 2px' }}
-                      onMouseEnter={e => e.currentTarget.style.color = C.accent}
-                      onMouseLeave={e => e.currentTarget.style.color = C.ultra}>×</button>
-                  </div>
-
-                  {/* Alert button */}
-                  {item.discogs_id && (
-                    showAlertForm === item.id ? (
-                      <div style={{ marginTop: 10, display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <span style={{ fontSize: 10, color: C.dim, ...MONO, flexShrink: 0 }}>Alert when price ≤</span>
-                        <input type="number" value={targetPrice} onChange={e => setTargetPrice(e.target.value)}
-                          placeholder="$" style={{ ...inputSt, padding: '6px 10px', fontSize: 14, flex: 1 }} />
-                        <button onClick={() => createAlert(item)} disabled={saving}
-                          style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>
-                          {saving ? '…' : 'OK'}
-                        </button>
-                        <button onClick={() => setShowAlertForm(null)}
-                          style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 10px', cursor: 'pointer', ...MONO, fontSize: 10 }}>✕</button>
+                    {/* ── Expanded detail ── */}
+                    {isExpanded && (
+                      <div style={{ borderTop: '1px solid ' + C.border, padding: '10px 12px' }}>
+                        {/* Price + gain */}
+                        {(paid > 0 || now > 0) && (
+                          <div style={{ display: 'flex', gap: 12, marginBottom: 10, padding: '8px 10px', background: C.bg3, borderRadius: 8 }}>
+                            {paid > 0 && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Paid</div><div style={{ ...BEBAS, fontSize: 18, color: '#f5c842' }}>${paid.toFixed(0)}</div></div>}
+                            {now > 0  && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Market</div><div style={{ ...BEBAS, fontSize: 18, color: '#4ade80' }}>${now.toFixed(0)}</div></div>}
+                            {gain !== null && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Gain</div><div style={{ ...BEBAS, fontSize: 18, color: gain >= 0 ? '#4ade80' : '#f87171' }}>{gain >= 0 ? '+' : ''}${gain.toFixed(0)}<span style={{ fontSize: 11 }}> ({gainPct >= 0 ? '+' : ''}{gainPct?.toFixed(0)}%)</span></div></div>}
+                          </div>
+                        )}
+                        {/* Grade */}
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: 9, color: C.dim, ...MONO, marginRight: 2 }}>Grade:</span>
+                          {VINYL_GRADES.map(g => (
+                            <button key={g} onClick={async () => {
+                              await fetch('/api/collection?id=' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grade: g }) });
+                              const fresh = await fetch('/api/collection').then(r => r.json());
+                              if (fresh.items) onUpdate(fresh.items);
+                            }} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, cursor: 'pointer', border: '1px solid ' + (item.grade === g ? GRADE_COLOR[g] : C.border), background: item.grade === g ? GRADE_COLOR[g] + '22' : C.bg3, color: item.grade === g ? GRADE_COLOR[g] : C.dim, ...MONO }}>{g}</button>
+                          ))}
+                        </div>
+                        {/* Set price */}
+                        {showAlertForm === item.id + '_price' ? (
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+                            <input type="number" defaultValue={item.purchase_price || ''} id={'pp_' + item.id} placeholder="Paid ($)" style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 14, ...MONO, outline: 'none' }} />
+                            <button onClick={async () => {
+                              const val = document.getElementById('pp_' + item.id)?.value;
+                              if (!val) return;
+                              await fetch('/api/collection?id=' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ purchase_price: parseFloat(val) }) });
+                              const fresh = await fetch('/api/collection').then(r => r.json());
+                              if (fresh.items) onUpdate(fresh.items);
+                              setShowAlertForm(null);
+                            }} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>OK</button>
+                            <button onClick={() => setShowAlertForm(null)} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                          </div>
+                        ) : !item.purchase_price && (
+                          <button onClick={() => setShowAlertForm(item.id + '_price')} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, marginBottom: 8 }}>+ Set purchase price</button>
+                        )}
+                        {/* Alert + Delete */}
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {item.discogs_id && (showAlertForm === item.id ? (
+                            <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input type="number" value={targetPrice} onChange={e => setTargetPrice(e.target.value)} placeholder="Alert ≤ $" style={{ ...inputSt, padding: '6px 10px', fontSize: 14, flex: 1 }} />
+                              <button onClick={() => createAlert(item)} disabled={saving} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>{saving ? '…' : 'OK'}</button>
+                              <button onClick={() => setShowAlertForm(null)} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setShowAlertForm(item.id)} style={{ flex: 1, background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 10px', cursor: 'pointer', ...MONO, fontSize: 10 }}>🔔 Set price alert</button>
+                          ))}
+                          <button onClick={() => { if (expandedId === item.id) setExpandedId(null); onRemove(item.id); }} style={{ background: 'none', border: '1px solid #7f1d1d', borderRadius: 6, color: '#f87171', padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🗑</button>
+                        </div>
                       </div>
-                    ) : (
-                      <button onClick={() => setShowAlertForm(item.id)}
-                        style={{ marginTop: 8, background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, width: '100%' }}>
-                        🔔 Set price alert
-                      </button>
-                    )
-                  )}
-                </div>
-              ));
+                    )}
+                  </div>
+                  );
+                });
               })()}
             </div>
           )}
