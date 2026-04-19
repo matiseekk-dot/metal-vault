@@ -132,7 +132,21 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ ...BEBAS, fontSize: 17, color: C.text, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{album.artist}</div>
                     <div style={{ fontSize: 11, color: C.muted, ...MONO, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{album.album}</div>
-                    <div style={{ fontSize: 10, color: C.dim, ...MONO, marginTop: 3 }}>{formatDate(album.release_date || album.releaseDate)}</div>
+                    {/* Version info — format + color so user can tell pressings apart */}
+                    <div style={{ display: 'flex', gap: 5, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {album.format && album.format !== 'Vinyl' && (
+                        <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: C.bg3, color: C.dim, ...MONO }}>{album.format}</span>
+                      )}
+                      {album.color && (
+                        <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: C.bg3, color: '#aaa', ...MONO }}>🎨 {album.color}</span>
+                      )}
+                      {album.label && (
+                        <span style={{ fontSize: 9, color: C.dim, ...MONO }}>{album.label}</span>
+                      )}
+                      {!album.format && !album.color && (
+                        <span style={{ fontSize: 9, color: C.dim, ...MONO }}>{formatDate(album.release_date || album.releaseDate)}</span>
+                      )}
+                    </div>
                     {hasAlert && <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginTop: 2 }}>🔔 Alert: ≤${hasAlert}</div>}
                   </div>
                 </div>
@@ -256,6 +270,43 @@ function VaultScore({ collection }) {
   );
 }
 
+// ── PriceEditForm — isolated component so typing doesn't re-render whole list ──
+function PriceEditForm({ itemId, currentPrice, onSave, onCancel }) {
+  const [val, setVal] = useState(currentPrice ? String(currentPrice) : '');
+
+  const handleSave = async () => {
+    const n = parseFloat(val.trim());
+    if (!val.trim() || isNaN(n)) return;
+    await onSave(n);
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+      <input
+        type="number"
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && handleSave()}
+        placeholder="Paid ($)"
+        autoFocus
+        style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.accent + '66',
+          borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 16,
+          fontFamily: "Space Mono, monospace", outline: 'none' }}
+      />
+      <button onClick={handleSave}
+        style={{ background: C.accent, border: 'none', borderRadius: 6,
+          color: '#fff', padding: '7px 14px', cursor: 'pointer',
+          fontFamily: "'Bebas Neue',sans-serif", fontSize: 16 }}>
+        OK
+      </button>
+      <button onClick={onCancel}
+        style={{ background: 'none', border: '1px solid ' + C.border,
+          borderRadius: 6, color: C.dim, padding: '7px 8px',
+          cursor: 'pointer', fontSize: 13 }}>✕</button>
+    </div>
+  );
+}
+
 // ── ManualAddForm ─────────────────────────────────────────────
 function ManualAddForm({ onAdd, onClose }) {
   const [form, setForm] = useState({ artist: '', album: '', format: 'Vinyl', label: '', year: '', purchase_price: '' });
@@ -322,7 +373,7 @@ export function CollectionTab({
   user, collection, watchlist = [], onRemoveWatch, onRemove, onUpdate,
   portfolio, onAlbumClick, onAddToWatchlist, AlbumCover, onManualAdd,
   premium, onUpgrade, onRefreshPrices,
-  followedArtists = [], onToggleFollow,
+  followedArtists = [], onToggleFollow, onBatchFollow,
 }) {
   const [view, setView]                   = useState('vinyl');
   const [vaultSearch,    setVaultSearch]   = useState('');
@@ -331,7 +382,6 @@ export function CollectionTab({
   const [refreshing,     setRefreshing]    = useState(false);
   const [refreshResult,  setRefreshResult] = useState(null);
   const [expandedId,     setExpandedId]    = useState(null);
-  const [priceInput,     setPriceInput]    = useState(''); // controlled input for purchase price
   const [showAlertForm, setShowAlertForm] = useState(null);
   const [targetPrice, setTargetPrice]     = useState('');
   const [saving, setSaving]               = useState(false);
@@ -455,7 +505,7 @@ export function CollectionTab({
       </div>
 
       {view === 'watchlist' && <WatchlistTab watchlist={watchlist} user={user} onRemove={onRemoveWatch} onAlbumClick={onAlbumClick} AlbumCover={AlbumCover} />}
-      {view === 'bands'     && <BandsTab collection={collection} watchlist={watchlist} onAddToWatchlist={onAddToWatchlist || (() => {})} />}
+      {view === 'bands'     && <BandsTab collection={collection} watchlist={watchlist} onAddToWatchlist={onAddToWatchlist || (() => {})} followedArtists={followedArtists} onToggleFollow={onToggleFollow} onBatchFollow={onBatchFollow} />}
 
       {view === 'vinyl' && (
         <div style={{ padding: '16px' }}>
@@ -589,18 +639,29 @@ export function CollectionTab({
                           {now === 0 && paid > 0 && <span style={{ fontSize: 8, color: '#444', ...MONO }}>⏳</span>}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                         {onToggleFollow && (
                           <button
                             onClick={e => { e.stopPropagation(); onToggleFollow(item.artist); }}
-                            title={followedArtists.some(a => a.artist_name === item.artist) ? 'Unfollow artist' : 'Follow artist'}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14,
+                            title={followedArtists.some(a => a.artist_name === item.artist) ? 'Unfollow' : 'Follow artist'}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16,
                               color: followedArtists.some(a => a.artist_name === item.artist) ? C.accent : C.ultra,
-                              padding: '2px 4px', lineHeight: 1 }}>
+                              padding: '8px 10px', lineHeight: 1, minWidth: 40, textAlign: 'center' }}>
                             {followedArtists.some(a => a.artist_name === item.artist) ? '🔔' : '🔕'}
                           </button>
                         )}
-                        <div style={{ fontSize: 14, color: C.dim, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>⌄</div>
+                        {/* Delete — always visible so long titles don't hide it */}
+                        <button
+                          onClick={e => { e.stopPropagation(); if (expandedId === item.id) setExpandedId(null); onRemove(item.id); }}
+                          title="Remove from collection"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15,
+                            color: '#555', padding: '8px 8px', lineHeight: 1, minWidth: 36, textAlign: 'center' }}>
+                          ×
+                        </button>
+                        {/* Expand chevron */}
+                        <div style={{ fontSize: 18, color: C.dim, transition: 'transform 0.2s',
+                          transform: isExpanded ? 'rotate(180deg)' : 'none',
+                          padding: '8px 10px', minWidth: 40, textAlign: 'center' }}>⌄</div>
                       </div>
                     </div>
 
@@ -628,32 +689,23 @@ export function CollectionTab({
                         </div>
                         {/* Set price */}
                         {showAlertForm === item.id + '_price' ? (
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-                            <input
-                              type="number"
-                              value={priceInput}
-                              onChange={e => setPriceInput(e.target.value)}
-                              placeholder="Paid ($)"
-                              autoFocus
-                              style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.accent + '66', borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 14, ...MONO, outline: 'none' }}
-                            />
-                            <button onClick={async () => {
-                              const val = priceInput.trim();
-                              if (!val || isNaN(parseFloat(val))) return;
+                          <PriceEditForm
+                            itemId={item.id}
+                            currentPrice={item.purchase_price}
+                            onSave={async (n) => {
                               await fetch('/api/collection?id=' + item.id, {
                                 method: 'PATCH',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ purchase_price: parseFloat(val) }),
+                                body: JSON.stringify({ purchase_price: n }),
                               });
                               const fresh = await fetch('/api/collection').then(r => r.json());
                               if (fresh.items) onUpdate(fresh.items);
-                              setPriceInput('');
                               setShowAlertForm(null);
-                            }} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>OK</button>
-                            <button onClick={() => { setShowAlertForm(null); setPriceInput(''); }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
-                          </div>
+                            }}
+                            onCancel={() => setShowAlertForm(null)}
+                          />
                         ) : (
-                          <button onClick={() => { setPriceInput(item.purchase_price ? String(item.purchase_price) : ''); setShowAlertForm(item.id + '_price'); }}
+                          <button onClick={() => setShowAlertForm(item.id + '_price')}
                             style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6,
                               color: item.purchase_price ? C.gold : C.dim,
                               padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, marginBottom: 8 }}>

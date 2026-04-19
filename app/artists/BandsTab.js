@@ -32,7 +32,23 @@ function CompletionBar({ have, total, isComplete }) {
 }
 
 // ── Single artist discography (expanded) ──────────────────────
-function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist, onComplete }) {
+function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist, onComplete, isFollowed, onToggleFollow }) {
+  const LS_WANTED = 'mv_wanted_v1';
+  const [wanted, setWanted] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(LS_WANTED) || '{}'); } catch { return {}; }
+  });
+
+  const wantKey = (title) => (artistName + '::' + title).toLowerCase();
+  const isWanted = (title) => wanted[wantKey(title)] === true;
+  const toggleWanted = (album) => {
+    const k = wantKey(album.title);
+    setWanted(prev => {
+      const next = { ...prev };
+      if (next[k]) { delete next[k]; } else { next[k] = true; }
+      try { localStorage.setItem(LS_WANTED, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
@@ -98,24 +114,42 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
     ...album,
     inCollection: normCollection.some(c => titleMatch(c, album.normTitle)),
     inWatchlist:  watchlistTitles.some(w => titleMatch(w, album.normTitle)),
+    wanted:       isWanted(album.title),
   }));
 
-  const haveCount  = enriched.filter(a => a.inCollection).length;
-  const isComplete = haveCount === enriched.length && enriched.length > 0;
-  const missing    = enriched.filter(a => !a.inCollection);
+  const wantedAlbums = enriched.filter(a => isWanted(a.title) || a.inCollection || a.inWatchlist);
+  const hasAnyWanted = wantedAlbums.length > 0;
+  // If user has marked any ♥ wants, use those for completion. Otherwise use full discography.
+  const targetAlbums = hasAnyWanted ? wantedAlbums : enriched;
+  const haveCount    = targetAlbums.filter(a => a.inCollection).length;
+  const isComplete   = haveCount === targetAlbums.length && targetAlbums.length > 0;
+  const missing      = targetAlbums.filter(a => !a.inCollection);
 
   return (
     <div style={{ padding:'12px 16px 16px' }}>
       {/* Summary row */}
       <div style={{ marginBottom:14 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+          <div style={{ fontSize:10, color:C.dim, ...MONO }}>
+            {enriched.length} release{enriched.length !== 1 ? 's' : ''}
+          </div>
+          <button onClick={() => setVinylOnly(v => !v)}
+            style={{ background: vinylOnly ? C.accent+'22' : C.bg3,
+              border:'1px solid '+(vinylOnly ? C.accent+'66' : C.border),
+              borderRadius:20, color: vinylOnly ? C.accent : C.dim,
+              padding:'3px 10px', cursor:'pointer', fontSize:10, ...MONO }}>
+            💿 Vinyl only {vinylOnly ? '✓' : ''}
+          </button>
+        </div>
         <CompletionBar have={haveCount} total={enriched.length} isComplete={isComplete}/>
         {isComplete ? (
           <div style={{ fontSize:11, color:C.gold, ...MONO, marginTop:6, display:'flex', alignItems:'center', gap:6 }}>
-            🏆 Full discography collected!
+            🏆 {hasAnyWanted ? 'All wanted albums collected!' : 'Full discography collected!'}
           </div>
         ) : (
           <div style={{ fontSize:10, color:C.dim, ...MONO, marginTop:4 }}>
             {missing.length} album{missing.length !== 1 ? 's' : ''} missing
+            {hasAnyWanted && <span style={{ color:C.accent, marginLeft:4 }}>· wanted only</span>}
           </div>
         )}
       </div>
@@ -129,8 +163,8 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
             <div key={album.id} style={{
               display:'flex', alignItems:'center', gap:10,
               padding:'8px 10px', borderRadius:8,
-              background: album.inCollection ? '#0d1f0d' : album.inWatchlist ? '#1a1500' : C.bg3,
-              border:'1px solid ' + (album.inCollection ? '#1a3d1a' : album.inWatchlist ? '#3d3000' : C.border),
+              background: album.inCollection ? '#0d1f0d' : album.inWatchlist ? '#1a1500' : album.wanted ? '#1a0a0a' : C.bg3,
+              border:'1px solid ' + (album.inCollection ? '#1a3d1a' : album.inWatchlist ? '#3d3000' : album.wanted ? '#7f1d1d' : C.border),
             }}>
               {/* Cover */}
               <div style={{ width:36, height:36, borderRadius:4, flexShrink:0,
@@ -155,10 +189,28 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
                   )}
                 </div>
               </div>
-              {/* Status + action */}
-              <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+              {/* Want ♥ + status */}
+              <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
+                {/* ♥ Want toggle — marks album as personally wanted */}
+                {!album.inCollection && (
+                  <button onClick={() => toggleWanted(album)}
+                    title={album.wanted ? 'Remove from wanted' : 'Mark as wanted'}
+                    style={{ background:'none', border:'none', cursor:'pointer',
+                      fontSize:17, padding:'4px 6px', lineHeight:1,
+                      color: album.wanted ? '#f87171' : '#333' }}>
+                    {album.wanted ? '♥' : '♡'}
+                  </button>
+                )}
                 <span style={{ fontSize:13, color:statusColor, ...MONO }}>{statusIcon}</span>
-                {!album.inCollection && !album.inWatchlist && (
+                {!album.inCollection && !album.inWatchlist && album.wanted && (
+                  <button onClick={() => onAddToWatchlist(artistName, album)}
+                    style={{ background:'#1a0a0a', border:'1px solid #7f1d1d', borderRadius:6,
+                      color:'#f87171', padding:'3px 8px', fontSize:10, cursor:'pointer', ...MONO,
+                      whiteSpace:'nowrap' }}>
+                    + Watch
+                  </button>
+                )}
+                {!album.inCollection && !album.inWatchlist && !album.wanted && (
                   <button onClick={() => onAddToWatchlist(artistName, album)}
                     style={{ background:'#1a1a00', border:'1px solid '+C.gold, borderRadius:6,
                       color:C.gold, padding:'3px 8px', fontSize:10, cursor:'pointer', ...MONO,
@@ -247,8 +299,47 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist }) {
 
       {/* Header */}
       <div style={{ padding:'0 16px 10px' }}>
-        <div style={{ ...BEBAS, fontSize:20, color:C.text, letterSpacing:'0.06em' }}>
-          BAND DISCOGRAPHIES
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+          <div style={{ ...BEBAS, fontSize:20, color:C.text, letterSpacing:'0.06em' }}>
+            BAND DISCOGRAPHIES
+          </div>
+          {onToggleFollow && (() => {
+            const allNames     = Object.keys(artistMap);
+            const notFollowed  = allNames.filter(n => !followedArtists.some(a => a.artist_name === n));
+            const anyFollowed  = allNames.some(n => followedArtists.some(a => a.artist_name === n));
+            return (
+              <div style={{ display:'flex', gap:6 }}>
+                {notFollowed.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      setFollowingAll(true);
+                      try {
+                        const r = await fetch('/api/artists/follow-all', { method: 'POST' });
+                        const d = await r.json();
+                        if (d.artists?.length && onBatchFollow) onBatchFollow(d.artists);
+                      } catch {}
+                      setFollowingAll(false);
+                    }}
+                    disabled={followingAll}
+                    style={{ background:C.accent+'22', border:'1px solid '+C.accent+'66',
+                      borderRadius:8, color:C.accent, padding:'6px 10px', cursor:'pointer',
+                      ...MONO, fontSize:10, whiteSpace:'nowrap', opacity:followingAll?0.6:1 }}>
+                    {followingAll ? '⏳…' : `🔔 All (${notFollowed.length})`}
+                  </button>
+                )}
+                {anyFollowed && (
+                  <button
+                    onClick={() => setManageMode(m => !m)}
+                    style={{ background: manageMode ? '#1a0000' : C.bg3,
+                      border:'1px solid '+(manageMode ? C.accent : C.border),
+                      borderRadius:8, color: manageMode ? C.accent : C.dim,
+                      padding:'6px 10px', cursor:'pointer', ...MONO, fontSize:10, whiteSpace:'nowrap' }}>
+                    {manageMode ? '✕ Done' : '✏ Manage'}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
         <div style={{ display:'flex', gap:12, alignItems:'center', marginTop:2, flexWrap:'wrap' }}>
           <span style={{ fontSize:10, color:C.dim, ...MONO }}>
@@ -263,6 +354,52 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist }) {
           )}
         </div>
       </div>
+
+      {/* Manage following — shown when manageMode active */}
+      {manageMode && onToggleFollow && (() => {
+        const followedInCollection = followedArtists.filter(a =>
+          Object.keys(artistMap).some(n => n === a.artist_name)
+        );
+        const followedOther = followedArtists.filter(a =>
+          !Object.keys(artistMap).some(n => n === a.artist_name)
+        );
+        return (
+          <div style={{ margin:'0 16px 10px', background:C.bg2, border:'1px solid '+C.border, borderRadius:10, padding:'10px 12px' }}>
+            <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.15em', textTransform:'uppercase', marginBottom:8 }}>
+              Following ({followedArtists.length}) — tap to unfollow
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {[...followedInCollection, ...followedOther].map(a => (
+                <button key={a.artist_name}
+                  onClick={() => onToggleFollow(a.artist_name)}
+                  style={{ background:'#1a0000', border:'1px solid '+C.accent+'44',
+                    borderRadius:20, color:C.accent, padding:'5px 10px',
+                    cursor:'pointer', fontSize:11, ...MONO,
+                    display:'flex', alignItems:'center', gap:5 }}>
+                  🔔 {a.artist_name}
+                  <span style={{ fontSize:13, color:'#f87171', lineHeight:1 }}>×</span>
+                </button>
+              ))}
+              {followedArtists.length === 0 && (
+                <div style={{ fontSize:11, color:C.dim, ...MONO }}>No followed artists yet</div>
+              )}
+            </div>
+            {followedArtists.length > 1 && (
+              <button
+                onClick={async () => {
+                  if (!confirm('Unfollow all artists?')) return;
+                  for (const a of followedArtists) await onToggleFollow(a.artist_name);
+                  setManageMode(false);
+                }}
+                style={{ marginTop:10, background:'none', border:'1px solid #7f1d1d',
+                  borderRadius:6, color:'#f87171', padding:'5px 12px',
+                  cursor:'pointer', ...MONO, fontSize:10 }}>
+                Unfollow all
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Search */}
       <div style={{ padding:'0 16px 10px' }}>
@@ -330,10 +467,21 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist }) {
                   </div>
                 </div>
 
+                {/* Follow button */}
+                {onToggleFollow && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onToggleFollow(artistName); }}
+                    title={followedArtists.some(a => a.artist_name === artistName) ? 'Unfollow' : 'Follow — get notified of new releases'}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer',
+                      fontSize: 18, padding: '8px 6px', flexShrink: 0, lineHeight: 1,
+                      color: followedArtists.some(a => a.artist_name === artistName) ? C.accent : C.ultra }}>
+                    {followedArtists.some(a => a.artist_name === artistName) ? '🔔' : '🔕'}
+                  </button>
+                )}
                 {/* Chevron */}
                 <div style={{ fontSize:12, color: isComplete ? C.gold : C.dim,
                   transition:'transform 0.2s', transform: isOpen ? 'rotate(90deg)' : 'none',
-                  flexShrink:0 }}>
+                  flexShrink:0, padding:'8px 4px' }}>
                   ▶
                 </div>
               </button>
@@ -346,6 +494,8 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist }) {
                   watchlist={watchlist}
                   onAddToWatchlist={onAddToWatchlist}
                   onComplete={handleComplete}
+                  isFollowed={followedArtists.some(a => a.artist_name === artistName)}
+                  onToggleFollow={onToggleFollow ? () => onToggleFollow(artistName) : null}
                 />
               )}
             </div>

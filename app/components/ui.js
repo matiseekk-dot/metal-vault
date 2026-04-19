@@ -6,9 +6,20 @@ import { C, MONO, BEBAS, BADGE_STYLES, GENRE_COLOR } from '@/lib/theme';
 // ── formatDate helper ─────────────────────────────────────────
 function formatDate(dateStr) {
   if (!dateStr) return '';
-  if (/^\d{4}$/.test(dateStr)) return dateStr;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-  return dateStr;
+  const s = String(dateStr).trim();
+  if (/^\d{4}$/.test(s)) return s;  // just year
+  try {
+    const d = new Date(s + (s.length === 7 ? '-01' : ''));  // handle YYYY-MM
+    if (isNaN(d)) return s;
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+    }
+    if (/^\d{4}-\d{2}$/.test(s)) {
+      return months[d.getMonth()] + ' ' + d.getFullYear();
+    }
+  } catch {}
+  return s;
 }
 
 // ── Badge ─────────────────────────────────────────────────────
@@ -71,7 +82,7 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
   const today=new Date();
   const rd=new Date(album.releaseDate);
   const isPreorder=(rd>today)||album.preorder===true;
-  const isNew=(today-rd)/(1000*60*60*24)<60&&!isPreorder;
+  const isNew=(today-rd)/(1000*60*60*24)<180&&!isPreorder;  // 6 months
   const isLimited=album.limited===true||vinylData?.hasLimited===true;
   // Compact vertical card for 2-column grid
   return(
@@ -215,13 +226,24 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                         borderRadius:7,padding:'7px',fontSize:11,color:C.muted,...MONO,textDecoration:'none',textAlign:'center'}}>
                       🔗 Discogs
                     </a>
+                    <button onClick={()=>onWatchToggle({
+                        id: album.id + '_' + v.id,
+                        artist: album.artist, album: album.album,
+                        cover: album.cover,
+                        format: v.format, color: v.color, label: v.label,
+                        releaseDate: album.releaseDate,
+                      })}
+                      style={{flex:1,background:C.bg4,border:'1px solid '+C.border,borderRadius:7,
+                        padding:'7px',fontSize:11,color:C.muted,...MONO,cursor:'pointer'}}>
+                      ☆ Watch
+                    </button>
                     <button onClick={()=>onAddToCollection({
                         discogs_id:v.id,artist:album.artist,album:album.album,
                         cover:album.cover,format:v.format,color:v.color,label:v.label,
                       })}
                       style={{flex:1,background:'#001a00',border:'1px solid #166534',borderRadius:7,
                         padding:'7px',fontSize:11,color:'#4ade80',...MONO,cursor:'pointer'}}>
-                      + Collection
+                      + Vault
                     </button>
                   </div>
                 </div>

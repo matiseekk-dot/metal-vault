@@ -26,8 +26,9 @@ const TTL   = 2 * 60 * 60 * 1000; // 2 hours
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
-  const artist   = (searchParams.get('artist') || '').trim();
-  const forcedId = searchParams.get('artist_id') || '';
+  const artist    = (searchParams.get('artist') || '').trim();
+  const forcedId  = searchParams.get('artist_id') || '';
+  const vinylOnly = searchParams.get('vinyl') === '1'; // filter to vinyl pressings only
 
   if (!artist) return NextResponse.json({ error: 'artist param required' }, { status: 400 });
 
@@ -93,17 +94,32 @@ export async function GET(req) {
     // Formats we WANT: Album, Live (studio + live albums only)
     // Formats we SKIP: Single, EP, Compilation, Video, Unofficial, DJ-mix, etc.
     const WANTED_FORMATS  = ['album', 'live'];
-    const BLOCKED_FORMATS = ['single', 'ep', 'compilation', 'video', 'unofficial', 'dj-mix', 'mixtape', 'interview', 'soundtrack'];
+    const BLOCKED_FORMATS = ['single', 'ep', 'compilation', 'video', 'unofficial',
+                             'dj-mix', 'mixtape', 'interview', 'soundtrack', 'box set'];
+
+    // Title patterns that indicate singles/EPs even when format is missing
+    const BLOCKED_TITLE_PATTERNS = [
+      /\bsingle\b/i, /\bep\b/i, /\b7"\b/, /\b7inch\b/i,
+      /\bpromo\b/i, /\bflexidisc\b/i, /\bpicture disc single\b/i,
+    ];
 
     const albums = (relData.releases || [])
       .filter(r => {
         if (r.type !== 'master') return false;
         if (r.role !== 'Main')   return false;
-        const fmt = (r.format || '').toLowerCase();
-        // Must match a wanted format OR format is empty/unknown (assume album)
-        const isWanted  = !fmt || WANTED_FORMATS.some(f => fmt.includes(f));
+        const fmt   = (r.format || '').toLowerCase();
+        const title = (r.title  || '').toLowerCase();
+
+        // Block by format
         const isBlocked = BLOCKED_FORMATS.some(f => fmt.includes(f));
-        return isWanted && !isBlocked;
+        if (isBlocked) return false;
+
+        // Block by title pattern (catches singles with empty format)
+        if (BLOCKED_TITLE_PATTERNS.some(p => p.test(title))) return false;
+
+        // Must match a wanted format OR format is empty/unknown (assume album)
+        const isWanted = !fmt || WANTED_FORMATS.some(f => fmt.includes(f));
+        return isWanted;
       })
       .map(r => ({
         id:         String(r.id),                      // master release ID
@@ -115,11 +131,23 @@ export async function GET(req) {
         normTitle:  norm(r.title),
       }));
 
+    // vinyl=1 param: only include releases that likely have vinyl
+    // We can't know for sure without fetching each release, so filter by format hint
+    const filteredAlbums = vinylOnly
+      ? albums.filter(a => {
+          const f = (a.format || '').toLowerCase();
+          // Include if format mentions vinyl, or format is empty/Album (assume vinyl exists)
+          // Exclude if format explicitly says CD/DVD/digital/cassette only
+          const isDigitalOnly = ['cd', 'dvd', 'digital', 'cassette', 'mp3', 'flac'].some(x => f.includes(x));
+          return !isDigitalOnly;
+        })
+      : albums;
+
     const result = {
       artist:   artistName,
       artistId: String(artistId),
-      total:    albums.length,
-      albums,
+      total:    filteredAlbums.length,
+      albums:   filteredAlbums,
     };
 
     CACHE.set(cacheKey, { ts: Date.now(), data: result });

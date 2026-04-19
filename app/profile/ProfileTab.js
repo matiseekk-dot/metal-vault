@@ -308,29 +308,52 @@ export default function ProfileTab({
           </button>
         </div>
 
-        {/* Import from CSV */}
+        {/* Import from CSV or JSON */}
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>From CSV file (Metal Vault export or any spreadsheet with Artist + Album columns)</div>
-          <label style={{ display: 'block', cursor: importing ? 'default' : 'pointer' }}>
-            <div style={{ padding: '9px', background: C.bg3, border: '1px dashed ' + (importing ? C.border : C.accent + '55'), borderRadius: 7, color: importing ? C.dim : C.muted, textAlign: 'center', fontSize: 11, ...MONO, opacity: importing ? 0.6 : 1 }}>
-              {importing ? '⏳ Importing…' : '📥 Import from CSV'}
-            </div>
-            <input type="file" accept=".csv,text/csv" disabled={importing} style={{ display: 'none' }}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setImporting(true); setImportResult(null);
-                try {
-                  const fd = new FormData();
-                  fd.append('file', file);
-                  const r = await fetch('/api/collection/import', { method: 'POST', body: fd });
-                  const d = await r.json();
-                  setImportResult(d);
-                  if (d.imported > 0) setTimeout(() => window.location.reload(), 1500);
-                } catch (err) { setImportResult({ error: err.message }); }
-                finally { setImporting(false); e.target.value = ''; }
-              }}/>
-          </label>
+          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>From file — CSV (any spreadsheet) or JSON (Metal Vault export)</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {/* CSV */}
+            <label style={{ flex: 1, cursor: importing ? 'default' : 'pointer' }}>
+              <div style={{ padding: '9px', background: C.bg3, border: '1px dashed ' + (importing ? C.border : C.accent + '55'), borderRadius: 7, color: importing ? C.dim : C.muted, textAlign: 'center', fontSize: 11, ...MONO, opacity: importing ? 0.6 : 1 }}>
+                {importing ? '⏳…' : '📥 CSV'}
+              </div>
+              <input type="file" accept=".csv,text/csv" disabled={importing} style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  setImporting(true); setImportResult(null);
+                  try {
+                    const fd = new FormData(); fd.append('file', file);
+                    const d = await fetch('/api/collection/import', { method: 'POST', body: fd }).then(r => r.json());
+                    setImportResult(d);
+                    if (d.imported > 0) setTimeout(() => window.location.reload(), 1500);
+                  } catch (err) { setImportResult({ error: err.message }); }
+                  finally { setImporting(false); e.target.value = ''; }
+                }}/>
+            </label>
+            {/* JSON */}
+            <label style={{ flex: 1, cursor: importing ? 'default' : 'pointer' }}>
+              <div style={{ padding: '9px', background: C.bg3, border: '1px dashed ' + (importing ? C.border : C.accent + '55'), borderRadius: 7, color: importing ? C.dim : C.muted, textAlign: 'center', fontSize: 11, ...MONO, opacity: importing ? 0.6 : 1 }}>
+                {importing ? '⏳…' : '📥 JSON'}
+              </div>
+              <input type="file" accept=".json,application/json" disabled={importing} style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  setImporting(true); setImportResult(null);
+                  try {
+                    const items = JSON.parse(await file.text());
+                    if (!Array.isArray(items)) throw new Error('JSON must be an array');
+                    const headers = 'Artist,Album,Format,Grade,Label,Year,Purchase Price ($),Discogs ID,Notes';
+                    const rows = items.map(i => [i.artist||'',i.album||'',i.format||'',i.grade||'',i.label||'',i.year||'',i.purchase_price||'',i.discogs_id||'',i.notes||''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','));
+                    const blob = new Blob([[headers,...rows].join('\n')], {type:'text/csv'});
+                    const fd = new FormData(); fd.append('file', blob, 'import.csv');
+                    const d = await fetch('/api/collection/import', { method: 'POST', body: fd }).then(r => r.json());
+                    setImportResult(d);
+                    if (d.imported > 0) setTimeout(() => window.location.reload(), 1500);
+                  } catch (err) { setImportResult({ error: err.message }); }
+                  finally { setImporting(false); e.target.value = ''; }
+                }}/>
+            </label>
+          </div>
           {importResult && (
             <div style={{ marginTop: 6, padding: '7px 10px', borderRadius: 6, fontSize: 10, ...MONO, lineHeight: 1.5,
               background: importResult.error ? '#1a0000' : importResult.imported > 0 ? '#0d1f0d' : C.bg3,

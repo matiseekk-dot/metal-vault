@@ -293,7 +293,7 @@ export default function MetalVault() {
       }
       const rd = new Date(r.releaseDate);
       const isPreorder = (rd > today) || r.preorder === true;
-      const isNew = (today-rd)/864e5 < 45 && !isPreorder;
+      const isNew = (today-rd)/864e5 < 180 && !isPreorder;  // 6 months = new
       const vinyl = col.vinylCache[r.id];
       if (filter==='new')      return isNew;
       if (filter==='preorder') return isPreorder||r.preorder;
@@ -447,6 +447,11 @@ export default function MetalVault() {
             onManualAdd={async(item)=>{ await col.addToCollection(item); }}
             premium={premium} onUpgrade={triggerUpgrade}
             followedArtists={col.followedArtists} onToggleFollow={col.toggleFollow}
+            onBatchFollow={async (artists) => {
+              // Add all newly followed artists to state
+              const newArtists = artists.map(name => ({ artist_name: name, user_id: user?.id }));
+              col.setFollowedArtists(a => [...a, ...newArtists.filter(n => !a.some(x => x.artist_name === n.artist_name))]);
+            }}
             onRefreshPrices={async()=>{
               const r = await fetch('/api/collection/refresh-prices',{method:'POST'});
               const d = await r.json();

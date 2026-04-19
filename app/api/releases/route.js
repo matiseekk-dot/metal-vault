@@ -80,8 +80,8 @@ export async function GET(request) {
   const curYear  = today.getFullYear();
   const nextYear = curYear + 1;
 
-  // "Recent" window: 60 days back — so we show what just came out too
-  const recentFrom = new Date(today.getTime() - 60 * 24 * 60 * 60 * 1000)
+  // "Recent" window: 180 days back (6 months) — covers recent releases
+  const recentFrom = new Date(today.getTime() - 180 * 24 * 60 * 60 * 1000)
     .toISOString().split('T')[0];
 
   try {
@@ -95,20 +95,29 @@ export async function GET(request) {
       `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${nextYear}&sort=date_added&sort_order=desc&per_page=5&page=1`,
     ]);
 
+    const prevYear = curYear - 1;
+
     const fetches = [
-      // Followed artists first — most relevant results
+      // Followed artists first (also prev year for 6-month coverage)
       ...artistSearches,
-      // Next year — pure pre-orders/announcements
+      ...followedArtists.flatMap(artist => [
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${prevYear}&sort=date_added&sort_order=desc&per_page=5&page=1`,
+      ]),
+      // Next year — pre-orders/announcements
       ...METAL_STYLES.slice(0, 6).map(style =>
         `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${nextYear}&sort=date_added&sort_order=desc&per_page=20&page=1`
       ),
-      // Current year, recently added — catches new announcements + recent releases
+      // Current year
       ...METAL_STYLES.slice(0, 8).map(style =>
         `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear}&sort=date_added&sort_order=desc&per_page=20&page=1`
       ),
-      // Current year page 2 — more coverage
+      // Current year page 2
       ...METAL_STYLES.slice(0, 4).map(style =>
         `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${curYear}&sort=date_added&sort_order=desc&per_page=20&page=2`
+      ),
+      // Previous year — last 6 months of releases
+      ...METAL_STYLES.slice(0, 4).map(style =>
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&style=${encodeURIComponent(style)}&year=${prevYear}&sort=date_added&sort_order=desc&per_page=20&page=1`
       ),
     ];
 
