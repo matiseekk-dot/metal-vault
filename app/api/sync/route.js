@@ -199,6 +199,8 @@ export async function POST(req) {
               year:         item.year ? String(item.year) : null,
               discogs_url:  item.discogs_url,
               release_date: item.year ? String(item.year) : null,
+              format:       item.format || null,
+              label:        item.label  || null,
               added_at:     new Date().toISOString(),
             });
             result.watchAdded++;
