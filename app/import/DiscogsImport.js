@@ -95,7 +95,7 @@ export default function DiscogsImport({ onImportCollection, onImportWatchlist, u
         try {
           await onImportWatchlist({
             album_id:     String(item.discogs_id),
-            artist:       item.artist,
+            artist:       (item.artist || '').replace(/\s*\(\d+\)$/, ''),
             album:        item.album,
             cover:        item.cover,
             release_date: item.year ? String(item.year) : '',

@@ -78,7 +78,8 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
     <div onClick={onClick} style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,
       overflow:'hidden',cursor:'pointer',WebkitTapHighlightColor:'transparent',position:'relative'}}
       onTouchStart={e=>e.currentTarget.style.background=C.bg3}
-      onTouchEnd={e=>e.currentTarget.style.background=C.bg2}>
+      onTouchEnd={e=>e.currentTarget.style.background=C.bg2}
+      onTouchCancel={e=>e.currentTarget.style.background=C.bg2}>
       {/* Cover — full width */}
       <div style={{position:'relative',paddingTop:'100%',background:'#111'}}>
         <div style={{position:'absolute',inset:0}}>
@@ -224,7 +225,8 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
           )}
 
           {/* Price History — Pro feature */}
-          {vinylData?.listings?.length > 0 && vinylData.listings[0]?.id && (
+          {/* Use album.id as the Discogs release ID for price history lookup */}
+          {album?.id && !String(album.id).startsWith('m') && (
             <div style={{padding:'0 16px 16px'}}>
               {!premium ? (
                 <div style={{background:'linear-gradient(135deg,#0a0a1a,#14142a)',border:'1px solid #3333aa55',borderRadius:10,padding:'12px 14px'}}>
@@ -233,7 +235,7 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                   <div style={{fontSize:10,color:'#4f46e5',...MONO}}>🔒 Metal Vault Pro feature</div>
                 </div>
               ) : history === null && !histLoading ? (
-                <button onClick={()=>loadHistory(vinylData.listings[0].id)}
+                <button onClick={()=>loadHistory(album.id)}
                   style={{width:'100%',background:C.bg3,border:'1px solid '+C.border,borderRadius:10,padding:'10px',color:C.dim,cursor:'pointer',...MONO,fontSize:11}}>
                   📈 Load price history
                 </button>

@@ -29,9 +29,8 @@ export default async function SharePage({ params }) {
     sb.from('profiles').select('display_name,username,avatar_url').eq('id', share.user_id).single(),
   ]);
 
-  const totalPaid    = (collection||[]).reduce((s,i)=>s+(Number(i.purchase_price)||0),0);
-  const totalCurrent = (collection||[]).reduce((s,i)=>s+(Number(i.median_price||i.current_price||i.purchase_price)||0),0);
-  const gain         = totalCurrent - totalPaid;
+  const totalCurrent = (collection||[]).reduce((s,i)=>s+(Number(i.median_price)||0),0);
+  const gain = 0; // purchase prices hidden from public view
 
   return (
     <div style={{minHeight:'100vh',background:C.bg,maxWidth:600,margin:'0 auto',paddingBottom:40}}>
@@ -60,8 +59,8 @@ export default async function SharePage({ params }) {
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',borderBottom:'1px solid '+C.border}}>
         {[
           {l:'Records',v:(collection||[]).length},
-          {l:'Value',v:totalCurrent>0?'$'+totalCurrent.toFixed(0):'—'},
-          {l:'Gain',v:gain!==0?(gain>0?'+$':'-$')+Math.abs(gain).toFixed(0):'—',c:gain>0?'#4ade80':gain<0?'#f87171':C.muted},
+          {l:'Est. Value',v:totalCurrent>0?'$'+totalCurrent.toFixed(0):'—'},
+          {l:'Format',v:(collection||[]).filter(i=>!i.format||i.format==='Vinyl').length+' vinyl'},
         ].map(s=>(
           <div key={s.l} style={{textAlign:'center',padding:'14px 8px',borderRight:'1px solid '+C.border}}>
             <div style={{...BEBAS,fontSize:26,color:s.c||C.accent,lineHeight:1}}>{s.v}</div>

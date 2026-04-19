@@ -119,10 +119,13 @@ export default function ProfileTab({
             <div style={{ fontSize: 10, color: '#4a7ab5', ...MONO, lineHeight: 1.5 }}>Enable public profile to show off your vault</div>
           </div>
           <button onClick={async () => {
+              if (!username?.trim()) {
+                alert('Set a username first in the profile settings below');
+                return;
+              }
               setIsPublic(true);
-              // Auto-save public setting
               await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, is_public: true }) });
-              onUpdateProfile({ ...profile, is_public: true });
+              onUpdateProfile({ ...profile, is_public: true, username });
             }}
             style={{ background: '#1e40af', border: 'none', borderRadius: 8, color: '#fff', padding: '8px 14px', cursor: 'pointer', ...MONO, fontSize: 11, flexShrink: 0, whiteSpace: 'nowrap' }}>
             Go public →

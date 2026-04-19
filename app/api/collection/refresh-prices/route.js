@@ -8,21 +8,31 @@ function discogsAuth() {
   return k && s ? `Discogs key=${k}, secret=${s}` : `Discogs token=${t}`;
 }
 
-// Rate limit: 1 call per 30s per user (prevent Discogs abuse)
-const lastCall = new Map();
-
 export async function POST(request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Rate limiting
-  const now = Date.now();
-  const last = lastCall.get(user.id) || 0;
-  if (now - last < 30_000) {
-    return NextResponse.json({ error: 'Please wait before refreshing again', retryAfter: 30 }, { status: 429 });
+  // Rate limit via DB — check last_price_check across all user's items
+  // If most items were checked in last 30 min, skip
+  const { count: recentCount } = await supabase
+    .from('collection')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .not('last_price_check', 'is', null)
+    .gte('last_price_check', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+
+  const { count: totalCount } = await supabase
+    .from('collection')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id);
+
+  if (totalCount > 0 && recentCount >= totalCount * 0.8) {
+    return NextResponse.json({
+      error: 'Prices are already up to date (refreshed in last 30 minutes)',
+      retryAfter: 1800, updated: 0, total: 0,
+    }, { status: 429 });
   }
-  lastCall.set(user.id, now);
 
   const auth = discogsAuth();
   if (!auth) return NextResponse.json({ error: 'Discogs not configured' }, { status: 503 });
@@ -52,6 +62,17 @@ export async function POST(request) {
           `https://api.discogs.com/marketplace/stats/${item.discogs_id}`,
           { headers: { Authorization: auth, 'User-Agent': 'MetalVault/1.0' } }
         );
+        if (r.status === 429) {
+          // Rate limited — wait 2s and retry once
+          await new Promise(r => setTimeout(r, 2000));
+          const r2 = await fetch(
+            `https://api.discogs.com/marketplace/stats/${item.discogs_id}`,
+            { headers: { Authorization: auth, 'User-Agent': 'MetalVault/1.0' } }
+          );
+          if (!r2.ok) { errors++; return; }
+          const d2 = await r2.json();
+          Object.assign(r, { ok: true, json: async () => d2 });
+        }
         if (!r.ok) { errors++; return; }
         const d = await r.json();
         const current = d.lowest_price?.value || null;
@@ -61,6 +82,17 @@ export async function POST(request) {
           median_price:     median,
           last_price_check: new Date().toISOString(),
         }).eq('id', item.id);
+        // Also save to price_history for Pro users (backfills on first run)
+        if ((current || median) && item.discogs_id) {
+          try {
+            await supabase.from('price_history').upsert({
+              discogs_id:    item.discogs_id,
+              snapshot_date: new Date().toISOString().split('T')[0],
+              lowest_price:  current,
+              median_price:  median,
+            }, { onConflict: 'discogs_id,snapshot_date' });
+          } catch {}  // table may not exist yet — silent fail
+        }
         updated++;
       } catch { errors++; }
     }));

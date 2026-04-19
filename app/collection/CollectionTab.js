@@ -459,7 +459,7 @@ export function CollectionTab({
         <div style={{ padding: '16px' }}>
           {/* Search + Add */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <input value={vaultSearch} onChange={e => setVaultSearch(e.target.value)}
+            <input value={vaultSearch} onChange={e => { setVaultSearch(e.target.value); setExpandedId(null); }}
               placeholder="Search artist, album…"
               style={{ ...inputSt, flex: 1, padding: '9px 12px', fontSize: 14 }} />
             <button onClick={() => setShowAddManual(true)}
@@ -470,7 +470,7 @@ export function CollectionTab({
           {/* Filter pills */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto' }}>
             {[['all','⚡ All'],['vinyl','💿 Vinyl'],['cd','💽 CD'],['limited','💎 Limited'],['no_price','💳 No price']].map(([id, label]) => (
-              <button key={id} onClick={() => setVaultFilter(id)}
+              <button key={id} onClick={() => { setVaultFilter(id); setExpandedId(null); }}
                 style={{ padding: '5px 11px', borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer', fontSize: 10, ...MONO, flexShrink: 0,
                   background: vaultFilter === id ? C.accent + '22' : C.bg3,
                   color: vaultFilter === id ? C.accent : C.dim,
@@ -570,7 +570,8 @@ export function CollectionTab({
                   const gain = paid > 0 && now > 0 ? now - paid : null;
                   const gainPct = gain !== null ? Math.max(-999, Math.min(999, (gain / paid) * 100)) : null;
                   return (
-                  <div key={item.id} style={{ background: C.bg2, border: '1px solid ' + (isExpanded ? C.accent + '44' : C.border), borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.2s' }}>
+                  <div key={item.id} style={{ background: C.bg2, border: '1px solid ' + (isExpanded ? C.accent + '44' : C.border), borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.2s' }}
+                      onTouchCancel={e=>e.currentTarget.style.background=C.bg2}>
                     {/* ── Collapsed row — always visible ── */}
                     <div onClick={() => setExpandedId(isExpanded ? null : item.id)}
                       style={{ display: 'flex', gap: 10, padding: '10px 12px', alignItems: 'center', cursor: 'pointer' }}>

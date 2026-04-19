@@ -62,7 +62,7 @@ export default function MetalVault() {
   const [selected,        setSelected]        = useState(null);
   const [showOnboarding,  setShowOnboarding]  = useState(false);
   const [feedRetryCount,  setFeedRetryCount]  = useState(0);
-  const [feedTab,         setFeedTab]         = useState('following'); // following | all
+  const [feedTab,         setFeedTab]         = useState('all'); // 'all' default — user switches to Following manually
   const [premium,         setPremium]         = useState(null); // null=loading, false=free, true=pro
   const [showUpgrade,     setShowUpgrade]     = useState(false);
   const [upgradeReason,   setUpgradeReason]   = useState('');
@@ -82,10 +82,17 @@ export default function MetalVault() {
         col.loadUserData(session.user);
         loadProfile(session.user);
         loadPremium();
-        // Show onboarding for brand new sign-ups
+        // Show onboarding only for real first-time sign-ins
+        // TOKEN_REFRESHED also triggers SIGNED_IN — guard with seen flag
         if (event === 'SIGNED_IN') {
-          const seen = localStorage.getItem('mv_onboarding_done');
-          if (!seen) setShowOnboarding(true);
+          try {
+            const seen = localStorage.getItem('mv_onboarding_done');
+            // Only show if never seen AND this isn't a tab re-focus token refresh
+            // (token refresh happens silently — check if session was just created)
+            const isNewUser = !seen && session?.user?.created_at &&
+              (Date.now() - new Date(session.user.created_at).getTime()) < 5 * 60 * 1000; // within 5 mins
+            if (isNewUser) setShowOnboarding(true);
+          } catch {}
         }
       }
       else col.resetUserData();
@@ -335,11 +342,11 @@ export default function MetalVault() {
         {tab==='feed' && (
           <>
             {!feedLoading && releases.length>0 && <StatsBar releases={releases}/>}
-            {/* Following / All tabs */}
+            {/* Following / All tabs — only show Following if user is logged in */}
             <div style={{ display:'flex', borderBottom:'1px solid '+C.border }}>
               {[
-                { id:'following', label: col.followedArtists.length > 0 ? `Following (${col.followedArtists.length})` : 'Following' },
-                { id:'all',       label: 'All Metal' },
+                ...(user ? [{ id:'following', label: col.followedArtists.length > 0 ? `🔔 Following (${col.followedArtists.length})` : '🔔 Following' }] : []),
+                { id:'all', label: '🔥 All Metal' },
               ].map(t => (
                 <button key={t.id} onClick={()=>setFeedTab(t.id)} style={{
                   flex:1, padding:'10px 0', background:'none', border:'none',
