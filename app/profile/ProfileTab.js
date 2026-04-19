@@ -293,23 +293,59 @@ export default function ProfileTab({
         )}
       </div>
 
-      {/* Import */}
-      <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>Import from Discogs</div>
-        <button onClick={onShowImport}
-          style={{
-            width: '100%', padding: '10px',
-            background: C.accent + '22', border: '1px solid ' + C.accent + '44',
-            borderRadius: 8, color: C.accent, cursor: 'pointer', ...MONO, fontSize: 12,
-          }}>
-          ⬇ Open Discogs Import
-        </button>
-      </div>
 
-      {/* Export + Import */}
+
+      {/* Data — Export + Import (combined, visible immediately) */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>Export Collection</div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 12 }}>📦 Data — Import & Export</div>
+
+        {/* Import from Discogs */}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>From Discogs</div>
+          <button onClick={onShowImport}
+            style={{ width: '100%', padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, cursor: 'pointer', ...MONO, fontSize: 11, textAlign: 'center' }}>
+            🔗 Import from Discogs account
+          </button>
+        </div>
+
+        {/* Import from CSV */}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>From CSV file (Metal Vault export or any spreadsheet with Artist + Album columns)</div>
+          <label style={{ display: 'block', cursor: importing ? 'default' : 'pointer' }}>
+            <div style={{ padding: '9px', background: C.bg3, border: '1px dashed ' + (importing ? C.border : C.accent + '55'), borderRadius: 7, color: importing ? C.dim : C.muted, textAlign: 'center', fontSize: 11, ...MONO, opacity: importing ? 0.6 : 1 }}>
+              {importing ? '⏳ Importing…' : '📥 Import from CSV'}
+            </div>
+            <input type="file" accept=".csv,text/csv" disabled={importing} style={{ display: 'none' }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setImporting(true); setImportResult(null);
+                try {
+                  const fd = new FormData();
+                  fd.append('file', file);
+                  const r = await fetch('/api/collection/import', { method: 'POST', body: fd });
+                  const d = await r.json();
+                  setImportResult(d);
+                  if (d.imported > 0) setTimeout(() => window.location.reload(), 1500);
+                } catch (err) { setImportResult({ error: err.message }); }
+                finally { setImporting(false); e.target.value = ''; }
+              }}/>
+          </label>
+          {importResult && (
+            <div style={{ marginTop: 6, padding: '7px 10px', borderRadius: 6, fontSize: 10, ...MONO, lineHeight: 1.5,
+              background: importResult.error ? '#1a0000' : importResult.imported > 0 ? '#0d1f0d' : C.bg3,
+              border: '1px solid ' + (importResult.error ? '#7f1d1d' : importResult.imported > 0 ? '#1a3d1a' : C.border),
+              color: importResult.error ? '#f87171' : importResult.imported > 0 ? '#4ade80' : C.dim }}>
+              {importResult.error ? '⚠ ' + importResult.error : importResult.message}
+              {importResult.imported > 0 && ' — reloading…'}
+            </div>
+          )}
+        </div>
+
+        {/* Export */}
+        <div style={{ borderTop: '1px solid ' + C.border, paddingTop: 10 }}>
+          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>Export your collection</div>
+          <div style={{ display: 'flex', gap: 8 }}>
           <a href="/api/collection/export?format=csv" download
             style={{ flex: 1, padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, textDecoration: 'none', textAlign: 'center', fontSize: 11, ...MONO }}>
             📊 CSV / Excel
@@ -318,69 +354,11 @@ export default function ProfileTab({
             style={{ flex: 1, padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, textDecoration: 'none', textAlign: 'center', fontSize: 11, ...MONO }}>
             {'{ }'} JSON
           </a>
-        </div>
-
-        {/* Import */}
-        <div style={{ borderTop: '1px solid ' + C.border, paddingTop: 12 }}>
-          <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 6 }}>Import from CSV</div>
-          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 8, lineHeight: 1.5 }}>
-            Upload a Metal Vault CSV export or any CSV with Artist and Album columns. Duplicates are skipped automatically.
           </div>
-          <label style={{ display: 'block', cursor: importing ? 'default' : 'pointer' }}>
-            <div style={{
-              padding: '9px', background: importing ? C.bg3 : C.bg3,
-              border: '1px dashed ' + (importing ? C.border : C.accent + '66'),
-              borderRadius: 7, color: importing ? C.dim : C.accent,
-              textAlign: 'center', fontSize: 11, ...MONO,
-              opacity: importing ? 0.6 : 1,
-            }}>
-              {importing ? '⏳ Importing…' : '📥 Choose CSV file'}
-            </div>
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              disabled={importing}
-              style={{ display: 'none' }}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setImporting(true);
-                setImportResult(null);
-                try {
-                  const fd = new FormData();
-                  fd.append('file', file);
-                  const r = await fetch('/api/collection/import', { method: 'POST', body: fd });
-                  const d = await r.json();
-                  setImportResult(d);
-                  if (d.imported > 0) {
-                    // Reload page to show new items
-                    setTimeout(() => window.location.reload(), 1500);
-                  }
-                } catch (err) {
-                  setImportResult({ error: err.message });
-                } finally {
-                  setImporting(false);
-                  e.target.value = '';
-                }
-              }}
-            />
-          </label>
-          {importResult && (
-            <div style={{
-              marginTop: 8, padding: '8px 10px', borderRadius: 7, fontSize: 10, ...MONO,
-              background: importResult.error ? '#1a0000' : importResult.imported > 0 ? '#0d1f0d' : C.bg3,
-              border: '1px solid ' + (importResult.error ? '#7f1d1d' : importResult.imported > 0 ? '#1a3d1a' : C.border),
-              color: importResult.error ? '#f87171' : importResult.imported > 0 ? '#4ade80' : C.dim,
-              lineHeight: 1.6,
-            }}>
-              {importResult.error
-                ? '⚠ ' + importResult.error
-                : importResult.message}
-              {importResult.imported > 0 && ' — reloading…'}
-            </div>
-          )}
         </div>
       </div>
+
+
 
       {/* Share */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>

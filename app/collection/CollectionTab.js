@@ -652,8 +652,13 @@ export function CollectionTab({
                             }} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>OK</button>
                             <button onClick={() => { setShowAlertForm(null); setPriceInput(''); }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
                           </div>
-                        ) : !item.purchase_price && (
-                          <button onClick={() => { setPriceInput(item.purchase_price ? String(item.purchase_price) : ''); setShowAlertForm(item.id + '_price'); }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, marginBottom: 8 }}>+ Set purchase price</button>
+                        ) : (
+                          <button onClick={() => { setPriceInput(item.purchase_price ? String(item.purchase_price) : ''); setShowAlertForm(item.id + '_price'); }}
+                            style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6,
+                              color: item.purchase_price ? C.gold : C.dim,
+                              padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, marginBottom: 8 }}>
+                            {item.purchase_price ? '💳 $' + Number(item.purchase_price).toFixed(0) + ' · edit' : '+ Set purchase price'}
+                          </button>
                         )}
                         {/* Alert + Delete */}
                         <div style={{ display: 'flex', gap: 6 }}>
