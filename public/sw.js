@@ -1,7 +1,7 @@
 // ── Metal Vault Service Worker ────────────────────────────────
 // Auto-updates on every new deploy — no manual cache clearing needed.
 
-const VERSION    = 'mv-v4';  // bump this on every deploy
+const VERSION    = 'mv-v5';  // bump this on every deploy
 const CACHE_APP  = VERSION + '-app';
 const CACHE_DATA = VERSION + '-data';
 const CACHE_IMG  = VERSION + '-img';
@@ -37,10 +37,13 @@ self.addEventListener('activate', e => {
             return caches.delete(k);
           })
       )
-    ).then(() => {
-      // Take control of all open tabs immediately
-      return self.clients.claim();
-    })
+    ).then(() => self.clients.claim())
+      .then(() => {
+        // Tell all open tabs to reload with fresh code
+        return self.clients.matchAll({ type: 'window' }).then(clients => {
+          clients.forEach(client => client.postMessage({ type: 'SW_UPDATED' }));
+        });
+      })
   );
 });
 

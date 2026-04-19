@@ -68,6 +68,14 @@ export default function RootLayout({ children }) {
                     window.location.reload();
                   }
                 });
+
+                // Also listen for SW_UPDATED message
+                navigator.serviceWorker.addEventListener('message', e => {
+                  if (e.data?.type === 'SW_UPDATED' && !refreshing) {
+                    refreshing = true;
+                    window.location.reload();
+                  }
+                });
               });
             }
           `
