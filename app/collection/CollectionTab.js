@@ -64,10 +64,24 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertDone, setAlertDone]     = useState({});
 
+  // Load saved alerts on mount — persists across tab switches
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/alerts').then(r => r.json()).then(d => {
+      if (!d.alerts) return;
+      const map = {};
+      for (const a of d.alerts) {
+        if (a.is_active !== false) map[String(a.discogs_id)] = Number(a.target_price);
+      }
+      setAlertDone(map);
+    }).catch(() => {});
+  }, [user]);
+
   const sorted = [...watchlist].sort((a, b) => {
     if (sort === 'artist') return (a.artist || '').localeCompare(b.artist || '');
     if (sort === 'year')   return (b.release_date || '0').localeCompare(a.release_date || '0');
-    return 0;
+    // 'added' (default): newest first by added_at timestamp
+    return new Date(b.date_added || b.added_at || 0) - new Date(a.date_added || a.added_at || 0);
   });
 
   const saveAlert = async (album) => {
@@ -125,37 +139,46 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
           const hasAlert = alertDone[id];
           return (
             <div key={id} style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div onClick={() => onAlbumClick(album)}
-                  style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0, alignItems: 'center', cursor: 'pointer' }}>
+              {/* CSS Grid: fixed cover | fluid text (truncates) | fixed X button */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '52px minmax(0, 1fr) 40px',
+                gap: 12, padding: '12px 14px', alignItems: 'center',
+              }}>
+                {/* Cover — clickable */}
+                <div onClick={() => onAlbumClick(album)} style={{ cursor: 'pointer' }}>
                   {AlbumCover && <AlbumCover src={album.cover} artist={album.artist} size={52} />}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ ...BEBAS, fontSize: 17, color: C.text, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{album.artist}</div>
-                    <div style={{ fontSize: 11, color: C.muted, ...MONO, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{album.album}</div>
-                    {/* Version info — format + color so user can tell pressings apart */}
-                    <div style={{ display: 'flex', gap: 5, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {album.format && album.format !== 'Vinyl' && (
-                        <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: C.bg3, color: C.dim, ...MONO }}>{album.format}</span>
-                      )}
-                      {album.color && (
-                        <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: C.bg3, color: '#aaa', ...MONO }}>🎨 {album.color}</span>
-                      )}
-                      {album.label && (
-                        <span style={{ fontSize: 9, color: C.dim, ...MONO }}>{album.label}</span>
-                      )}
-                      {!album.format && !album.color && (
-                        <span style={{ fontSize: 9, color: C.dim, ...MONO }}>{formatDate(album.release_date || album.releaseDate)}</span>
-                      )}
-                    </div>
-                    {hasAlert && <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginTop: 2 }}>🔔 Alert: ≤${hasAlert}</div>}
+                </div>
+                {/* Text column — guaranteed to shrink via minmax(0, 1fr) */}
+                <div onClick={() => onAlbumClick(album)} style={{ cursor: 'pointer', minWidth: 0, overflow: 'hidden' }}>
+                  <div style={{ ...BEBAS, fontSize: 17, color: C.text, lineHeight: 1,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{album.artist}</div>
+                  <div style={{ fontSize: 11, color: C.muted, ...MONO, marginTop: 2,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{album.album}</div>
+                  {/* Version info chips */}
+                  <div style={{ display: 'flex', gap: 5, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {album.format && album.format !== 'Vinyl' && album.format !== 'LP' && (
+                      <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: C.bg3, color: C.dim, ...MONO }}>{album.format}</span>
+                    )}
+                    {album.color && (
+                      <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: C.bg3, color: '#aaa', ...MONO }}>🎨 {album.color}</span>
+                    )}
+                    {album.label && (
+                      <span style={{ fontSize: 9, color: C.dim, ...MONO, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{album.label}</span>
+                    )}
+                    {(album.release_date || album.releaseDate || album.year) && (
+                      <span style={{ fontSize: 9, color: C.dim, ...MONO }}>
+                        {formatDate(album.release_date || album.releaseDate || album.year)}
+                      </span>
+                    )}
                   </div>
+                  {hasAlert && <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginTop: 2 }}>🔔 Alert: ≤${hasAlert}</div>}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end', minWidth: 36 }}>
-                  {hasAlert && <div style={{ fontSize: 10, color: '#f5c842', ...MONO }}>🔔 ≤${hasAlert}</div>}
-                  <button onClick={() => onRemove(id)}
-                    style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer',
-                      fontSize: 24, padding: '6px 8px', lineHeight: 1, minWidth: 36, minHeight: 36 }}>×</button>
-                </div>
+                {/* × button — always visible, fixed 40px column */}
+                <button onClick={() => onRemove(id)}
+                  style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer',
+                    fontSize: 26, padding: 0, lineHeight: 1, width: 40, height: 40,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               </div>
               <button onClick={() => { setAlertItem(alertItem === id ? null : id); setAlertPrice(''); }}
                 style={{ width: '100%', padding: '8px 14px', background: alertItem === id ? '#1a0a00' : 'transparent', border: 'none', borderTop: '1px solid ' + C.border, color: alertItem === id ? '#f5c842' : hasAlert ? '#f5c842' : '#555', cursor: 'pointer', fontSize: 11, ...MONO, display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.05em', textAlign: 'left' }}>
@@ -439,6 +462,11 @@ export function CollectionTab({
         const gainPct   = paid > 0 ? Math.max(-999, Math.min(999, (gain / paid) * 100)) : 0;
         const gainColor = gain >= 0 ? '#4ade80' : '#f87171';
         const priceTracked = collection.filter(i => Number(i.median_price || i.current_price) > 0).length;
+        // Items that were checked but Discogs has no marketplace data (not really "pending")
+        const noMarketData = collection.filter(i =>
+          i.last_price_check && !Number(i.median_price) && !Number(i.current_price)
+        ).length;
+        const trulyPending = collection.length - priceTracked - noMarketData;
         return (
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border }}>
             <div style={{ background: 'linear-gradient(135deg,#1a0800,#2a0a00,#1a0800)', border: '1px solid ' + C.accent, borderRadius: 14, padding: '16px', marginBottom: 10, position: 'relative', overflow: 'hidden' }}>
@@ -456,7 +484,8 @@ export function CollectionTab({
               </div>
               <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 5 }}>
                 {priceTracked > 0
-                  ? 'Based on Discogs median · ' + priceTracked + '/' + collection.length + ' tracked'
+                  ? ('Based on Discogs median · ' + priceTracked + '/' + collection.length + ' tracked'
+                      + (noMarketData > 0 ? ' · ' + noMarketData + ' without marketplace data' : ''))
                   : refreshResult
                     ? '✓ ' + refreshResult
                     : '⏳ No prices yet'}
@@ -474,7 +503,7 @@ export function CollectionTab({
                     cursor: 'pointer', ...MONO, fontSize: 11,
                     letterSpacing: '0.05em',
                   }}>
-                    ↺ Fetch prices now ({collection.length - priceTracked} pending)
+                    ↺ Fetch prices now ({trulyPending > 0 ? trulyPending + ' pending' : 'refresh all'})
                   </button>
                 )}
                 {refreshing && (
@@ -561,7 +590,7 @@ export function CollectionTab({
                 if (s === 'artist')     return (a.artist || '').localeCompare(b.artist || '');
                 if (s === 'price_asc')  return (Number(a.purchase_price) || 0) - (Number(b.purchase_price) || 0);
                 if (s === 'price_desc') return (Number(b.purchase_price) || 0) - (Number(a.purchase_price) || 0);
-                if (s === 'added')      return new Date(b.added_at || 0) - new Date(a.added_at || 0);
+                if (s === 'added')      return new Date(b.date_added || b.added_at || 0) - new Date(a.date_added || a.added_at || 0);
                 return 0;
               });
               onUpdate(sorted);
@@ -701,28 +730,32 @@ export function CollectionTab({
                             }} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, cursor: 'pointer', border: '1px solid ' + (item.grade === g ? GRADE_COLOR[g] : C.border), background: item.grade === g ? GRADE_COLOR[g] + '22' : C.bg3, color: item.grade === g ? GRADE_COLOR[g] : C.dim, ...MONO }}>{g}</button>
                           ))}
                         </div>
-                        {/* Set price */}
-                        {showAlertForm === item.id + '_price' ? (
-                          <PriceEditForm
-                            itemId={item.id}
-                            currentPrice={item.purchase_price}
-                            onSave={async (n) => {
-                              await fetch('/api/collection?id=' + item.id, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ purchase_price: n }),
-                              });
-                              const fresh = await fetch('/api/collection').then(r => r.json());
-                              if (fresh.items) onUpdate(fresh.items);
-                              setShowAlertForm(null);
-                            }}
-                            onCancel={() => setShowAlertForm(null)}
-                          />
-                        ) : (
-                          <button onClick={() => setShowAlertForm(item.id + '_price')}
+                        {/* Set price — uses native iOS prompt (no React input issues) */}
+                        {false ? null : (
+                          <button onClick={async () => {
+                            // Native iOS prompt — 100% reliable, no React state issues
+                            const current = item.purchase_price ? String(item.purchase_price) : '';
+                            const input = window.prompt(
+                              'Purchase price for ' + item.artist + ' — ' + item.album + ' ($)',
+                              current
+                            );
+                            if (input === null) return; // user canceled
+                            const n = parseFloat(String(input).trim().replace(',', '.'));
+                            if (isNaN(n) || n < 0) {
+                              alert('Please enter a valid number');
+                              return;
+                            }
+                            await fetch('/api/collection?id=' + item.id, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ purchase_price: n }),
+                            });
+                            const fresh = await fetch('/api/collection').then(r => r.json());
+                            if (fresh.items) onUpdate(fresh.items);
+                          }}
                             style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6,
                               color: item.purchase_price ? C.gold : C.dim,
-                              padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, marginBottom: 8 }}>
+                              padding: '8px 12px', cursor: 'pointer', ...MONO, fontSize: 11, marginBottom: 8, minHeight: 36 }}>
                             {item.purchase_price ? '💳 $' + Number(item.purchase_price).toFixed(0) + ' · edit' : '+ Set purchase price'}
                           </button>
                         )}

@@ -284,6 +284,41 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
     artistMap[key].push(item);
   });
 
+  // Auto-mark artists as complete when all ♥ wanted albums are in collection
+  // (runs without needing to expand each artist — uses local wanted state)
+  useEffect(() => {
+    try {
+      const wanted = JSON.parse(localStorage.getItem('mv_wanted_v1') || '{}');
+      const wantedKeys = Object.keys(wanted);
+      if (!wantedKeys.length) return;
+
+      const updates = {};
+      for (const artistName of Object.keys(artistMap)) {
+        const keyPrefix = artistName.toLowerCase() + '::';
+        const artistWanted = wantedKeys.filter(k => k.startsWith(keyPrefix));
+        if (artistWanted.length === 0) continue;
+
+        // All wanted titles for this artist
+        const wantedTitles = artistWanted.map(k => k.replace(keyPrefix, ''));
+        // Titles the user owns (normalized)
+        const ownedTitles = artistMap[artistName].map(i => (i.album || '').toLowerCase());
+
+        // Check: every wanted title matches something in collection
+        const hasAll = wantedTitles.every(wt =>
+          ownedTitles.some(ot => ot.includes(wt) || wt.includes(ot))
+        );
+        if (hasAll) updates[artistName] = 100;
+      }
+      if (Object.keys(updates).length) {
+        setCompletion(prev => {
+          const next = { ...prev, ...updates };
+          try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      }
+    } catch {}
+  }, [collection]);
+
   // Sort: complete artists first (as a special category), then by record count
   let artists = Object.entries(artistMap).sort((a, b) => {
     const aComplete = completion[a[0]] === 100;
