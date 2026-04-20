@@ -37,11 +37,12 @@ export async function POST(request) {
     const { count } = await supabase
       .from('price_alerts').select('id', { count: 'exact', head: true })
       .eq('user_id', user.id).eq('is_active', true);
-    if ((count || 0) >= 1) {
+    const FREE_LIMIT = 3;
+    if ((count || 0) >= FREE_LIMIT) {
       return NextResponse.json({
         error:   'ALERT_LIMIT_REACHED',
-        message: 'Free plan includes 1 price alert. Upgrade to Pro for unlimited alerts.',
-        count, limit: 1,
+        message: 'Free plan includes ' + FREE_LIMIT + ' price alerts. Upgrade to Pro for unlimited.',
+        count, limit: FREE_LIMIT,
       }, { status: 403 });
     }
   }

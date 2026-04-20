@@ -313,17 +313,18 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
             const artistWanted = wantedKeys.filter(k => k.startsWith(keyPrefix));
             if (artistWanted.length === 0) continue;
 
-            const wantedTitles = artistWanted.map(k => k.replace(keyPrefix, ''));
-            const ownedTitles = localArtistMap[artistName].map(i => (i.album || '').toLowerCase());
+            const wantedTitles = artistWanted.map(k => norm(k.replace(keyPrefix, '')));
+            const ownedTitles = localArtistMap[artistName].map(i => norm(i.album || ''));
             const hasAll = wantedTitles.every(wt =>
-              ownedTitles.some(ot => ot.includes(wt) || wt.includes(ot))
+              ownedTitles.some(ot => titleMatch(ot, wt))
             );
 
+            // Only ADD to 100 — never revoke. ArtistDiscography (when expanded)
+            // is authoritative for REMOVING completion. This prevents race where
+            // BandsTab's title matching differs from ArtistDiscography's and wrongly
+            // removes a complete badge.
             if (hasAll && next[artistName] !== 100) {
               next[artistName] = 100;
-              changed = true;
-            } else if (!hasAll && next[artistName] === 100) {
-              delete next[artistName];
               changed = true;
             }
           }
