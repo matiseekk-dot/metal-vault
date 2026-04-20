@@ -46,7 +46,11 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
     setWanted(prev => {
       const next = { ...prev };
       if (next[k]) { delete next[k]; } else { next[k] = true; }
-      try { localStorage.setItem(LS_WANTED, JSON.stringify(next)); } catch {}
+      try {
+        localStorage.setItem(LS_WANTED, JSON.stringify(next));
+        // Notify BandsTab to re-check completion for all artists
+        window.dispatchEvent(new CustomEvent('mv-wanted-changed'));
+      } catch {}
       return next;
     });
   };
@@ -285,39 +289,55 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
   });
 
   // Auto-mark artists as complete when all ♥ wanted albums are in collection
-  // (runs without needing to expand each artist — uses local wanted state)
-  useEffect(() => {
+  // Runs on mount, on collection change, and whenever ♥ toggle fires custom event
+  const checkWantedCompletion = useCallback(() => {
     try {
       const wanted = JSON.parse(localStorage.getItem('mv_wanted_v1') || '{}');
       const wantedKeys = Object.keys(wanted);
-      if (!wantedKeys.length) return;
 
-      const updates = {};
-      for (const artistName of Object.keys(artistMap)) {
-        const keyPrefix = artistName.toLowerCase() + '::';
-        const artistWanted = wantedKeys.filter(k => k.startsWith(keyPrefix));
-        if (artistWanted.length === 0) continue;
+      setCompletion(prev => {
+        const next = { ...prev };
+        let changed = false;
 
-        // All wanted titles for this artist
-        const wantedTitles = artistWanted.map(k => k.replace(keyPrefix, ''));
-        // Titles the user owns (normalized)
-        const ownedTitles = artistMap[artistName].map(i => (i.album || '').toLowerCase());
+        for (const artistName of Object.keys(artistMap)) {
+          const keyPrefix = artistName.toLowerCase() + '::';
+          const artistWanted = wantedKeys.filter(k => k.startsWith(keyPrefix));
+          if (artistWanted.length === 0) {
+            // If artist previously marked via ♥ but no ♥ now → reset from cache
+            // (but keep if it was marked via full discography check)
+            continue;
+          }
 
-        // Check: every wanted title matches something in collection
-        const hasAll = wantedTitles.every(wt =>
-          ownedTitles.some(ot => ot.includes(wt) || wt.includes(ot))
-        );
-        if (hasAll) updates[artistName] = 100;
-      }
-      if (Object.keys(updates).length) {
-        setCompletion(prev => {
-          const next = { ...prev, ...updates };
+          const wantedTitles = artistWanted.map(k => k.replace(keyPrefix, ''));
+          const ownedTitles = artistMap[artistName].map(i => (i.album || '').toLowerCase());
+          const hasAll = wantedTitles.every(wt =>
+            ownedTitles.some(ot => ot.includes(wt) || wt.includes(ot))
+          );
+
+          if (hasAll && next[artistName] !== 100) {
+            next[artistName] = 100;
+            changed = true;
+          } else if (!hasAll && next[artistName] === 100) {
+            delete next[artistName];
+            changed = true;
+          }
+        }
+
+        if (changed) {
           try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
           return next;
-        });
-      }
+        }
+        return prev;
+      });
     } catch {}
-  }, [collection]);
+  }, [artistMap]);
+
+  useEffect(() => {
+    checkWantedCompletion();
+    const handler = () => checkWantedCompletion();
+    window.addEventListener('mv-wanted-changed', handler);
+    return () => window.removeEventListener('mv-wanted-changed', handler);
+  }, [checkWantedCompletion]);
 
   // Sort: complete artists first (as a special category), then by record count
   let artists = Object.entries(artistMap).sort((a, b) => {

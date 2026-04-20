@@ -406,6 +406,68 @@ function ManualAddForm({ onAdd, onClose }) {
   );
 }
 
+// ── PriceModal — fullscreen, isolated from 161-card re-render problem ──
+// Rendered at CollectionTab root level so card list re-renders don't affect it
+function PriceModal({ item, onClose, onSave }) {
+  const [val, setVal] = useState(item.purchase_price ? String(item.purchase_price) : '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (saving) return;
+    const n = parseFloat(String(val).trim().replace(',', '.'));
+    if (isNaN(n) || n < 0) return;
+    setSaving(true);
+    try { await onSave(n); } catch {}
+    setSaving(false);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      paddingTop: '20vh', padding: '20vh 20px 20px',
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxWidth: 400, background: C.bg2,
+        border: '2px solid ' + C.accent, borderRadius: 14, padding: 20,
+      }}>
+        <div style={{ ...BEBAS, fontSize: 18, color: C.text, marginBottom: 4, letterSpacing: '0.05em' }}>
+          PURCHASE PRICE
+        </div>
+        <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {item.artist} — {item.album}
+        </div>
+        <input
+          type="number"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+          placeholder="e.g. 25"
+          autoFocus
+          style={{ width: '100%', background: C.bg3, border: '1px solid ' + C.border,
+            borderRadius: 6, color: C.text, padding: '10px 12px', fontSize: 16,
+            ...MONO, outline: 'none', boxSizing: 'border-box', marginBottom: 14 }}
+        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose}
+            style={{ flex: 1, background: 'none', border: '1px solid ' + C.border,
+              borderRadius: 8, color: C.dim, padding: '10px', cursor: 'pointer',
+              ...MONO, fontSize: 12 }}>
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            style={{ flex: 2, background: C.accent, border: 'none', borderRadius: 8,
+              color: '#fff', padding: '10px', cursor: 'pointer',
+              ...BEBAS, fontSize: 16, letterSpacing: '0.06em', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'SAVING…' : 'SAVE'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CollectionTab({
   user, collection, watchlist = [], onRemoveWatch, onRemove, onUpdate,
   portfolio, onAlbumClick, onAddToWatchlist, AlbumCover, onManualAdd,
@@ -420,6 +482,7 @@ export function CollectionTab({
   const [refreshResult,  setRefreshResult] = useState(null);
   const [expandedId,     setExpandedId]    = useState(null);
   const [showAlertForm, setShowAlertForm] = useState(null);
+  const [priceModalItem, setPriceModalItem] = useState(null);
   const [targetPrice, setTargetPrice]     = useState('');
   const [saving, setSaving]               = useState(false);
   if (!onUpdate) onUpdate = () => {};
@@ -781,6 +844,24 @@ export function CollectionTab({
             </div>
           )}
         </div>
+      )}
+
+      {/* ═══ PRICE MODAL — rendered outside card list to avoid iOS re-render bug ═══ */}
+      {priceModalItem && (
+        <PriceModal
+          item={priceModalItem}
+          onClose={() => setPriceModalItem(null)}
+          onSave={async (n) => {
+            await fetch('/api/collection?id=' + priceModalItem.id, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ purchase_price: n }),
+            });
+            const fresh = await fetch('/api/collection').then(r => r.json());
+            if (fresh.items) onUpdate(fresh.items);
+            setPriceModalItem(null);
+          }}
+        />
       )}
     </div>
   );
