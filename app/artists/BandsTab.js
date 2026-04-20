@@ -288,56 +288,58 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
     artistMap[key].push(item);
   });
 
-  // Auto-mark artists as complete when all ♥ wanted albums are in collection
-  // Runs on mount, on collection change, and whenever ♥ toggle fires custom event
-  const checkWantedCompletion = useCallback(() => {
-    try {
-      const wanted = JSON.parse(localStorage.getItem('mv_wanted_v1') || '{}');
-      const wantedKeys = Object.keys(wanted);
+  // Auto-mark artists as complete when all ♥ wanted albums are in collection.
+  // Uses collection + wanted from localStorage. Event-driven - no race condition.
+  useEffect(() => {
+    const check = () => {
+      try {
+        const wanted = JSON.parse(localStorage.getItem('mv_wanted_v1') || '{}');
+        const wantedKeys = Object.keys(wanted);
 
-      setCompletion(prev => {
-        const next = { ...prev };
-        let changed = false;
+        // Build artistMap locally to avoid stale closure
+        const localArtistMap = {};
+        collection.forEach(item => {
+          const key = item.artist || 'Unknown';
+          if (!localArtistMap[key]) localArtistMap[key] = [];
+          localArtistMap[key].push(item);
+        });
 
-        for (const artistName of Object.keys(artistMap)) {
-          const keyPrefix = artistName.toLowerCase() + '::';
-          const artistWanted = wantedKeys.filter(k => k.startsWith(keyPrefix));
-          if (artistWanted.length === 0) {
-            // If artist previously marked via ♥ but no ♥ now → reset from cache
-            // (but keep if it was marked via full discography check)
-            continue;
+        setCompletion(prev => {
+          const next = { ...prev };
+          let changed = false;
+
+          for (const artistName of Object.keys(localArtistMap)) {
+            const keyPrefix = artistName.toLowerCase() + '::';
+            const artistWanted = wantedKeys.filter(k => k.startsWith(keyPrefix));
+            if (artistWanted.length === 0) continue;
+
+            const wantedTitles = artistWanted.map(k => k.replace(keyPrefix, ''));
+            const ownedTitles = localArtistMap[artistName].map(i => (i.album || '').toLowerCase());
+            const hasAll = wantedTitles.every(wt =>
+              ownedTitles.some(ot => ot.includes(wt) || wt.includes(ot))
+            );
+
+            if (hasAll && next[artistName] !== 100) {
+              next[artistName] = 100;
+              changed = true;
+            } else if (!hasAll && next[artistName] === 100) {
+              delete next[artistName];
+              changed = true;
+            }
           }
 
-          const wantedTitles = artistWanted.map(k => k.replace(keyPrefix, ''));
-          const ownedTitles = artistMap[artistName].map(i => (i.album || '').toLowerCase());
-          const hasAll = wantedTitles.every(wt =>
-            ownedTitles.some(ot => ot.includes(wt) || wt.includes(ot))
-          );
-
-          if (hasAll && next[artistName] !== 100) {
-            next[artistName] = 100;
-            changed = true;
-          } else if (!hasAll && next[artistName] === 100) {
-            delete next[artistName];
-            changed = true;
-          }
-        }
-
-        if (changed) {
+          if (!changed) return prev;
           try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
           return next;
-        }
-        return prev;
-      });
-    } catch {}
-  }, [artistMap]);
+        });
+      } catch {}
+    };
 
-  useEffect(() => {
-    checkWantedCompletion();
-    const handler = () => checkWantedCompletion();
-    window.addEventListener('mv-wanted-changed', handler);
-    return () => window.removeEventListener('mv-wanted-changed', handler);
-  }, [checkWantedCompletion]);
+    // Run once on mount + when collection changes + on ♥ toggle
+    check();
+    window.addEventListener('mv-wanted-changed', check);
+    return () => window.removeEventListener('mv-wanted-changed', check);
+  }, [collection]);
 
   // Sort: complete artists first (as a special category), then by record count
   let artists = Object.entries(artistMap).sort((a, b) => {

@@ -87,7 +87,7 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
   const saveAlert = async (album) => {
     if (!alertPrice || isNaN(alertPrice) || !user) return;
     setAlertSaving(true);
-    await fetch('/api/alerts', {
+    const res = await fetch('/api/alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -97,7 +97,23 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
         target_price: parseFloat(alertPrice),
       }),
     });
-    setAlertDone(d => ({ ...d, [album.album_id || album.id]: parseFloat(alertPrice) }));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data.message || data.error || 'Could not save alert');
+      setAlertSaving(false);
+      return;
+    }
+    // Immediately reload alerts from server to get authoritative state
+    try {
+      const r = await fetch('/api/alerts').then(r => r.json());
+      if (r.alerts) {
+        const map = {};
+        for (const a of r.alerts) {
+          if (a.is_active !== false) map[String(a.discogs_id)] = Number(a.target_price);
+        }
+        setAlertDone(map);
+      }
+    } catch {}
     setAlertSaving(false); setAlertItem(null); setAlertPrice('');
   };
 
@@ -483,6 +499,7 @@ export function CollectionTab({
   const [expandedId,     setExpandedId]    = useState(null);
   const [showAlertForm, setShowAlertForm] = useState(null);
   const [priceModalItem, setPriceModalItem] = useState(null);
+  const [priceInputVal, setPriceInputVal] = useState('');
   const [targetPrice, setTargetPrice]     = useState('');
   const [saving, setSaving]               = useState(false);
   if (!onUpdate) onUpdate = () => {};
@@ -793,28 +810,53 @@ export function CollectionTab({
                             }} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, cursor: 'pointer', border: '1px solid ' + (item.grade === g ? GRADE_COLOR[g] : C.border), background: item.grade === g ? GRADE_COLOR[g] + '22' : C.bg3, color: item.grade === g ? GRADE_COLOR[g] : C.dim, ...MONO }}>{g}</button>
                           ))}
                         </div>
-                        {/* Set price — uses native iOS prompt (no React input issues) */}
-                        {false ? null : (
-                          <button onClick={async () => {
-                            // Native iOS prompt — 100% reliable, no React state issues
-                            const current = item.purchase_price ? String(item.purchase_price) : '';
-                            const input = window.prompt(
-                              'Purchase price for ' + item.artist + ' — ' + item.album + ' ($)',
-                              current
-                            );
-                            if (input === null) return; // user canceled
-                            const n = parseFloat(String(input).trim().replace(',', '.'));
-                            if (isNaN(n) || n < 0) {
-                              alert('Please enter a valid number');
-                              return;
-                            }
-                            await fetch('/api/collection?id=' + item.id, {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ purchase_price: n }),
-                            });
-                            const fresh = await fetch('/api/collection').then(r => r.json());
-                            if (fresh.items) onUpdate(fresh.items);
+                        {/* Set price — inline input matching watchlist pattern (works on iOS) */}
+                        {showAlertForm === item.id + '_price' ? (
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ ...BEBAS, fontSize: 18, color: C.muted }}>$</span>
+                            <input type="number" value={priceInputVal}
+                              onChange={e => setPriceInputVal(e.target.value)}
+                              onKeyDown={async e => {
+                                if (e.key !== 'Enter') return;
+                                const n = parseFloat(String(priceInputVal).replace(',','.'));
+                                if (isNaN(n)) return;
+                                await fetch('/api/collection?id=' + item.id, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ purchase_price: n }),
+                                });
+                                const fresh = await fetch('/api/collection').then(r => r.json());
+                                if (fresh.items) onUpdate(fresh.items);
+                                setShowAlertForm(null); setPriceInputVal('');
+                              }}
+                              placeholder="e.g. 25" autoFocus
+                              style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border,
+                                borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 16,
+                                ...MONO, outline: 'none' }} />
+                            <button onClick={async () => {
+                              const n = parseFloat(String(priceInputVal).replace(',','.'));
+                              if (isNaN(n)) { setShowAlertForm(null); setPriceInputVal(''); return; }
+                              await fetch('/api/collection?id=' + item.id, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ purchase_price: n }),
+                              });
+                              const fresh = await fetch('/api/collection').then(r => r.json());
+                              if (fresh.items) onUpdate(fresh.items);
+                              setShowAlertForm(null); setPriceInputVal('');
+                            }}
+                              style={{ padding: '10px 18px', background: C.accent, border: 'none',
+                                borderRadius: 8, color: '#fff', cursor: 'pointer', ...BEBAS, fontSize: 16, flexShrink: 0 }}>
+                              OK
+                            </button>
+                            <button onClick={() => { setShowAlertForm(null); setPriceInputVal(''); }}
+                              style={{ padding: '8px 10px', background: 'none', border: '1px solid ' + C.border,
+                                borderRadius: 6, color: C.dim, cursor: 'pointer', fontSize: 14 }}>✕</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => {
+                            setPriceInputVal(item.purchase_price ? String(item.purchase_price) : '');
+                            setShowAlertForm(item.id + '_price');
                           }}
                             style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6,
                               color: item.purchase_price ? C.gold : C.dim,
