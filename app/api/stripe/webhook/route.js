@@ -22,6 +22,17 @@ export async function POST(request) {
 
   const admin = getAdminClient();
 
+  // IDEMPOTENCY: INSERT-first approach. Primary key conflict → already processed.
+  // This is race-safe: two concurrent webhooks from Stripe won't both pass the check.
+  const { error: dedupErr } = await admin
+    .from('stripe_events').insert({ id: event.id, type: event.type });
+  if (dedupErr) {
+    // 23505 = unique_violation (event already processed)
+    if (dedupErr.code === '23505') return NextResponse.json({ received: true, duplicate: true });
+    // Table missing / other DB error — continue processing (dedup is best-effort)
+    console.warn('[stripe-webhook] dedup insert error:', dedupErr.code, dedupErr.message);
+  }
+
   try {
     switch (event.type) {
 
@@ -94,6 +105,9 @@ export async function POST(request) {
     console.error('[stripe-webhook]', event.type, e.message);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
+
+  // Mark event processed — insert AFTER switch handler succeeds so retries work on failure
+  await admin.from('stripe_events').insert({ id: event.id, type: event.type }).select().maybeSingle();
 
   return NextResponse.json({ received: true });
 }

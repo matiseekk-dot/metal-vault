@@ -7,28 +7,40 @@ const steps = [
     icon: '🔥',
     title: 'METAL VAULT',
     sub: 'YOUR VINYL UNIVERSE',
-    desc: 'Track your collection, discover new releases, monitor prices and connect with Discogs — all in one place.',
+    desc: 'Track your collection, discover upcoming pre-orders, monitor market prices, and generate insurance reports — all for your metal records.',
+    bullets: ['Unlimited records', 'Price alerts', 'Pre-order feed', 'Insurance PDFs (Pro)'],
     cta: null,
   },
   {
     icon: '🔗',
     title: 'CONNECT DISCOGS',
-    sub: 'STEP 1 OF 3',
-    desc: 'Link your Discogs account to automatically import your entire collection and wantlist in seconds.',
+    sub: 'STEP 1 OF 4  ·  RECOMMENDED',
+    desc: 'Link your Discogs to automatically import your collection and fetch live market prices. You can skip this and add records manually.',
     cta: 'connect',
+    skippable: true,
   },
   {
     icon: '🔄',
     title: 'SYNC YOUR VAULT',
-    sub: 'STEP 2 OF 3',
-    desc: 'We pull all your vinyl — artist, album, format, price paid — straight into your private vault.',
+    sub: 'STEP 2 OF 4',
+    desc: 'We pull your vinyl — artist, album, format, price paid — into your private vault and keep it in sync.',
+    bullets: ['Automatic import', 'Live market prices', 'Wantlist → watchlist'],
     cta: null,
   },
   {
+    icon: '🔔',
+    title: 'ENABLE NOTIFICATIONS',
+    sub: 'STEP 3 OF 4  ·  OPTIONAL',
+    desc: 'Get a push notification when your followed artists announce a new album or a watched record drops below your target price.',
+    bullets: ['Pre-order alerts', 'Price drop alerts', 'Weekly release digest'],
+    cta: 'done',
+    skippable: true,
+  },
+  {
     icon: '🎯',
-    title: 'TRACK & DISCOVER',
-    sub: 'STEP 3 OF 3',
-    desc: 'Watch prices, get alerts when vinyl drops below your target, and never miss a new release from followed artists.',
+    title: 'YOU ARE READY',
+    sub: 'STEP 4 OF 4',
+    desc: 'Start adding records, following artists, and tracking prices. Upgrade to Pro anytime for detailed grading, insurance reports and price history.',
     cta: 'done',
   },
 ];
@@ -101,10 +113,27 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
       <div style={{
         fontSize: 15, color: C.muted, ...MONO,
         textAlign: 'center', lineHeight: 1.8,
-        maxWidth: 320, marginBottom: 48,
+        maxWidth: 320, marginBottom: current.bullets ? 24 : 48,
       }}>
         {current.desc}
       </div>
+
+      {/* Feature bullets */}
+      {current.bullets && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 320, width: '100%', marginBottom: 40 }}>
+          {current.bullets.map((b, i) => (
+            <div key={i} style={{
+              fontSize: 11, color: C.text, ...MONO,
+              display: 'flex', gap: 6, alignItems: 'center',
+              padding: '6px 10px', background: '#1a0a0a',
+              border: '1px solid #3a1010', borderRadius: 6,
+            }}>
+              <span style={{ color: '#dc2626' }}>✓</span>
+              <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Connected badge (step 1) */}
       {step === 1 && isConnected && (
@@ -149,8 +178,8 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
         </button>
       </div>
 
-      {/* Skip all */}
-      {step === 0 && (
+      {/* Skip button for skippable steps OR skip-all from first */}
+      {(step === 0 || current.skippable) && (
         <button onClick={onDone} style={{
           position: 'absolute', bottom: 40,
           background: 'none', border: 'none',

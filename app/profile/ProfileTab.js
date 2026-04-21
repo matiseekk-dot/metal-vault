@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 
 export default function ProfileTab({
-  user, profile, followedArtists,
+  user, profile, followedArtists, collection = [],
   onSignOut, onUpdateProfile, onShowImport,
   pushEnabled, pushLoading, onTogglePush,
   discogsConnected, onConnectDiscogs, onSyncDiscogs,
@@ -18,6 +18,34 @@ export default function ProfileTab({
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [msg,      setMsg]      = useState('');
+  const [showInsuranceModal, setShowInsuranceModal] = useState(false);
+  const [insuranceLoading, setInsuranceLoading] = useState(false);
+  const [ownerName, setOwnerName] = useState(profile?.display_name || profile?.username || '');
+  const [ownerEmail, setOwnerEmail] = useState(profile?.email || user?.email || '');
+  const [ownerAddress, setOwnerAddress] = useState('');
+
+  const handleGenerateInsurance = async () => {
+    if (!collection || collection.length === 0) {
+      alert('Your collection is empty. Add records before generating a report.');
+      return;
+    }
+    setInsuranceLoading(true);
+    try {
+      const { generateInsuranceReport } = await import('@/app/components/insurance-report');
+      await generateInsuranceReport({
+        collection,
+        profile,
+        ownerInfo: { name: ownerName, email: ownerEmail, address: ownerAddress },
+      });
+      setShowInsuranceModal(false);
+    } catch (e) {
+      console.error('Insurance report error:', e);
+      alert('Failed to generate report: ' + e.message);
+    }
+    setInsuranceLoading(false);
+  };
+
+
 
   const saveProfile = async () => {
     setSaving(true); setMsg('');
@@ -104,7 +132,7 @@ export default function ProfileTab({
             </button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {[['📦','Unlimited records'],['🔔','1 price alert free'],['📈','No price history'],['⭐','Pro unlocks all']].map(([icon, text]) => (
+            {[['📦','Unlimited records'],['🔔','3 price alerts free'],['🏛️','Pro: Insurance Report'],['📈','Pro: Price history']].map(([icon, text]) => (
               <div key={text} style={{ fontSize: 10, color: C.dim, ...MONO, display: 'flex', gap: 5, alignItems: 'center' }}>
                 <span>{icon}</span><span>{text}</span>
               </div>
@@ -209,6 +237,97 @@ export default function ProfileTab({
                 {a.artist_name} 🔔
               </span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Insurance Report — Pro flagship feature */}
+      <div style={{
+        background: premium ? 'linear-gradient(135deg,#1a0a05,#0a0a0a)' : C.bg2,
+        border: '1px solid ' + (premium ? '#f5c842' : C.border),
+        borderRadius: 12, padding: '16px', marginBottom: 12, position: 'relative', overflow: 'hidden',
+      }}>
+        {/* Gold corner accent for Pro */}
+        {premium && <div style={{ position:'absolute', top:0, right:0, width:60, height:60, background:'radial-gradient(circle at top right, #f5c84222, transparent 70%)' }}/>}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, color: premium ? '#f5c842' : C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 4 }}>
+              🏛️ Insurance Report {!premium && <span style={{ color: '#f5c842', marginLeft: 6 }}>· PRO</span>}
+            </div>
+            <div style={{ ...BEBAS, fontSize: 18, color: C.text, letterSpacing: '0.04em', lineHeight: 1.1, marginBottom: 4 }}>
+              Generate appraisal PDF
+            </div>
+            <div style={{ fontSize: 11, color: C.dim, ...MONO, lineHeight: 1.4 }}>
+              Formal collection inventory with market valuations — ready for your insurance policy
+            </div>
+          </div>
+        </div>
+
+        {premium ? (
+          <button onClick={() => setShowInsuranceModal(true)}
+            disabled={!collection || collection.length === 0}
+            style={{
+              width: '100%', background: '#f5c842', border: 'none', borderRadius: 8,
+              color: '#1a0800', padding: '12px', cursor: collection.length > 0 ? 'pointer' : 'not-allowed',
+              ...BEBAS, fontSize: 15, letterSpacing: '0.1em', marginTop: 4,
+              opacity: collection.length > 0 ? 1 : 0.5,
+            }}>
+            {collection.length === 0 ? 'ADD RECORDS FIRST' : '📄 GENERATE REPORT (' + collection.length + ' ITEMS)'}
+          </button>
+        ) : (
+          <button onClick={onUpgrade}
+            style={{
+              width: '100%', background: 'linear-gradient(135deg,#dc2626,#991b1b)', border: 'none', borderRadius: 8,
+              color: '#fff', padding: '12px', cursor: 'pointer',
+              ...BEBAS, fontSize: 14, letterSpacing: '0.08em', marginTop: 4,
+            }}>
+            UPGRADE TO PRO →
+          </button>
+        )}
+      </div>
+
+      {/* Insurance modal — collects owner info, then generates PDF */}
+      {showInsuranceModal && (
+        <div style={{ position:'fixed', inset:0, background:'#000000cc', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }}
+          onClick={e => e.target === e.currentTarget && setShowInsuranceModal(false)}>
+          <div style={{ background: C.bg2, borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 500, padding: '20px 18px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))' }}>
+            <div style={{ width: 40, height: 4, background: C.border2, borderRadius: 2, margin: '0 auto 16px' }}/>
+            <div style={{ fontSize: 10, color: '#f5c842', letterSpacing: '0.2em', ...MONO, marginBottom: 4 }}>INSURANCE REPORT</div>
+            <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.04em', marginBottom: 4 }}>Owner Information</div>
+            <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 16, lineHeight: 1.5 }}>
+              This info appears on the appraisal cover page. Insurers typically require owner name + address.
+            </div>
+
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, color: C.muted, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Full name</div>
+              <input value={ownerName} onChange={e => setOwnerName(e.target.value)}
+                placeholder="John Smith"
+                style={{ width: '100%', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, padding: '10px', color: C.text, ...MONO, fontSize: 13, boxSizing: 'border-box' }}/>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, color: C.muted, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Email (optional)</div>
+              <input value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)}
+                placeholder="you@example.com" type="email"
+                style={{ width: '100%', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, padding: '10px', color: C.text, ...MONO, fontSize: 13, boxSizing: 'border-box' }}/>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 9, color: C.muted, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Address (optional)</div>
+              <input value={ownerAddress} onChange={e => setOwnerAddress(e.target.value)}
+                placeholder="123 Main St, City, ZIP"
+                style={{ width: '100%', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, padding: '10px', color: C.text, ...MONO, fontSize: 13, boxSizing: 'border-box' }}/>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowInsuranceModal(false)}
+                style={{ flex: 1, background: 'none', border: '1px solid ' + C.border, borderRadius: 8, color: C.dim, padding: '12px', cursor: 'pointer', ...MONO, fontSize: 12 }}>
+                Cancel
+              </button>
+              <button onClick={handleGenerateInsurance} disabled={insuranceLoading || !ownerName.trim()}
+                style={{ flex: 2, background: '#f5c842', border: 'none', borderRadius: 8, color: '#1a0800', padding: '12px', cursor: 'pointer', ...BEBAS, fontSize: 14, letterSpacing: '0.08em', opacity: (insuranceLoading || !ownerName.trim()) ? 0.5 : 1 }}>
+                {insuranceLoading ? 'GENERATING…' : '📄 GENERATE PDF'}
+              </button>
+            </div>
           </div>
         </div>
       )}

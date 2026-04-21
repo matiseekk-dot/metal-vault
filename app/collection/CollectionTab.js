@@ -501,8 +501,51 @@ export function CollectionTab({
   const [priceModalItem, setPriceModalItem] = useState(null);
   const [priceInputVal, setPriceInputVal] = useState('');
   const [targetPrice, setTargetPrice]     = useState('');
+  const [gradingExpandedId, setGradingExpandedId] = useState(null);
+  const [gradingDraft, setGradingDraft]   = useState({});  // per-item draft {sleeve_grade, vinyl_grade, inner_sleeve_grade, hype_sticker, playback_notes}
+  const [gradingSaving, setGradingSaving] = useState(false);
   const [saving, setSaving]               = useState(false);
   if (!onUpdate) onUpdate = () => {};
+
+  // Save detailed grading fields atomically — optimistic UI:
+  // 1. Update local collection immediately (instant feedback, no lag)
+  // 2. PATCH in background
+  // 3. On error, refetch from server to revert
+  const saveGrading = async (itemId) => {
+    const draft = gradingDraft[itemId] || {};
+    const payload = {
+      sleeve_grade:        draft.sleeve_grade        || null,
+      vinyl_grade:         draft.vinyl_grade         || null,
+      inner_sleeve_grade:  draft.inner_sleeve_grade  || null,
+      hype_sticker:        !!draft.hype_sticker,
+      playback_notes:      draft.playback_notes      || null,
+    };
+
+    // Optimistic update — apply to local collection immediately
+    const optimistic = collection.map(i => i.id === itemId ? { ...i, ...payload } : i);
+    onUpdate(optimistic);
+    setGradingExpandedId(null);
+    setGradingSaving(true);
+
+    try {
+      const res = await fetch('/api/collection?id=' + itemId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('PATCH failed: ' + res.status);
+      // Success — local state already correct, skip refetch
+    } catch (e) {
+      console.error('Grading save error — reverting:', e);
+      // Revert by refetching authoritative data
+      try {
+        const fresh = await fetch('/api/collection').then(r => r.json());
+        if (fresh.items) onUpdate(fresh.items);
+      } catch {}
+      alert('Failed to save grading. Your changes were reverted.');
+    }
+    setGradingSaving(false);
+  };
 
   const createAlert = async (item) => {
     if (!targetPrice || isNaN(targetPrice)) return;
@@ -756,6 +799,22 @@ export function CollectionTab({
                         <div style={{ fontSize: 10, color: C.muted, ...MONO, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.album}</div>
                         <div style={{ display: 'flex', gap: 4, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                           {item.grade && item.grade !== 'NM' && <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: GRADE_COLOR[item.grade] + '22', color: GRADE_COLOR[item.grade], ...MONO }}>{item.grade}</span>}
+                          {/* Detailed grading chips — Pro only, compact S/V/I labels */}
+                          {premium && item.sleeve_grade && (
+                            <span title={'Sleeve: ' + item.sleeve_grade} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: GRADE_COLOR[item.sleeve_grade] + '22', color: GRADE_COLOR[item.sleeve_grade], ...MONO, border: '1px solid ' + GRADE_COLOR[item.sleeve_grade] + '44' }}>
+                              S:{item.sleeve_grade}
+                            </span>
+                          )}
+                          {premium && item.vinyl_grade && (
+                            <span title={'Vinyl: ' + item.vinyl_grade} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: GRADE_COLOR[item.vinyl_grade] + '22', color: GRADE_COLOR[item.vinyl_grade], ...MONO, border: '1px solid ' + GRADE_COLOR[item.vinyl_grade] + '44' }}>
+                              V:{item.vinyl_grade}
+                            </span>
+                          )}
+                          {premium && item.hype_sticker && (
+                            <span title="Original hype sticker intact" style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: '#f5c84222', color: '#f5c842', ...MONO }}>
+                              🏷️ HYPE
+                            </span>
+                          )}
                           {item.format && item.format !== 'Vinyl' && <span style={{ fontSize: 8, color: C.dim, ...MONO, padding: '1px 4px', background: C.bg3, borderRadius: 3 }}>{item.format}</span>}
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>${paid.toFixed(0)}</span>}
                           {now > 0  && <span style={{ fontSize: 9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO }}>→${now.toFixed(0)}{gain !== null ? (gain >= 0 ? ' ▲' : ' ▼') : ''}</span>}
@@ -804,12 +863,117 @@ export function CollectionTab({
                           <span style={{ fontSize: 9, color: C.dim, ...MONO, marginRight: 2 }}>Grade:</span>
                           {VINYL_GRADES.map(g => (
                             <button key={g} onClick={async () => {
-                              await fetch('/api/collection?id=' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grade: g }) });
-                              const fresh = await fetch('/api/collection').then(r => r.json());
-                              if (fresh.items) onUpdate(fresh.items);
+                              // Optimistic: update locally first, then PATCH
+                              const optimistic = collection.map(i => i.id === item.id ? { ...i, grade: g } : i);
+                              onUpdate(optimistic);
+                              try {
+                                const res = await fetch('/api/collection?id=' + item.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grade: g }) });
+                                if (!res.ok) throw new Error('PATCH failed');
+                              } catch {
+                                const fresh = await fetch('/api/collection').then(r => r.json());
+                                if (fresh.items) onUpdate(fresh.items);
+                              }
                             }} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, cursor: 'pointer', border: '1px solid ' + (item.grade === g ? GRADE_COLOR[g] : C.border), background: item.grade === g ? GRADE_COLOR[g] + '22' : C.bg3, color: item.grade === g ? GRADE_COLOR[g] : C.dim, ...MONO }}>{g}</button>
                           ))}
                         </div>
+
+                        {/* Detailed grading — Pro feature. Collapsed by default, expands on click. */}
+                        {premium ? (
+                          <div style={{ marginBottom: 8 }}>
+                            <button onClick={() => {
+                              if (gradingExpandedId === item.id) { setGradingExpandedId(null); return; }
+                              // Init draft from current values
+                              setGradingDraft(d => ({ ...d, [item.id]: {
+                                sleeve_grade:       item.sleeve_grade       || '',
+                                vinyl_grade:        item.vinyl_grade        || '',
+                                inner_sleeve_grade: item.inner_sleeve_grade || '',
+                                hype_sticker:       !!item.hype_sticker,
+                                playback_notes:     item.playback_notes     || '',
+                              }}));
+                              setGradingExpandedId(item.id);
+                            }} style={{ background: 'none', border: '1px dashed ' + C.border, borderRadius: 6,
+                              color: (item.sleeve_grade || item.vinyl_grade) ? '#f5c842' : C.dim,
+                              padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, width: '100%', textAlign: 'left' }}>
+                              {(item.sleeve_grade || item.vinyl_grade || item.inner_sleeve_grade)
+                                ? '💎 Detailed grading set — tap to edit'
+                                : '💎 Add detailed grading ' + (gradingExpandedId === item.id ? '▴' : '▾')}
+                            </button>
+
+                            {gradingExpandedId === item.id && (() => {
+                              const draft = gradingDraft[item.id] || {};
+                              const updateDraft = (key, val) => setGradingDraft(d => ({ ...d, [item.id]: { ...d[item.id], [key]: val } }));
+                              const GradeRow = ({ label, value, onChange, hint }) => (
+                                <div style={{ marginBottom: 8 }}>
+                                  <div style={{ fontSize: 9, color: C.muted, ...MONO, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>
+                                    {label}{hint && <span style={{ color: C.dim, textTransform: 'none', letterSpacing: 0, marginLeft: 6 }}>· {hint}</span>}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                                    <button onClick={() => onChange('')}
+                                      style={{ fontSize: 9, padding: '3px 7px', borderRadius: 4, cursor: 'pointer',
+                                        border: '1px solid ' + (!value ? C.accent : C.border),
+                                        background: !value ? C.accent + '22' : C.bg3,
+                                        color: !value ? C.accent : C.dim, ...MONO }}>—</button>
+                                    {VINYL_GRADES.map(g => (
+                                      <button key={g} onClick={() => onChange(g)}
+                                        style={{ fontSize: 9, padding: '3px 7px', borderRadius: 4, cursor: 'pointer',
+                                          border: '1px solid ' + (value === g ? GRADE_COLOR[g] : C.border),
+                                          background: value === g ? GRADE_COLOR[g] + '22' : C.bg3,
+                                          color: value === g ? GRADE_COLOR[g] : C.dim, ...MONO }}>{g}</button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                              return (
+                                <div style={{ background: C.bg3, border: '1px solid ' + C.border, borderRadius: 8, padding: 10, marginTop: 6 }}>
+                                  <GradeRow label="Sleeve grade" hint="outer cover/jacket"
+                                    value={draft.sleeve_grade || ''} onChange={v => updateDraft('sleeve_grade', v)}/>
+                                  <GradeRow label="Vinyl grade" hint="playing surface"
+                                    value={draft.vinyl_grade || ''} onChange={v => updateDraft('vinyl_grade', v)}/>
+                                  <GradeRow label="Inner sleeve / insert" hint="inner bag, lyric sheet"
+                                    value={draft.inner_sleeve_grade || ''} onChange={v => updateDraft('inner_sleeve_grade', v)}/>
+                                  <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <input type="checkbox" id={'hs-' + item.id}
+                                      checked={!!draft.hype_sticker}
+                                      onChange={e => updateDraft('hype_sticker', e.target.checked)}
+                                      style={{ width: 16, height: 16, cursor: 'pointer', accentColor: C.accent }}/>
+                                    <label htmlFor={'hs-' + item.id} style={{ fontSize: 11, color: C.text, ...MONO, cursor: 'pointer' }}>
+                                      Original hype sticker intact
+                                    </label>
+                                  </div>
+                                  <div style={{ marginBottom: 8 }}>
+                                    <div style={{ fontSize: 9, color: C.muted, ...MONO, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>
+                                      Playback notes <span style={{ color: C.dim, textTransform: 'none', letterSpacing: 0 }}>· pops, clicks, warps, skips</span>
+                                    </div>
+                                    <textarea value={draft.playback_notes || ''}
+                                      onChange={e => updateDraft('playback_notes', e.target.value)}
+                                      placeholder="e.g. light surface noise on side A track 2, otherwise plays clean"
+                                      rows={2}
+                                      style={{ width: '100%', background: C.bg2, border: '1px solid ' + C.border,
+                                        borderRadius: 6, color: C.text, padding: '7px 9px', fontSize: 12,
+                                        ...MONO, outline: 'none', resize: 'vertical', boxSizing: 'border-box', minHeight: 50 }}/>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button onClick={() => setGradingExpandedId(null)}
+                                      style={{ flex: 1, background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '8px', cursor: 'pointer', ...MONO, fontSize: 11 }}>
+                                      Cancel
+                                    </button>
+                                    <button onClick={() => saveGrading(item.id)} disabled={gradingSaving}
+                                      style={{ flex: 2, background: '#f5c842', border: 'none', borderRadius: 6, color: '#1a0800', padding: '8px', cursor: 'pointer', ...BEBAS, fontSize: 13, letterSpacing: '0.06em', opacity: gradingSaving ? 0.5 : 1 }}>
+                                      {gradingSaving ? 'SAVING…' : 'SAVE GRADING'}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <button onClick={onUpgrade}
+                            style={{ background: 'none', border: '1px dashed ' + C.border, borderRadius: 6,
+                              color: C.dim, padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10,
+                              width: '100%', textAlign: 'left', marginBottom: 8 }}>
+                            💎 Detailed grading · <span style={{ color: '#f5c842' }}>PRO</span>
+                          </button>
+                        )}
                         {/* Set price — inline input matching watchlist pattern (works on iOS) */}
                         {showAlertForm === item.id + '_price' ? (
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>

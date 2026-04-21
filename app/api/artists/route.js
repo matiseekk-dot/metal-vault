@@ -27,9 +27,22 @@ export async function POST(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
+
+  // SECURITY: whitelist writable fields
+  const ALLOWED = ['artist_name', 'spotify_id', 'image_url'];
+  const safe = Object.fromEntries(
+    Object.entries(body || {}).filter(([k]) => ALLOWED.includes(k))
+  );
+  if (!safe.artist_name || String(safe.artist_name).trim().length === 0) {
+    return NextResponse.json({ error: 'artist_name required' }, { status: 400 });
+  }
+  if (String(safe.artist_name).length > 200) {
+    return NextResponse.json({ error: 'artist_name too long' }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from('artist_follows')
-    .upsert({ user_id: user.id, ...body }, { onConflict: 'user_id,artist_name' })
+    .upsert({ ...safe, user_id: user.id }, { onConflict: 'user_id,artist_name' })
     .select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -267,6 +267,222 @@ function TopLabels({ collection }) {
 }
 
 // ── Main export ───────────────────────────────────────────────
+// ── PersonaCard — shareable metal identity card ──
+function PersonaCard() {
+  const [persona, setPersona] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/persona')
+      .then(r => r.json())
+      .then(d => { setPersona(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  // Render the persona as PNG for sharing — draws on offscreen canvas
+  const sharePersona = async () => {
+    if (!persona || persona.empty || sharing) return;
+    setSharing(true);
+    try {
+      const canvas = document.createElement('canvas');
+      const W = 1080, H = 1350; // Instagram Story / portrait
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+
+      // Background gradient (dark red → black, matching app aesthetic)
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#2a0a0a'); g.addColorStop(0.5, '#1a0505'); g.addColorStop(1, '#0a0a0a');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+      // Subtle red top bar
+      ctx.fillStyle = '#dc2626'; ctx.fillRect(0, 0, W, 12);
+
+      // Header
+      ctx.fillStyle = '#dc2626';
+      ctx.font = 'bold 32px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('METAL VAULT PERSONA', W/2, 100);
+
+      // Persona title (BIG)
+      ctx.fillStyle = '#f0f0f0';
+      ctx.font = 'bold 72px Arial, sans-serif';
+      // Wrap long titles
+      const words = persona.title.toUpperCase().split(' ');
+      if (words.length > 2) {
+        ctx.fillText(words.slice(0, Math.ceil(words.length/2)).join(' '), W/2, 260);
+        ctx.fillText(words.slice(Math.ceil(words.length/2)).join(' '), W/2, 340);
+      } else {
+        ctx.fillText(persona.title.toUpperCase(), W/2, 300);
+      }
+
+      // Stats block
+      ctx.fillStyle = '#888'; ctx.font = '26px monospace';
+      ctx.fillText(persona.stats.recordCount + ' RECORDS · ' + persona.stats.uniqueArtists + ' ARTISTS',
+                   W/2, 440);
+      ctx.fillStyle = '#f5c842'; ctx.font = 'bold 96px Arial, sans-serif';
+      ctx.fillText('$' + persona.stats.totalValue, W/2, 560);
+      ctx.fillStyle = persona.stats.gain >= 0 ? '#4ade80' : '#f87171';
+      ctx.font = '28px monospace';
+      const gainStr = (persona.stats.gain >= 0 ? '+' : '') + '$' + persona.stats.gain
+                    + ' (' + (persona.stats.gainPct >= 0 ? '+' : '') + persona.stats.gainPct + '%)';
+      ctx.fillText(gainStr, W/2, 610);
+
+      // Top genres block
+      ctx.fillStyle = '#dc2626'; ctx.font = 'bold 22px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('TOP GENRES', 100, 760);
+      ctx.fillStyle = '#f0f0f0'; ctx.font = '28px Arial, sans-serif';
+      let y = 810;
+      for (const g of persona.top3Genres.slice(0, 3)) {
+        ctx.fillText(g.name, 100, y);
+        ctx.fillStyle = '#888'; ctx.font = '24px monospace';
+        ctx.fillText(g.pct + '%', W - 180, y);
+        ctx.fillStyle = '#f0f0f0'; ctx.font = '28px Arial, sans-serif';
+        y += 55;
+      }
+
+      // Era + label block
+      ctx.fillStyle = '#dc2626'; ctx.font = 'bold 22px monospace';
+      ctx.fillText('ERA', 100, 1020);
+      ctx.fillStyle = '#f0f0f0'; ctx.font = 'bold 36px Arial, sans-serif';
+      ctx.fillText(persona.topEra, 100, 1075);
+
+      if (persona.topLabel) {
+        ctx.fillStyle = '#dc2626'; ctx.font = 'bold 22px monospace';
+        ctx.fillText('TOP LABEL', W/2 + 50, 1020);
+        ctx.fillStyle = '#f0f0f0'; ctx.font = 'bold 32px Arial, sans-serif';
+        const labelText = persona.topLabel.name.length > 18
+          ? persona.topLabel.name.substring(0, 18) + '…'
+          : persona.topLabel.name;
+        ctx.fillText(labelText, W/2 + 50, 1070);
+      }
+
+      // Footer
+      ctx.fillStyle = '#555'; ctx.font = '22px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('metal-vault-six.vercel.app', W/2, 1290);
+
+      // Convert to blob and share
+      canvas.toBlob(async blob => {
+        if (!blob) { setSharing(false); return; }
+        const file = new File([blob], 'metal-persona.png', { type: 'image/png' });
+        // Prefer native share (iOS/Android support this)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: 'My Metal Vault Persona',
+              text: 'I\'m a ' + persona.title + ' — built with Metal Vault',
+            });
+          } catch {} // user canceled
+        } else {
+          // Fallback: download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'metal-persona.png'; a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+        setSharing(false);
+      }, 'image/png');
+    } catch (e) {
+      console.error('Share error:', e);
+      setSharing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ background: 'linear-gradient(135deg,#1a0505,#0a0a0a)', border: '1px solid #3a0a0a',
+        borderRadius: 14, padding: 20, marginBottom: 16 }}>
+        <Skeleton h={120} r={8}/>
+      </div>
+    );
+  }
+  if (!persona || persona.empty) return null;
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg,#2a0808,#1a0404 40%,#0a0a0a)',
+      border: '2px solid #7f1d1d',
+      borderRadius: 14, padding: 20, marginBottom: 16, position: 'relative', overflow: 'hidden',
+    }}>
+      {/* Diagonal stripe accent */}
+      <div style={{ position:'absolute', top:0, right:-30, width:80, height:8, background:'#dc2626', transform:'rotate(-3deg)', opacity:0.4 }}/>
+
+      <div style={{ fontSize: 9, color: '#dc2626', letterSpacing: '0.25em', ...MONO, marginBottom: 4 }}>
+        YOUR METAL PERSONA
+      </div>
+      <div style={{ ...BEBAS, fontSize: 32, color: '#f0f0f0', letterSpacing: '0.03em', lineHeight: 1.1, marginBottom: 12 }}>
+        {persona.title}
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: 'flex', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', ...MONO }}>Records</div>
+          <div style={{ ...BEBAS, fontSize: 20, color: '#f0f0f0' }}>{persona.stats.recordCount}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', ...MONO }}>Value</div>
+          <div style={{ ...BEBAS, fontSize: 20, color: '#f5c842' }}>${persona.stats.totalValue}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', ...MONO }}>Era</div>
+          <div style={{ ...BEBAS, fontSize: 20, color: '#f0f0f0' }}>{persona.topEra}</div>
+        </div>
+        {persona.topLabel && (
+          <div style={{ flex: 1, minWidth: 100 }}>
+            <div style={{ fontSize: 10, color: '#888', ...MONO }}>Top label</div>
+            <div style={{ fontSize: 13, color: '#f0f0f0', ...MONO, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {persona.topLabel.name}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Top 3 genres */}
+      <div style={{ marginBottom: 12 }}>
+        {persona.top3Genres.map((g, idx) => (
+          <div key={g.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+            <div style={{ fontSize: 11, color: idx === 0 ? '#dc2626' : '#888', ...MONO, width: 16 }}>
+              {idx + 1}.
+            </div>
+            <div style={{ fontSize: 12, color: '#f0f0f0', flex: 1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {g.name}
+            </div>
+            <div style={{ width: 60, height: 4, background: '#222', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ width: g.pct + '%', height: '100%', background: idx === 0 ? '#dc2626' : '#7f1d1d' }}/>
+            </div>
+            <div style={{ fontSize: 10, color: '#888', ...MONO, width: 32, textAlign: 'right' }}>{g.pct}%</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Crown jewel */}
+      {persona.crownJewel && (
+        <div style={{ background: '#0a0a0a', border: '1px solid #3a2a00', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+          <div style={{ fontSize: 9, color: '#f5c842', letterSpacing: '0.2em', ...MONO }}>👑 CROWN JEWEL</div>
+          <div style={{ fontSize: 13, color: '#f0f0f0', ...BEBAS, letterSpacing: '0.03em', marginTop: 3 }}>
+            {persona.crownJewel.artist}
+          </div>
+          <div style={{ fontSize: 11, color: '#888', ...MONO, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex: 1 }}>{persona.crownJewel.album}</span>
+            <span style={{ color: '#f5c842', flexShrink: 0, marginLeft: 8 }}>${Math.round(persona.crownJewel.value)}</span>
+          </div>
+        </div>
+      )}
+
+      <button onClick={sharePersona} disabled={sharing}
+        style={{ width: '100%', background: '#dc2626', border: 'none', borderRadius: 8,
+          color: '#fff', padding: '12px', cursor: 'pointer', ...BEBAS, fontSize: 15,
+          letterSpacing: '0.1em', opacity: sharing ? 0.6 : 1 }}>
+        {sharing ? 'GENERATING…' : '📤 SHARE PERSONA'}
+      </button>
+    </div>
+  );
+}
+
 export default function StatsTab({collection,watchlist}){
   const [portfolio,setPortfolio]=useState(null);
   const [loading,setLoading]=useState(true);
@@ -310,6 +526,9 @@ export default function StatsTab({collection,watchlist}){
       <div style={{padding:'16px 0 12px'}}>
         <div style={{...BEBAS,fontSize:28,color:C.text,letterSpacing:'0.06em',lineHeight:1}}>STATISTICS</div>
         <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>YOUR METAL VAULT OVERVIEW</div>
+
+      {/* Persona Card — algorithmic metal identity, shareable as PNG */}
+      <PersonaCard/>
       </div>
 
       {/* Hero value card */}

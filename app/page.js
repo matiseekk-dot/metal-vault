@@ -7,6 +7,7 @@ import { useCollection } from '@/lib/hooks/useCollection';
 import { AlbumCard, VinylModal, StatsBar, BottomNav, AlbumCover } from '@/app/components/ui';
 import { CollectionTab, WatchlistTab } from '@/app/collection/CollectionTab';
 import ProfileTab from '@/app/profile/ProfileTab';
+import ErrorBoundary from '@/app/components/ErrorBoundary';
 import OnboardingScreen from '@/app/components/OnboardingScreen';
 import UpgradeModal from '@/app/components/UpgradeModal';
 import nextDynamic from 'next/dynamic';
@@ -484,7 +485,7 @@ export default function MetalVault() {
         )}
 
         {tab==='collection' && (
-          <CollectionTab user={user} collection={col.collection} watchlist={col.watchlist}
+          <ErrorBoundary name="Collection"><CollectionTab user={user} collection={col.collection} watchlist={col.watchlist}
             onRemoveWatch={async(id)=>{ if(user)await fetch('/api/watchlist?album_id='+id,{method:'DELETE'}); col.setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id)); }}
             onAddToWatchlist={async(artist,album)=>{ const item={artist,album:album.title,album_id:album.id,cover:album.cover}; col.setWatchlist(w=>[...w,{...item,id:album.id}]); if(user)await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)}); }}
             onAlbumClick={openAlbum} onRemove={col.removeFromCollection} onUpdate={col.setCollection} portfolio={col.portfolio} AlbumCover={AlbumCover}
@@ -501,13 +502,13 @@ export default function MetalVault() {
               const d = await r.json();
               if(d.updated>0) await col.loadUserData(user);
               return d.message;
-            }}/>
+            }}/></ErrorBoundary>
         )}
 
-        {tab==='search'   && <SearchTab onWatch={col.toggleWatch} onAddCollection={item=>col.addToCollection(item)} watchlist={col.watchlist} collection={col.collection}/>}
-        {tab==='concerts' && <ConcertsTab/>}
-        {tab==='calendar' && <CalendarTab releases={releases} followedArtists={col.followedArtists}/>}
-        {tab==='stats'    && <StatsTab collection={col.collection} watchlist={col.watchlist} collectionSummary={col.collectionSummary}/>}
+        {tab==='search'   && <ErrorBoundary name="Search"><SearchTab onWatch={col.toggleWatch} onAddCollection={item=>col.addToCollection(item)} watchlist={col.watchlist} collection={col.collection}/></ErrorBoundary>}
+        {tab==='concerts' && <ErrorBoundary name="Concerts"><ConcertsTab/></ErrorBoundary>}
+        {tab==='calendar' && <ErrorBoundary name="Calendar"><CalendarTab releases={releases} followedArtists={col.followedArtists}/></ErrorBoundary>}
+        {tab==='stats'    && <ErrorBoundary name="Stats & Persona"><StatsTab collection={col.collection} watchlist={col.watchlist} collectionSummary={col.collectionSummary}/></ErrorBoundary>}
 
         {tab==='profile' && discogsError && (
           <div style={{margin:'12px 16px',padding:'14px',background:'#2a0000',border:'1px solid #7f1d1d',borderRadius:10,color:'#f87171',fontSize:12,fontFamily:"'Space Mono',monospace",lineHeight:1.6}}>
@@ -518,13 +519,13 @@ export default function MetalVault() {
         )}
         {tab==='profile' && (
           user ? (
-            <ProfileTab user={user} profile={profile} followedArtists={col.followedArtists}
+            <ErrorBoundary name="Profile"><ProfileTab user={user} profile={profile} followedArtists={col.followedArtists} collection={col.collection}
               onSignOut={signOut} onUpdateProfile={setProfile} onShowImport={()=>setShowImportModal(true)}
               pushEnabled={pushEnabled} pushLoading={pushLoading} onTogglePush={togglePush}
               discogsConnected={discogsConnected} onConnectDiscogs={connectDiscogs}
               onSyncDiscogs={runSync} syncStatus={syncStatus} syncResult={syncResult}
               shareToken={shareToken} onGetShareToken={getShareToken}
-              premium={premium} onUpgrade={()=>triggerUpgrade()} onOpenPortal={openPortal}/>
+              premium={premium} onUpgrade={()=>triggerUpgrade()} onOpenPortal={openPortal}/></ErrorBoundary>
           ) : (
             <div style={{ textAlign:'center', padding:'80px 24px' }}>
               <div style={{ ...BEBAS, fontSize:40, color:C.text, marginBottom:8, lineHeight:1 }}>METAL VAULT</div>

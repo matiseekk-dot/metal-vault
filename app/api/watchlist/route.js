@@ -28,9 +28,25 @@ export async function POST(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
+
+  // SECURITY: whitelist writable fields
+  const ALLOWED = ['album_id', 'artist', 'album', 'cover', 'year', 'format', 'color', 'label', 'target_price', 'notes'];
+  const safe = Object.fromEntries(
+    Object.entries(body || {}).filter(([k]) => ALLOWED.includes(k))
+  );
+  if (!safe.album_id) return NextResponse.json({ error: 'album_id required' }, { status: 400 });
+  if (safe.target_price !== undefined) {
+    const p = Number(safe.target_price);
+    if (isNaN(p) || p < 0 || p > 100000) return NextResponse.json({ error: 'Invalid target_price' }, { status: 400 });
+    safe.target_price = p;
+  }
+  if (safe.notes && String(safe.notes).length > 500) {
+    return NextResponse.json({ error: 'notes max 500 chars' }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from('watchlist')
-    .upsert({ user_id: user.id, ...body }, { onConflict: 'user_id,album_id' })
+    .upsert({ ...safe, user_id: user.id }, { onConflict: 'user_id,album_id' })
     .select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -48,9 +48,28 @@ export async function POST(request) {
   }
 
   const body = await request.json();
+
+  // SECURITY: whitelist writable fields — user_id, created_at, triggered_at are server-owned
+  const ALLOWED = ['collection_item_id', 'album_id', 'target_price', 'direction', 'is_active'];
+  const safe = Object.fromEntries(
+    Object.entries(body || {}).filter(([k]) => ALLOWED.includes(k))
+  );
+
+  // Validation
+  if (safe.target_price !== undefined) {
+    const p = Number(safe.target_price);
+    if (isNaN(p) || p <= 0 || p > 100000) {
+      return NextResponse.json({ error: 'target_price must be between 0 and 100000' }, { status: 400 });
+    }
+    safe.target_price = p;
+  }
+  if (safe.direction && !['above', 'below'].includes(safe.direction)) {
+    return NextResponse.json({ error: 'direction must be "above" or "below"' }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from('price_alerts')
-    .insert({ user_id: user.id, ...body })
+    .insert({ ...safe, user_id: user.id })
     .select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -63,9 +82,22 @@ export async function PATCH(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const id   = new URL(request.url).searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
   const body = await request.json();
+
+  const ALLOWED = ['target_price', 'direction', 'is_active'];
+  const safe = Object.fromEntries(
+    Object.entries(body || {}).filter(([k]) => ALLOWED.includes(k))
+  );
+  if (safe.target_price !== undefined) {
+    const p = Number(safe.target_price);
+    if (isNaN(p) || p <= 0 || p > 100000) return NextResponse.json({ error: 'Invalid target_price' }, { status: 400 });
+    safe.target_price = p;
+  }
+  if (Object.keys(safe).length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 });
+
   const { data, error } = await supabase
-    .from('price_alerts').update(body)
+    .from('price_alerts').update(safe)
     .eq('id', id).eq('user_id', user.id)
     .select().single();
 
