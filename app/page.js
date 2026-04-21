@@ -169,15 +169,59 @@ export default function MetalVault() {
   // Feed
   useEffect(() => {
     setFeedLoading(true); setFeedError('');
-    // Pass followed artists so API can include their upcoming releases
+    // Pass followed artists so Discogs API can include their upcoming releases
     const artists = col.followedArtists.map(a => a.artist_name).filter(Boolean);
-    const url = artists.length > 0
+    const discogsUrl = artists.length > 0
       ? '/api/releases?artists=' + encodeURIComponent(artists.join(','))
       : '/api/releases';
-    fetch(url)
-      .then(r => { if (!r.ok) throw new Error('Server error ' + r.status); return r.json(); })
-      .then(d => { setReleases(d.releases||[]); setSource(d.source||''); setFeedLoading(false); })
-      .catch(e => { setFeedError(e.message); setFeedLoading(false); });
+
+    // Fetch Discogs + Metal Archives in parallel; merge + dedupe by (artist+album)
+    Promise.all([
+      fetch(discogsUrl).then(r => r.ok ? r.json() : { releases: [] }).catch(() => ({ releases: [] })),
+      fetch('/api/releases/metal-archives').then(r => r.ok ? r.json() : { items: [] }).catch(() => ({ items: [] })),
+    ]).then(([discogs, ma]) => {
+      const dRel = discogs.releases || [];
+      const maRel = (ma.items || []).map(i => ({
+        id:           i.id,
+        source:       'metal_archives',
+        artist:       i.artist,
+        album:        i.album,
+        cover:        i.cover,
+        releaseDate:  i.releaseDate,
+        genre:        i.genre,
+        preorder:     i.preorder,
+        limited:      false,
+        type:         i.type,
+        discogs_url:  i.albumUrl,
+      }));
+
+      // Dedupe: prefer Discogs (has cover images). Key = lowercase "artist::album"
+      const seen = new Set();
+      const merged = [];
+      for (const r of dRel) {
+        const k = ((r.artist || '') + '::' + (r.album || '')).toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        merged.push(r);
+      }
+      for (const r of maRel) {
+        const k = ((r.artist || '') + '::' + (r.album || '')).toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        merged.push(r);
+      }
+
+      // Sort by release date ascending (soonest first for upcoming)
+      merged.sort((a, b) => {
+        const da = a.releaseDate ? new Date(a.releaseDate).getTime() : 0;
+        const db = b.releaseDate ? new Date(b.releaseDate).getTime() : 0;
+        return db - da;
+      });
+
+      setReleases(merged);
+      setSource(discogs.source || 'mixed');
+      setFeedLoading(false);
+    }).catch(e => { setFeedError(e.message); setFeedLoading(false); });
   }, [feedRetryCount, col.followedArtists.length]); // re-fetch when user follows/unfollows
 
   const openAlbum = (album) => { setSelected(album); col.setVinylError(''); col.fetchVinyl(album); };

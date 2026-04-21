@@ -75,9 +75,43 @@ export async function GET(request) {
     since.setDate(since.getDate() - 7);
     const sinceStr = since.toISOString().split('T')[0];
 
+    // ── Fetch Metal Archives upcoming once — shared across all users ──
+    // MA has the BEST pre-order data: labels submit release dates months ahead.
+    let maUpcoming = [];
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
+      const r = await fetch(appUrl + '/api/releases/metal-archives');
+      if (r.ok) {
+        const d = await r.json();
+        maUpcoming = d.items || [];
+      }
+    } catch (e) { console.warn('MA fetch failed:', e.message); }
+
     for (const [userId, userData] of Object.entries(byUser)) {
       try {
         const newReleases = [];
+
+        // ── Match MA upcoming against user's followed artists ──
+        // Use fuzzy match (case-insensitive includes) — Discogs names often have "(2)" suffix
+        const userArtistsLower = userData.artists.map(a => a.toLowerCase().replace(/\s*\(\d+\)$/, '').trim());
+        for (const rel of maUpcoming) {
+          const relArtistLower = (rel.artist || '').toLowerCase();
+          if (!userArtistsLower.some(a => relArtistLower === a || relArtistLower.includes(a) || a.includes(relArtistLower))) continue;
+          // Only notify about items announced in last 7 days (created_at unavailable — use release date ≤ 6 months future)
+          const releaseDate = rel.releaseDate;
+          if (!releaseDate) continue;
+          const daysUntil = (new Date(releaseDate) - new Date()) / 86400000;
+          if (daysUntil < 0 || daysUntil > 180) continue; // skip past or too-far-future
+          newReleases.push({
+            artist: rel.artist,
+            album:  rel.album,
+            cover:  null,
+            date:   releaseDate,
+            url:    rel.albumUrl || null,
+            source: 'metal_archives',
+          });
+          results.newReleases++;
+        }
 
         if (spotifyToken) {
           for (const artistName of userData.artists) {

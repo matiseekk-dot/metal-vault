@@ -180,12 +180,21 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
             {isWatched?'★':'☆'}
           </button>
         </div>
-        {album.spotifyUrl&&(
-          <div style={{padding:'10px 16px 0'}}>
+        {/* External listen/buy links — Spotify stream + Bandcamp search for buying */}
+        <div style={{padding:'10px 16px 0',display:'flex',gap:14,flexWrap:'wrap'}}>
+          {album.spotifyUrl&&(
             <a href={album.spotifyUrl} target="_blank" rel="noopener noreferrer"
               style={{fontSize:11,color:'#1db954',...MONO,textDecoration:'none'}}>▶ Listen on Spotify</a>
-          </div>
-        )}
+          )}
+          {/* Bandcamp search — indie/underground metal usually on Bandcamp even when no Discogs listing */}
+          <a href={'https://bandcamp.com/search?q=' + encodeURIComponent((album.artist||'') + ' ' + (album.album||''))}
+            target="_blank" rel="noopener noreferrer"
+            style={{fontSize:11,color:'#629aa9',...MONO,textDecoration:'none'}}>🎵 Buy on Bandcamp</a>
+          {album.discogs_url&&(
+            <a href={album.discogs_url} target="_blank" rel="noopener noreferrer"
+              style={{fontSize:11,color:C.dim,...MONO,textDecoration:'none'}}>⬡ Discogs</a>
+          )}
+        </div>
         <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
         <div style={{padding:'14px 16px 16px'}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:12}}>

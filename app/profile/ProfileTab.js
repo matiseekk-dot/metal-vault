@@ -218,7 +218,7 @@ export default function ProfileTab({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 4 }}>Push Notifications</div>
-            <div style={{ fontSize: 11, color: C.dim, ...MONO }}>Price alerts on your phone</div>
+            <div style={{ fontSize: 11, color: C.dim, ...MONO }}>Price alerts + new pre-orders</div>
           </div>
           <button onClick={onTogglePush} disabled={pushLoading}
             style={{
@@ -233,7 +233,7 @@ export default function ProfileTab({
             }} />
           </button>
         </div>
-        {pushEnabled && <div style={{ fontSize: 10, color: '#4ade80', ...MONO, marginTop: 6 }}>✓ Enabled — you will receive price alerts</div>}
+        {pushEnabled && <div style={{ fontSize: 10, color: '#4ade80', ...MONO, marginTop: 6 }}>✓ Enabled — price alerts + pre-orders from followed artists</div>}
       </div>
 
       {/* Discogs OAuth */}
