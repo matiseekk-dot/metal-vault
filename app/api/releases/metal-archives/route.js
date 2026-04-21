@@ -24,14 +24,13 @@ export async function GET() {
     const today = new Date();
     const future = new Date();
     future.setMonth(future.getMonth() + 6);
-    const dateFilter = 'date:[' + toISO(today) + ' TO ' + toISO(future) + ']';
+    // MB release-group uses `firstreleasedate` (no hyphen), not `date`
+    const dateFilter = 'firstreleasedate:[' + toISO(today) + ' TO ' + toISO(future) + ']';
 
-    // Query: metal tag + primary album/EP + upcoming window
-    // Fetch max 100 at a time (MB limit)
+    // Query: metal tag + primary album/EP + upcoming window (status not valid for release-group)
     const query = '(' + METAL_TAGS.map(t => 'tag:' + t).join(' OR ') + ')'
       + ' AND ' + dateFilter
-      + ' AND (primarytype:Album OR primarytype:EP)'
-      + ' AND status:official';
+      + ' AND (primarytype:Album OR primarytype:EP)';
 
     const url = 'https://musicbrainz.org/ws/2/release-group/'
       + '?query=' + encodeURIComponent(query)
