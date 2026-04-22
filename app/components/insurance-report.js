@@ -15,6 +15,7 @@
 
 'use client';
 import { C, MONO, BEBAS } from '@/lib/theme';
+import { realGenre } from '@/lib/genre-helper';
 
 const fmtUSD = v => '$' + Number(v || 0).toFixed(2);
 const fmtDate = d => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }) : '—';
@@ -42,10 +43,10 @@ export async function generateInsuranceReport({ collection, profile, ownerInfo }
   }, 0);
   const totalPaid = collection.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0);
 
-  // Genre breakdown
+  // Genre breakdown — use realGenre() which prefers styles over generic "Rock"/"Pop"
   const genreMap = {};
   for (const i of collection) {
-    const g = (i.genres && i.genres[0]) || (i.styles && i.styles[0]) || 'Unknown';
+    const g = realGenre(i);
     if (!genreMap[g]) genreMap[g] = { count: 0, value: 0 };
     genreMap[g].count++;
     genreMap[g].value += Number(i.median_price || i.current_price || i.purchase_price) || 0;

@@ -393,7 +393,10 @@ export default function MetalVault() {
       return true;
     })
     .filter(r => !search || r.artist.toLowerCase().includes(search.toLowerCase()) || r.album.toLowerCase().includes(search.toLowerCase()))
-    .filter(r => genreInterests.length===0 || genreInterests.includes(r.genre) || (r.genres||[]).some(g => genreInterests.includes(g)))
+    .filter(r => genreInterests.length===0
+      || genreInterests.includes(r.genre)
+      || (r.genres||[]).some(g => genreInterests.includes(g))
+      || (r.styles||[]).some(s => genreInterests.includes(s)))
     .sort((a,b) => {
       if (sort==='date_desc') return new Date(b.releaseDate)-new Date(a.releaseDate);
       if (sort==='date_asc')  return new Date(a.releaseDate)-new Date(b.releaseDate);

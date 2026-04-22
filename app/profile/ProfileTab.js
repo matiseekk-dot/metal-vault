@@ -2,6 +2,7 @@
 'use client';
 import { useState } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
+import { setLocale, getLocale } from '@/lib/i18n';
 
 export default function ProfileTab({
   user, profile, followedArtists, collection = [],

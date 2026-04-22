@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
+import { realGenre } from '@/lib/genre-helper';
 
 const GRADE_COLORS = {M:'#a78bfa',NM:'#4ade80','VG+':'#60a5fa',VG:'#f5c842','G+':'#f97316',G:'#f87171',F:'#888',P:'#555'};
 const GRADE_ORDER  = ['M','NM','VG+','VG','G+','G','F','P'];
@@ -511,7 +512,7 @@ export default function StatsTab({collection,watchlist}){
   const artistMap={};collection.forEach(c=>{artistMap[c.artist]=(artistMap[c.artist]||0)+1;});
   const topArtist=Object.entries(artistMap).sort((a,b)=>b[1]-a[1])[0];
 
-  const genreMap={};collection.forEach(c=>{const g=c.genre||(c.genres||[])[0]||c.styles?.[0]||'Metal';genreMap[g]=(genreMap[g]||0)+1;});
+  const genreMap={};collection.forEach(c=>{const g=realGenre(c);genreMap[g]=(genreMap[g]||0)+1;});
   const genreData=Object.entries(genreMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([label,value])=>({label,value}));
 
   const COLORS=['#dc2626','#f5c842','#4ade80','#60a5fa','#a78bfa','#f97316'];

@@ -7,6 +7,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { genreTagsForItem } from '@/lib/genre-helper';
 
 // ── Archetypes: pattern → title ──
 // Checked in order; first match wins. Fallback = "Metal Collector".
@@ -40,10 +41,13 @@ export async function GET() {
   }
 
   // ── Genres (flatten + count) ──
+  // IMPORTANT: use genreTagsForItem which prefers `styles` over `genres` and
+  // filters out generic parent buckets like "Rock" when a specific style exists.
+  // Without this, most metal collections get tagged "Rock" as #1 genre.
   const genreCounts = {};
   for (const i of items) {
-    const genres = [...(i.genres || []), ...(i.styles || [])];
-    for (const g of genres) {
+    const tags = genreTagsForItem(i);
+    for (const g of tags) {
       if (!g) continue;
       genreCounts[g] = (genreCounts[g] || 0) + 1;
     }
