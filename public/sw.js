@@ -1,7 +1,7 @@
 // ── Metal Vault Service Worker ────────────────────────────────
 // Auto-updates on every new deploy — no manual cache clearing needed.
 
-const VERSION    = 'mv-v32';  // bump this on every deploy
+const VERSION    = 'mv-v34';  // bump this on every deploy
 const CACHE_APP  = VERSION + '-app';
 const CACHE_DATA = VERSION + '-data';
 const CACHE_IMG  = VERSION + '-img';

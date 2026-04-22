@@ -9,6 +9,7 @@ import { CollectionTab, WatchlistTab } from '@/app/collection/CollectionTab';
 import ProfileTab from '@/app/profile/ProfileTab';
 import ErrorBoundary from '@/app/components/ErrorBoundary';
 import OnboardingScreen from '@/app/components/OnboardingScreen';
+import Icon from '@/app/components/Icon';
 import UpgradeModal from '@/app/components/UpgradeModal';
 import nextDynamic from 'next/dynamic';
 export const dynamic = 'force-dynamic';
@@ -423,11 +424,11 @@ export default function MetalVault() {
             {/* Streak badge — visible as soon as >= 2 days (day 1 is noise) */}
             {user && streak >= 2 && (
               <div title={streak + '-day streak'} style={{
-                display:'flex', alignItems:'center', gap:3,
+                display:'flex', alignItems:'center', gap:4,
                 background:'#1a0a00', border:'1px solid #7f1d1d', borderRadius:14,
                 padding:'3px 9px',
               }}>
-                <span style={{ fontSize:11 }}>🔥</span>
+                <Icon name="fire" size={12} color="#f87171"/>
                 <span style={{ ...BEBAS, fontSize:13, color:'#f5c842', lineHeight:1, letterSpacing:'0.02em' }}>{streak}</span>
               </div>
             )}

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { realGenre } from '@/lib/genre-helper';
+import Icon from '@/app/components/Icon';
 
 const GRADE_COLORS = {M:'#a78bfa',NM:'#4ade80','VG+':'#60a5fa',VG:'#f5c842','G+':'#f97316',G:'#f87171',F:'#888',P:'#555'};
 const GRADE_ORDER  = ['M','NM','VG+','VG','G+','G','F','P'];
@@ -10,10 +11,10 @@ function Skeleton({w='100%',h=20,r=4}){
   return <div style={{width:w,height:h,borderRadius:r,background:'linear-gradient(90deg,#1e1e1e 25%,#252525 50%,#1e1e1e 75%)',backgroundSize:'200% 100%',animation:'shimmer 1.5s infinite'}}/>;
 }
 
-function StatCard({icon,value,label,color=C.accent,sub,loading}){
+function StatCard({iconName, icon,value,label,color=C.accent,sub,loading}){
   return(
     <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'14px',textAlign:'center'}}>
-      <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
+      <div style={{ fontSize:24, marginBottom:4, display:'flex', justifyContent:'center' }}>{iconName ? <Icon name={iconName} size={22} color={color || C.accent}/> : icon}</div>
       {loading?<Skeleton h={28} r={4}/>:<div style={{...BEBAS,fontSize:28,color,lineHeight:1}}>{value}</div>}
       <div style={{fontSize:9,color:C.dim,...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginTop:4}}>{label}</div>
       {sub&&<div style={{fontSize:10,color:C.muted,...MONO,marginTop:3}}>{sub}</div>}
@@ -91,16 +92,16 @@ function BadgesSection({ collection, watchlist }) {
   const maxArtist = Object.values(artistMap).reduce((m,v)=>Math.max(m,v),0);
 
   const all = [
-    { id:'first',   icon:'🎵', label:'First Vinyl',     desc:'Added your first record',            earned: count>=1 },
-    { id:'ten',     icon:'📦', label:'10 Records',      desc:'Collection of 10',                   earned: count>=10 },
-    { id:'fifty',   icon:'🔥', label:'50 Records',      desc:'Serious collector',                  earned: count>=50 },
-    { id:'hundred', icon:'💯', label:'100 Records',     desc:'Century club',                       earned: count>=100 },
-    { id:'double',  icon:'🏆', label:'200 Records',     desc:'Elite collection',                   earned: count>=200 },
-    { id:'limited', icon:'💎', label:'Limited Edition', desc:'First limited pressing',             earned: hasLimited },
-    { id:'variant', icon:'🎭', label:'Variant Hunter',  desc:'Multi-format release owned',         earned: hasVariant },
-    { id:'fan',     icon:'⭐', label:'Super Fan',       desc:'5+ albums of one artist',            earned: maxArtist>=5 },
-    { id:'watch',   icon:'👀', label:'Wantlist 10',     desc:'10 items on watchlist',              earned: watchlist.length>=10 },
-    { id:'watcher', icon:'🔭', label:'Wantlist 50',     desc:'50 items on watchlist',              earned: watchlist.length>=50 },
+    { id:'first',   iconName:'record',   label:'First Vinyl',     desc:'Added your first record',            earned: count>=1 },
+    { id:'ten',     iconName:'pkg',      label:'10 Records',      desc:'Collection of 10',                   earned: count>=10 },
+    { id:'fifty',   iconName:'fire',     label:'50 Records',      desc:'Serious collector',                  earned: count>=50 },
+    { id:'hundred', iconName:'award',    label:'100 Records',     desc:'Century club',                       earned: count>=100 },
+    { id:'double',  iconName:'crown',    label:'200 Records',     desc:'Elite collection',                   earned: count>=200 },
+    { id:'limited', iconName:'gem',      label:'Limited Edition', desc:'First limited pressing',             earned: hasLimited },
+    { id:'variant', iconName:'layers',   label:'Variant Hunter',  desc:'Multi-format release owned',         earned: hasVariant },
+    { id:'fan',     iconName:'star',     label:'Super Fan',       desc:'5+ albums of one artist',            earned: maxArtist>=5 },
+    { id:'watch',   iconName:'heart',    label:'Wantlist 10',     desc:'10 items on watchlist',              earned: watchlist.length>=10 },
+    { id:'watcher', iconName:'sparkles', label:'Wantlist 50',     desc:'50 items on watchlist',              earned: watchlist.length>=50 },
   ];
 
   const earned = all.filter(b=>b.earned);
@@ -110,8 +111,8 @@ function BadgesSection({ collection, watchlist }) {
   return (
     <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase'}}>
-          🏅 Badges
+        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',display:'flex',alignItems:'center',gap:6}}>
+          <Icon name="award" size={12} color={C.accent}/> Badges
         </div>
         <div style={{fontSize:10,color:C.dim,...MONO}}>{earned.length}/{all.length} · {pct}%</div>
       </div>
@@ -126,7 +127,7 @@ function BadgesSection({ collection, watchlist }) {
           <div key={b.id} title={b.desc}
             style={{background:'#1a0800',border:'1px solid '+C.accent+'44',
               borderRadius:8,padding:'6px 10px',display:'flex',alignItems:'center',gap:6}}>
-            <span style={{fontSize:14}}>{b.icon}</span>
+            <Icon name={b.iconName} size={14} color={C.gold}/>
             <span style={{fontSize:10,color:C.text,...MONO}}>{b.label}</span>
           </div>
         ))}
@@ -139,7 +140,7 @@ function BadgesSection({ collection, watchlist }) {
               style={{background:C.bg3,border:'1px solid '+C.border,
                 borderRadius:8,padding:'6px 10px',display:'flex',alignItems:'center',gap:6,
                 opacity:0.5}}>
-              <span style={{fontSize:14,filter:'grayscale(1)'}}>{b.icon}</span>
+              <Icon name={b.iconName} size={14} color={C.dim} style={{opacity:0.6}}/>
               <span style={{fontSize:10,color:C.dim,...MONO}}>{b.label}</span>
             </div>
           ))}
@@ -174,8 +175,7 @@ function SellSuggestions({ collection }) {
 
   return (
     <div style={{background:C.bg2,border:'1px solid #1a3d1a',borderRadius:12,padding:'16px',marginBottom:16}}>
-      <div style={{fontSize:10,color:C.green,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>
-        💸 Consider Selling
+      <div style={{fontSize:10,color:C.green,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="coins" size={12} color="inherit"/> Consider Selling</span>
       </div>
       {candidates.map((item,i) => (
         <div key={item.id} style={{
@@ -220,7 +220,7 @@ function GradeChart({ collection }) {
     <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase'}}>
-          📊 Condition Breakdown
+          Condition Breakdown
         </div>
         <div style={{fontSize:9,color:C.dim,...MONO}}>{graded}/{collection.length} graded</div>
       </div>
@@ -259,8 +259,7 @@ function TopLabels({ collection }) {
 
   return (
     <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-      <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>
-        🏷 Top Labels
+      <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="tag" size={12} color="inherit"/> Top Labels</span>
       </div>
       <BarChart data={data} colorFn={()=>'#a78bfa'}/>
     </div>
@@ -411,8 +410,8 @@ function PersonaCard() {
       {/* Diagonal stripe accent */}
       <div style={{ position:'absolute', top:0, right:-30, width:80, height:8, background:'#dc2626', transform:'rotate(-3deg)', opacity:0.4 }}/>
 
-      <div style={{ fontSize: 9, color: '#dc2626', letterSpacing: '0.25em', ...MONO, marginBottom: 4 }}>
-        YOUR METAL PERSONA
+      <div style={{ fontSize: 9, color: '#dc2626', letterSpacing: '0.25em', ...MONO, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Icon name="music" size={11} color="#dc2626"/> YOUR METAL PERSONA
       </div>
       <div style={{ ...BEBAS, fontSize: 32, color: '#f0f0f0', letterSpacing: '0.03em', lineHeight: 1.1, marginBottom: 12 }}>
         {persona.title}
@@ -463,7 +462,9 @@ function PersonaCard() {
       {/* Crown jewel */}
       {persona.crownJewel && (
         <div style={{ background: '#0a0a0a', border: '1px solid #3a2a00', borderRadius: 8, padding: 10, marginBottom: 12 }}>
-          <div style={{ fontSize: 9, color: '#f5c842', letterSpacing: '0.2em', ...MONO }}>👑 CROWN JEWEL</div>
+          <div style={{ fontSize: 9, color: '#f5c842', letterSpacing: '0.2em', ...MONO, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Icon name="crown" size={11} color="#f5c842"/> CROWN JEWEL
+          </div>
           <div style={{ fontSize: 13, color: '#f0f0f0', ...BEBAS, letterSpacing: '0.03em', marginTop: 3 }}>
             {persona.crownJewel.artist}
           </div>
@@ -478,7 +479,11 @@ function PersonaCard() {
         style={{ width: '100%', background: '#dc2626', border: 'none', borderRadius: 8,
           color: '#fff', padding: '12px', cursor: 'pointer', ...BEBAS, fontSize: 15,
           letterSpacing: '0.1em', opacity: sharing ? 0.6 : 1 }}>
-        {sharing ? 'GENERATING…' : '📤 SHARE PERSONA'}
+        {sharing ? 'GENERATING…' : (
+          <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+            <Icon name="share" size={15} color="#fff"/> SHARE PERSONA
+          </span>
+        )}
       </button>
     </div>
   );
@@ -537,8 +542,7 @@ export default function StatsTab({collection,watchlist}){
         border:'1px solid '+C.accent,borderRadius:16,padding:'20px',marginBottom:16,
         position:'relative',overflow:'hidden'}}>
         <div style={{position:'absolute',right:-10,top:-10,fontSize:80,opacity:0.04,...BEBAS,userSelect:'none'}}>$</div>
-        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',textTransform:'uppercase',marginBottom:8}}>
-          💰 Collection Value
+        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',textTransform:'uppercase',marginBottom:8}}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="wallet" size={12} color="inherit"/> Collection Value</span>
         </div>
         {loading?<Skeleton h={52} r={6}/>:(
           <div style={{...BEBAS,fontSize:54,color:C.text,lineHeight:1,marginBottom:6}}>
@@ -555,16 +559,16 @@ export default function StatsTab({collection,watchlist}){
           {totalPaid>0&&!loading&&<span style={{fontSize:10,color:C.dim,...MONO}}>vs ${totalPaid.toFixed(0)} paid</span>}
         </div>
         <div style={{fontSize:9,color:priceCount>0?C.dim:'#f5c84299',...MONO,marginTop:6}}>
-          {priceCount>0?'Based on Discogs median · '+priceCount+'/'+collection.length+' tracked':'⏳ Tracking market prices…'}
+          {priceCount>0?'Based on Discogs median · '+priceCount+'/'+collection.length+' tracked':'Tracking market prices…'}
         </div>
       </div>
 
       {/* Secondary stats */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
-        <StatCard icon="📦" value={collection.length} label="Records" color={C.accent}/>
-        <StatCard icon="★"  value={watchlist.length}  label="Watching" color={C.gold}/>
-        <StatCard icon="💳" value={totalPaid>0?'$'+totalPaid.toFixed(0):'—'} label="Total paid" color={C.muted} loading={loading}/>
-        <StatCard icon="📊" value={collection.length>0?'$'+(totalPaid/collection.length).toFixed(0):'—'} label="Avg record" color={C.blue}/>
+        <StatCard iconName="pkg" value={collection.length} label="Records" color={C.accent}/>
+        <StatCard iconName="star" value={watchlist.length} label="Watching" color={C.gold}/>
+        <StatCard iconName="wallet" value={totalPaid>0?'$'+totalPaid.toFixed(0):'—'} label="Total paid" color={C.muted} loading={loading}/>
+        <StatCard iconName="barChart" value={collection.length>0?'$'+(totalPaid/collection.length).toFixed(0):'—'} label="Avg record" color={C.blue}/>
       </div>
 
       {/* Badges */}
@@ -576,7 +580,7 @@ export default function StatsTab({collection,watchlist}){
       {/* Market movers */}
       {(topGainer||topLoser)&&(
         <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>📈 Market movers</div>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12, display:'flex', alignItems:'center', gap:6}}><Icon name="up" size={12} color={C.accent}/> Market movers</div>
           {topGainer&&(
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:topLoser&&topLoser.gainPct<0?10:0}}>
               <div>
@@ -609,7 +613,7 @@ export default function StatsTab({collection,watchlist}){
       {/* No price data notice */}
       {collection.length>0&&!priceCount&&(
         <div style={{background:'#1a1a00',border:'1px solid #55550044',borderRadius:8,padding:'12px 14px',marginBottom:16}}>
-          <div style={{fontSize:12,color:C.gold,...MONO,marginBottom:4}}>⏳ First price update in progress</div>
+          <div style={{fontSize:12,color:C.gold,...MONO,marginBottom:4}}><span style={{display:'inline-flex',alignItems:'center',gap:4}}><Icon name="refresh" size={11} color="inherit"/> First price update</span> in progress</div>
           <div style={{fontSize:10,color:C.dim,...MONO,lineHeight:1.6}}>Market values load automatically. Add records from the album modal to start tracking.</div>
         </div>
       )}
@@ -628,7 +632,7 @@ export default function StatsTab({collection,watchlist}){
       {/* Top by value */}
       {topByValue.length>0&&(
         <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>💎 Top by market value</div>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12, display:'flex', alignItems:'center', gap:6}}><Icon name="gem" size={12} color={C.accent}/> Top by market value</div>
           {topByValue.map((item,i)=>{
             const paid=Number(item.purchase_price)||0,now=Number(item.median_price||item.current_price)||0;
             const g=paid>0?now-paid:null,gPct=g!==null?((g/paid)*100).toFixed(0):null;
@@ -656,7 +660,7 @@ export default function StatsTab({collection,watchlist}){
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
             {topArtist&&(
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:11,color:C.dim,...MONO}}>🔥 Top artist</span>
+                <span style={{fontSize:11,color:C.dim,...MONO,display:'inline-flex',alignItems:'center',gap:4}}><Icon name="fire" size={11} color={C.dim}/> Top artist</span>
                 <div style={{textAlign:'right'}}>
                   <div style={{fontSize:13,color:C.text,...MONO}}>{topArtist[0]}</div>
                   <div style={{fontSize:10,color:C.dim,...MONO}}>{topArtist[1]} records</div>
@@ -665,7 +669,7 @@ export default function StatsTab({collection,watchlist}){
             )}
             {recentlyAdded&&(
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid '+C.border,paddingTop:10}}>
-                <span style={{fontSize:11,color:C.dim,...MONO}}>🆕 Recently added</span>
+                <span style={{fontSize:11,color:C.dim,...MONO}}><span style={{display:'inline-flex',alignItems:'center',gap:4}}><Icon name="sparkles" size={10} color="inherit"/> Recently added</span></span>
                 <div style={{textAlign:'right'}}>
                   <div style={{fontSize:12,color:C.text,...MONO,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{recentlyAdded.artist}</div>
                   <div style={{fontSize:10,color:C.dim,...MONO}}>{(recentlyAdded.added_at||'').split('T')[0]}</div>
@@ -709,8 +713,7 @@ export default function StatsTab({collection,watchlist}){
         const maxSpent = Math.max(...years.map(([, v]) => v.spent), 1);
         return (
           <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
-            <div style={{ fontSize: 10, color: C.accent, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14 }}>
-              📅 Spending by year
+            <div style={{ fontSize: 10, color: C.accent, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14 }}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="calendar" size={12} color="inherit"/> Spending by year</span>
             </div>
             {years.map(([year, data]) => (
               <div key={year} style={{ marginBottom: 12 }}>
@@ -743,10 +746,10 @@ export default function StatsTab({collection,watchlist}){
       {/* Pro teaser */}
       <div style={{background:'linear-gradient(135deg,#0a0a1a,#14142a)',
         border:'1px solid #3333aa55',borderRadius:12,padding:'16px',marginBottom:16,position:'relative',overflow:'hidden'}}>
-        <div style={{position:'absolute',right:12,top:12,fontSize:20,opacity:0.3}}>🔒</div>
+        <div style={{position:'absolute',right:12,top:12,opacity:0.4}}><Icon name="lock" size={18} color={C.muted}/></div>
         <div style={{fontSize:10,color:'#818cf8',...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:8}}>Advanced Analytics</div>
-        {['📈 Price history per record','🔔 Smart price alerts','📊 30d / 90d portfolio change','🏆 Rarity score per pressing'].map((f,i)=>(
-          <div key={i} style={{fontSize:11,color:'#6366f1',...MONO,opacity:0.8,marginBottom:4}}>{f}</div>
+        {[['up','Price history per record'],['bell','Smart price alerts'],['barChart','30d / 90d portfolio change'],['award','Rarity score per pressing']].map(([iconName,f],i)=>(
+          <div key={i} style={{fontSize:11,color:'#6366f1',...MONO,opacity:0.8,marginBottom:4}}><Icon name={iconName} size={12} color={C.dim} style={{marginRight:6,verticalAlign:'middle',display:'inline-block'}}/>{f}</div>
         ))}
         <div style={{background:'#4f46e5',borderRadius:8,padding:'8px 14px',fontSize:11,color:'#fff',...BEBAS,letterSpacing:'0.1em',textAlign:'center',opacity:0.85,marginTop:8}}>
           Coming soon — Metal Vault Pro
@@ -755,7 +758,7 @@ export default function StatsTab({collection,watchlist}){
 
       {collection.length===0&&(
         <div style={{textAlign:'center',padding:'40px 0',color:C.dim,...MONO}}>
-          <div style={{fontSize:40,marginBottom:12}}>📊</div>
+          <div style={{marginBottom:12,display:'flex',justifyContent:'center'}}><Icon name="barChart" size={40} color={C.accent}/></div>
           <div style={{fontSize:13,lineHeight:1.7}}>Add records to your collection<br/>to see statistics here</div>
         </div>
       )}

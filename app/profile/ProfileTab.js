@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import { setLocale, getLocale } from '@/lib/i18n';
+import Icon from '@/app/components/Icon';
 
 export default function ProfileTab({
   user, profile, followedArtists, collection = [],
@@ -63,7 +64,7 @@ export default function ProfileTab({
 
   if (!user) return (
     <div style={{ textAlign: 'center', padding: '60px 24px', color: C.dim, ...MONO }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
+      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="user" size={40} color={C.accent}/></div>
       <div style={{ fontSize: 13, marginBottom: 20, lineHeight: 1.7 }}>Sign in to manage your profile</div>
       <button onClick={() => window.location.href = '/login'}
         style={{
@@ -133,9 +134,9 @@ export default function ProfileTab({
             </button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {[['📦','Unlimited records'],['🔔','3 price alerts free'],['🏛️','Pro: Insurance Report'],['📈','Pro: Price history']].map(([icon, text]) => (
+            {[['pkg','Unlimited records'],['bell','3 price alerts free'],['insurance','Pro: Insurance Report'],['priceHistory','Pro: Price history']].map(([iconName, text]) => (
               <div key={text} style={{ fontSize: 10, color: C.dim, ...MONO, display: 'flex', gap: 5, alignItems: 'center' }}>
-                <span>{icon}</span><span>{text}</span>
+                <Icon name={iconName} size={14} color={C.accent}/><span>{text}</span>
               </div>
             ))}
           </div>
@@ -146,7 +147,7 @@ export default function ProfileTab({
       {!profile?.is_public && (
         <div style={{ background: 'linear-gradient(135deg,#0d1a2e,#1a0a2e)', border: '1px solid #1e40af', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 11, color: '#60a5fa', ...MONO, marginBottom: 3 }}>🌐 Share your collection</div>
+            <div style={{ fontSize: 11, color: '#60a5fa', ...MONO, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="globe" size={12} color="#60a5fa"/> Share your collection</div>
             <div style={{ fontSize: 10, color: '#4a7ab5', ...MONO, lineHeight: 1.5 }}>Enable public profile to show off your vault</div>
           </div>
           <button onClick={async () => {
@@ -235,7 +236,7 @@ export default function ProfileTab({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {followedArtists.map(a => (
               <span key={a.id} style={{ fontSize: 11, padding: '5px 10px', borderRadius: 20, background: C.bg3, color: C.muted, border: '1px solid ' + C.border, ...MONO }}>
-                {a.artist_name} 🔔
+                {a.artist_name} <Icon name="bellOn" size={11} color="#4ade80" style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 4 }}/>
               </span>
             ))}
           </div>
@@ -245,8 +246,8 @@ export default function ProfileTab({
 
       {/* Language switcher — i18n */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>
-          🌐 Language / Język
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Icon name="globe" size={12} color={C.accent}/> Language / Język
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {[{id:'en', label:'English', flag:'🇬🇧'}, {id:'pl', label:'Polski', flag:'🇵🇱'}].map(lang => {
@@ -281,7 +282,7 @@ export default function ProfileTab({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 10, color: premium ? '#f5c842' : C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 4 }}>
-              🏛️ Insurance Report {!premium && <span style={{ color: '#f5c842', marginLeft: 6 }}>· PRO</span>}
+              <Icon name="insurance" size={14} color={C.accent} style={{ verticalAlign: 'middle', marginRight: 6, display: 'inline-block' }}/>Insurance Report {!premium && <span style={{ color: '#f5c842', marginLeft: 6 }}>· PRO</span>}
             </div>
             <div style={{ ...BEBAS, fontSize: 18, color: C.text, letterSpacing: '0.04em', lineHeight: 1.1, marginBottom: 4 }}>
               Generate appraisal PDF
@@ -301,7 +302,7 @@ export default function ProfileTab({
               ...BEBAS, fontSize: 15, letterSpacing: '0.1em', marginTop: 4,
               opacity: collection.length > 0 ? 1 : 0.5,
             }}>
-            {collection.length === 0 ? 'ADD RECORDS FIRST' : '📄 GENERATE REPORT (' + collection.length + ' ITEMS)'}
+            {collection.length === 0 ? 'ADD RECORDS FIRST' : 'GENERATE REPORT (' + collection.length + ' ITEMS)'}
           </button>
         ) : (
           <button onClick={() => window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'INSURANCE_REQUIRED' } }))}
@@ -353,7 +354,7 @@ export default function ProfileTab({
               </button>
               <button onClick={handleGenerateInsurance} disabled={insuranceLoading || !ownerName.trim()}
                 style={{ flex: 2, background: '#f5c842', border: 'none', borderRadius: 8, color: '#1a0800', padding: '12px', cursor: 'pointer', ...BEBAS, fontSize: 14, letterSpacing: '0.08em', opacity: (insuranceLoading || !ownerName.trim()) ? 0.5 : 1 }}>
-                {insuranceLoading ? 'GENERATING…' : '📄 GENERATE PDF'}
+                {insuranceLoading ? 'GENERATING…' : 'GENERATE PDF'}
               </button>
             </div>
           </div>
@@ -430,8 +431,7 @@ export default function ProfileTab({
                 border: '1px solid #f5c842', borderRadius: 8, color: '#f5c842',
                 cursor: 'pointer', ...BEBAS, fontSize: 16, letterSpacing: '0.06em',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              }}>
-              🔗 Connect Discogs Account
+              }}><Icon name="external" size={14} color={C.accent} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 8 }}/>Connect Discogs Account
             </button>
             <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 8, lineHeight: 1.6, textAlign: 'center' }}>
               Redirects to discogs.com → authorize → returns here → syncs automatically
@@ -444,14 +444,13 @@ export default function ProfileTab({
 
       {/* Data — Export + Import (combined, visible immediately) */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 12 }}>📦 Data — Import & Export</div>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 12 , display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="pkg" size={12} color={C.accent}/> Data — Import & Export</div>
 
         {/* Import from Discogs */}
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>From Discogs</div>
           <button onClick={onShowImport}
-            style={{ width: '100%', padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, cursor: 'pointer', ...MONO, fontSize: 11, textAlign: 'center' }}>
-            🔗 Import from Discogs account
+            style={{ width: '100%', padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, cursor: 'pointer', ...MONO, fontSize: 11, textAlign: 'center' }}><Icon name="download" size={12} color={C.accent} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }}/>Import from Discogs account
           </button>
         </div>
 
@@ -545,8 +544,7 @@ export default function ProfileTab({
           </div>
         ) : (
           <button onClick={onGetShareToken}
-            style={{ width: '100%', padding: '10px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 8, color: C.muted, cursor: 'pointer', ...MONO, fontSize: 12 }}>
-            🔗 Generate share link
+            style={{ width: '100%', padding: '10px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 8, color: C.muted, cursor: 'pointer', ...MONO, fontSize: 12 }}><Icon name="share" size={12} color={C.accent} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }}/>Generate share link
           </button>
         )}
       </div>

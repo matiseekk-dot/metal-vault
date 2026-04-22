@@ -2,27 +2,28 @@
 import { useState } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
+import Icon from '@/app/components/Icon';
 
 const FEATURES = [
-  { icon: '📦', free: 'Unlimited',      pro: 'Unlimited'           },
-  { icon: '🔔', free: '3 alerts',       pro: 'Unlimited'           },
-  { icon: '🏛️', free: '—',             pro: 'Insurance PDF'       },
-  { icon: '💎', free: '—',              pro: 'Detailed grading'    },
-  { icon: '📈', free: '—',              pro: 'Price history'       },
-  { icon: '⚡', free: 'Daily',          pro: 'On-demand refresh'   },
-  { icon: '📤', free: '—',              pro: 'CSV / JSON export'   },
-  { icon: '🎭', free: 'Persona share',  pro: 'Persona + stats'     },
-  { icon: '📊', free: 'Basic stats',    pro: 'Full portfolio'      },
-  { icon: '🔔', free: 'Weekly digest',  pro: 'Daily + pre-orders'  },
+  { iconName: 'pkg',             free: 'Unlimited',      pro: 'Unlimited'           },
+  { iconName: 'bell',            free: '3 alerts',       pro: 'Unlimited'           },
+  { iconName: 'insurance',       free: '—',              pro: 'Insurance PDF'       },
+  { iconName: 'detailedGrading', free: '—',              pro: 'Detailed grading'    },
+  { iconName: 'priceHistory',    free: '—',              pro: 'Price history'       },
+  { iconName: 'zap',             free: 'Daily',          pro: 'On-demand refresh'   },
+  { iconName: 'export',          free: '—',              pro: 'CSV / JSON export'   },
+  { iconName: 'user',            free: 'Persona share',  pro: 'Persona + stats'     },
+  { iconName: 'barChart',        free: 'Basic stats',    pro: 'Full portfolio'      },
+  { iconName: 'bellOn',          free: 'Weekly digest',  pro: 'Daily + pre-orders'  },
 ];
 
 // Feature matrix — tier unlocks
 const COLLECTOR_FEATURES = [
-  { icon: '📈', label: 'Market Intelligence (eBay + Discogs arbitrage)' },
-  { icon: '🤖', label: 'AI recommendations & similar bands' },
-  { icon: '🎯', label: 'Priority support' },
-  { icon: '⚙️', label: 'Bulk operations' },
-  { icon: '🚀', label: 'Early access to new features' },
+  { iconName: 'marketIntel', label: 'Market Intelligence (eBay + Discogs arbitrage)' },
+  { iconName: 'sparkles',    label: 'AI recommendations & similar bands' },
+  { iconName: 'priority',    label: 'Priority support' },
+  { iconName: 'bulkOps',     label: 'Bulk operations' },
+  { iconName: 'earlyAccess', label: 'Early access to new features' },
 ];
 
 export default function UpgradeModal({ onClose, onCheckout, reason }) {
@@ -148,7 +149,7 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr',
               padding: '10px 14px', borderBottom: i < FEATURES.length - 1 ? '1px solid ' + C.border : 'none',
               alignItems: 'center' }}>
-              <span style={{ fontSize: 16 }}>{f.icon}</span>
+              <Icon name={f.iconName} size={16} color={C.accent}/>
               <span style={{ fontSize: 11, color: C.dim, ...MONO, textAlign: 'center' }}>
                 {f.free === '—' ? <span style={{ color: '#555' }}>✕</span> : f.free}
               </span>
@@ -164,11 +165,11 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
           <div style={{ margin: '0 20px 20px', background: 'linear-gradient(135deg, #1a1000, #0a0700)',
             border: '1px solid #b8860b', borderRadius: 12, padding: 14 }}>
             <div style={{ ...BEBAS, fontSize: 14, color: '#f5c842', letterSpacing: '0.1em', marginBottom: 10 }}>
-              ⭐ COLLECTOR EXTRAS
+              COLLECTOR EXTRAS
             </div>
             {COLLECTOR_FEATURES.map((f, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{f.icon}</span>
+                <Icon name={f.iconName} size={18} color="#f5c842"/>
                 <span style={{ fontSize: 11, color: '#f5c842', ...MONO }}>{f.label}</span>
               </div>
             ))}

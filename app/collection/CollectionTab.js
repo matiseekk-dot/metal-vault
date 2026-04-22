@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { C, MONO, BEBAS, VINYL_GRADES, GRADE_COLOR, inputSt } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
+import Icon from '@/app/components/Icon';
 import dynamic from 'next/dynamic';
 const BandsTab = dynamic(() => import('@/app/artists/BandsTab'), { ssr: false });
 
@@ -397,8 +398,8 @@ function ManualAddForm({ onAdd, onClose }) {
             window.dispatchEvent(new CustomEvent('mv:open-scanner'));
           }} style={{ background: '#1a0a0a', border: '1px solid #7f1d1d', borderRadius: 8,
             color: '#f87171', padding: '6px 12px', cursor: 'pointer', ...MONO, fontSize: 10,
-            letterSpacing: '0.1em' }}>
-            📷 SCAN BARCODE
+            letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="scan" size={12} color="#f87171"/> SCAN BARCODE
           </button>
         </div>
         <label style={lbl}>Artist *</label>
@@ -796,8 +797,10 @@ export function CollectionTab({
                       background: 'linear-gradient(135deg,#1a1a00,#2a2800)',
                       border: '1px solid #f5c842', borderRadius: 10,
                       color: '#f5c842', cursor: 'pointer',
-                      ...BEBAS, fontSize: 15, letterSpacing: '0.08em' }}>
-                    {t('empty.vault.connect')}
+                      ...BEBAS, fontSize: 15, letterSpacing: '0.08em',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                    <Icon name="external" size={18} color="#f5c842"/>
+                    {t('empty.vault.connect').replace('🔗 ', '').replace('🔗', '')}
                   </button>
                 )}
                 {discogsConnected && (
@@ -810,16 +813,20 @@ export function CollectionTab({
                     background: 'linear-gradient(135deg,#dc2626,#991b1b)',
                     border: 'none', borderRadius: 10,
                     color: '#fff', cursor: 'pointer',
-                    ...BEBAS, fontSize: 15, letterSpacing: '0.08em' }}>
-                  {t('empty.vault.add')}
+                    ...BEBAS, fontSize: 15, letterSpacing: '0.08em',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                  <Icon name="add" size={18} color="#fff"/>
+                  {t('empty.vault.add').replace('＋ ', '').replace('＋', '')}
                 </button>
                 <button onClick={() => window.dispatchEvent(new CustomEvent('mv:open-scanner'))}
                   style={{ width: '100%', padding: '12px',
                     background: 'transparent',
                     border: '1px solid ' + C.border, borderRadius: 10,
                     color: C.muted, cursor: 'pointer',
-                    ...MONO, fontSize: 12, letterSpacing: '0.08em' }}>
-                  {t('empty.vault.scan')}
+                    ...MONO, fontSize: 12, letterSpacing: '0.08em',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Icon name="scan" size={14} color={C.muted}/>
+                  {t('empty.vault.scan').replace('📷 ', '').replace('📷', '')}
                 </button>
                 <div style={{ fontSize: 10, color: C.dim, ...MONO, marginTop: 8, lineHeight: 1.6 }}>
                   {t('empty.vault.tip')}
@@ -964,7 +971,7 @@ export function CollectionTab({
                               color: (item.sleeve_grade || item.vinyl_grade) ? '#f5c842' : C.dim,
                               padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, width: '100%', textAlign: 'left' }}>
                               {(item.sleeve_grade || item.vinyl_grade || item.inner_sleeve_grade)
-                                ? '💎 Detailed grading set — tap to edit'
+                                ? 'Detailed grading set — tap to edit'
                                 : '💎 Add detailed grading ' + (gradingExpandedId === item.id ? '▴' : '▾')}
                             </button>
 
@@ -1040,7 +1047,7 @@ export function CollectionTab({
                             style={{ background: 'none', border: '1px dashed ' + C.border, borderRadius: 6,
                               color: C.dim, padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10,
                               width: '100%', textAlign: 'left', marginBottom: 8 }}>
-                            💎 Detailed grading · <span style={{ color: '#f5c842' }}>PRO</span>
+                            Detailed grading · <span style={{ color: '#f5c842' }}>PRO</span>
                           </button>
                         )}
                         {/* Set price — inline input matching watchlist pattern (works on iOS) */}

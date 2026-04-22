@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
+import Icon from '@/app/components/Icon';
 
 // Steps are built inside component so translations react to locale changes
 
@@ -9,7 +10,7 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
   const t = useT();
   const steps = [
     {
-      icon: '🔥',
+      iconName: 'fire',
       title: t('onboarding.step1.title'),
       sub:   t('onboarding.step1.sub'),
       desc:  t('onboarding.step1.desc'),
@@ -17,7 +18,7 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
       cta: null,
     },
     {
-      icon: '🔗',
+      iconName: 'external',
       title: t('onboarding.step2.title'),
       sub:   t('onboarding.step2.sub'),
       desc:  t('onboarding.step2.desc'),
@@ -25,7 +26,7 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
       skippable: true,
     },
     {
-      icon: '🔄',
+      iconName: 'refresh',
       title: t('onboarding.step3.title'),
       sub:   t('onboarding.step3.sub'),
       desc:  t('onboarding.step3.desc'),
@@ -33,7 +34,7 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
       cta: null,
     },
     {
-      icon: '🔔',
+      iconName: 'bell',
       title: t('onboarding.step4.title'),
       sub:   t('onboarding.step4.sub'),
       desc:  t('onboarding.step4.desc'),
@@ -41,7 +42,7 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
       skippable: true,
     },
     {
-      icon: '🎯',
+      iconName: 'target',
       title: t('onboarding.step5.title'),
       sub:   t('onboarding.step5.sub'),
       desc:  t('onboarding.step5.desc'),
@@ -90,7 +91,7 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
         filter: step === 0 ? 'drop-shadow(0 0 40px #dc262688)' : 'none',
         transition: 'all 0.3s',
       }}>
-        {current.icon}
+        <Icon name={current.iconName} size={56} color={C.accent}/>
       </div>
 
       {/* Sub label */}
