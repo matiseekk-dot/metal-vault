@@ -20,7 +20,8 @@
     "stripe": "14.25.0",
     "jspdf": "2.5.2",
     "jspdf-autotable": "3.8.4",
-    "@sentry/nextjs": "8.38.0"
+    "@sentry/nextjs": "8.38.0",
+    "lucide-react": "0.468.0"
   },
   "engines": {
     "node": ">=18.17.0"

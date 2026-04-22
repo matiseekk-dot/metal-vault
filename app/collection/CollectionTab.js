@@ -7,6 +7,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { C, MONO, BEBAS, VINYL_GRADES, GRADE_COLOR, inputSt } from '@/lib/theme';
+import { useT } from '@/lib/i18n';
 import dynamic from 'next/dynamic';
 const BandsTab = dynamic(() => import('@/app/artists/BandsTab'), { ssr: false });
 
@@ -388,7 +389,18 @@ function ManualAddForm({ onAdd, onClose }) {
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ background: C.bg2, borderRadius: '16px 16px 0 0', padding: '16px', maxHeight: '90vh', overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom,24px)' }}>
         <div style={{ width: 40, height: 4, background: C.border2, borderRadius: 2, margin: '0 auto 16px' }} />
-        <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.06em', marginBottom: 16 }}>ADD RECORD MANUALLY</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.06em' }}>ADD RECORD MANUALLY</div>
+          {/* Quick switch to barcode scanner */}
+          <button onClick={() => {
+            onClose();
+            window.dispatchEvent(new CustomEvent('mv:open-scanner'));
+          }} style={{ background: '#1a0a0a', border: '1px solid #7f1d1d', borderRadius: 8,
+            color: '#f87171', padding: '6px 12px', cursor: 'pointer', ...MONO, fontSize: 10,
+            letterSpacing: '0.1em' }}>
+            📷 SCAN BARCODE
+          </button>
+        </div>
         <label style={lbl}>Artist *</label>
         <input value={form.artist} onChange={e => set('artist', e.target.value)} placeholder="e.g. Metallica" style={fld} autoFocus />
         <label style={lbl}>Album *</label>
@@ -488,8 +500,10 @@ export function CollectionTab({
   user, collection, watchlist = [], onRemoveWatch, onRemove, onUpdate,
   portfolio, onAlbumClick, onAddToWatchlist, AlbumCover, onManualAdd,
   premium, onUpgrade, onRefreshPrices,
+  onConnectDiscogs, discogsConnected,
   followedArtists = [], onToggleFollow, onBatchFollow,
 }) {
+  const t = useT();
   const [view, setView]                   = useState('vinyl');
   const [vaultSearch,    setVaultSearch]   = useState('');
   const [vaultFilter,    setVaultFilter]   = useState('all');
@@ -753,9 +767,64 @@ export function CollectionTab({
           )}
 
           {collection.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: C.dim, ...MONO, fontSize: 12 }}>
-              <div style={{ fontSize: 40, marginBottom: 10 }}>📦</div>
-              Collection is empty — tap + ADD or sync with Discogs
+            <div style={{ textAlign: 'center', padding: '40px 24px' }}>
+              {/* Illustration: empty vault */}
+              <svg width="120" height="120" viewBox="0 0 120 120" style={{ marginBottom: 16 }}>
+                <defs>
+                  <linearGradient id="vaultGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2a0a0a"/><stop offset="100%" stopColor="#0a0a0a"/>
+                  </linearGradient>
+                </defs>
+                <rect x="20" y="28" width="80" height="72" rx="6" fill="url(#vaultGrad)" stroke="#3a1010" strokeWidth="2"/>
+                <rect x="30" y="38" width="60" height="6" rx="2" fill="#1a0505"/>
+                <rect x="30" y="50" width="60" height="6" rx="2" fill="#1a0505"/>
+                <rect x="30" y="62" width="60" height="6" rx="2" fill="#1a0505"/>
+                <rect x="30" y="74" width="60" height="6" rx="2" fill="#1a0505"/>
+                <circle cx="60" cy="92" r="4" fill="#dc2626"/>
+                <path d="M52 20 L68 20 L68 28 L52 28 Z" fill="#2a0a0a" stroke="#3a1010" strokeWidth="1.5"/>
+              </svg>
+              <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.04em', marginBottom: 6 }}>
+                {t('empty.vault.title')}
+              </div>
+              <div style={{ fontSize: 12, color: C.muted, ...MONO, marginBottom: 24, lineHeight: 1.5 }}>
+                {t('empty.vault.desc')}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 320, margin: '0 auto' }}>
+                {!discogsConnected && onConnectDiscogs && (
+                  <button onClick={onConnectDiscogs}
+                    style={{ width: '100%', padding: '14px',
+                      background: 'linear-gradient(135deg,#1a1a00,#2a2800)',
+                      border: '1px solid #f5c842', borderRadius: 10,
+                      color: '#f5c842', cursor: 'pointer',
+                      ...BEBAS, fontSize: 15, letterSpacing: '0.08em' }}>
+                    {t('empty.vault.connect')}
+                  </button>
+                )}
+                {discogsConnected && (
+                  <div style={{ fontSize: 10, color: '#4ade80', ...MONO, padding: '6px 0' }}>
+                    ✓ Discogs connected — sync happens automatically
+                  </div>
+                )}
+                <button onClick={() => setShowAddManual(true)}
+                  style={{ width: '100%', padding: '14px',
+                    background: 'linear-gradient(135deg,#dc2626,#991b1b)',
+                    border: 'none', borderRadius: 10,
+                    color: '#fff', cursor: 'pointer',
+                    ...BEBAS, fontSize: 15, letterSpacing: '0.08em' }}>
+                  {t('empty.vault.add')}
+                </button>
+                <button onClick={() => window.dispatchEvent(new CustomEvent('mv:open-scanner'))}
+                  style={{ width: '100%', padding: '12px',
+                    background: 'transparent',
+                    border: '1px solid ' + C.border, borderRadius: 10,
+                    color: C.muted, cursor: 'pointer',
+                    ...MONO, fontSize: 12, letterSpacing: '0.08em' }}>
+                  {t('empty.vault.scan')}
+                </button>
+                <div style={{ fontSize: 10, color: C.dim, ...MONO, marginTop: 8, lineHeight: 1.6 }}>
+                  {t('empty.vault.tip')}
+                </div>
+              </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -967,7 +1036,7 @@ export function CollectionTab({
                             })()}
                           </div>
                         ) : (
-                          <button onClick={onUpgrade}
+                          <button onClick={() => window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'DETAILED_GRADING' } }))}
                             style={{ background: 'none', border: '1px dashed ' + C.border, borderRadius: 6,
                               color: C.dim, padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10,
                               width: '100%', textAlign: 'left', marginBottom: 8 }}>

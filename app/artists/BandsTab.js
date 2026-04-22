@@ -41,18 +41,47 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
 
   const wantKey = (title) => (artistName + '::' + title).toLowerCase();
   const isWanted = (title) => wanted[wantKey(title)] === true;
-  const toggleWanted = (album) => {
+  // Unified: ♥ click = toggle watchlist entry directly (no separate "wanted" concept).
+  // Still keeps LS as optimistic cache for instant UI feedback while DB write is in flight.
+  const toggleWanted = async (album) => {
     const k = wantKey(album.title);
+    const wasWanted = wanted[k] === true;
+
+    // Optimistic: update local state first
     setWanted(prev => {
       const next = { ...prev };
-      if (next[k]) { delete next[k]; } else { next[k] = true; }
+      if (wasWanted) { delete next[k]; } else { next[k] = true; }
       try {
         localStorage.setItem(LS_WANTED, JSON.stringify(next));
-        // Notify BandsTab to re-check completion for all artists
         window.dispatchEvent(new CustomEvent('mv-wanted-changed'));
       } catch {}
       return next;
     });
+
+    // Persist to watchlist: add if new, remove if toggling off
+    try {
+      if (wasWanted) {
+        // Already in watchlist — remove
+        if (album.id) {
+          await fetch('/api/watchlist?album_id=' + album.id, { method: 'DELETE' });
+        }
+      } else {
+        // Add to watchlist with minimal fields
+        await fetch('/api/watchlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            album_id: album.id || (artistName + '::' + album.title).toLowerCase().replace(/[^a-z0-9]/g, '_'),
+            artist:   artistName,
+            album:    album.title,
+            cover:    album.cover || null,
+            year:     album.year || null,
+          }),
+        });
+        // Notify parent so watchlist count updates everywhere
+        window.dispatchEvent(new CustomEvent('mv-watchlist-changed'));
+      }
+    } catch (e) { console.warn('Watchlist sync failed:', e); }
   };
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
@@ -214,14 +243,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
                   </button>
                 )}
                 <span style={{ fontSize:13, color:statusColor, ...MONO }}>{statusIcon}</span>
-                {!album.inCollection && !album.inWatchlist && album.wanted && (
-                  <button onClick={() => onAddToWatchlist(artistName, album)}
-                    style={{ background:'#1a0a0a', border:'1px solid #7f1d1d', borderRadius:6,
-                      color:'#f87171', padding:'3px 8px', fontSize:10, cursor:'pointer', ...MONO,
-                      whiteSpace:'nowrap' }}>
-                    + Watch
-                  </button>
-                )}
+                {/* Secondary watchlist button removed — ♥ click handles this directly */}
                 {!album.inCollection && !album.inWatchlist && !album.wanted && (
                   <button onClick={() => onAddToWatchlist(artistName, album)}
                     style={{ background:'#1a1a00', border:'1px solid '+C.gold, borderRadius:6,

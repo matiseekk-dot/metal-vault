@@ -241,6 +241,33 @@ export default function ProfileTab({
         </div>
       )}
 
+
+      {/* Language switcher — i18n */}
+      <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>
+          🌐 Language / Język
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[{id:'en', label:'English', flag:'🇬🇧'}, {id:'pl', label:'Polski', flag:'🇵🇱'}].map(lang => {
+            const active = getLocale() === lang.id;
+            return (
+              <button key={lang.id} onClick={() => setLocale(lang.id)}
+                style={{
+                  flex: 1, padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                  background: active ? C.accent + '22' : C.bg3,
+                  border: '1px solid ' + (active ? C.accent : C.border),
+                  color: active ? C.accent : C.dim,
+                  ...MONO, fontSize: 12, letterSpacing: '0.04em',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}>
+                <span style={{ fontSize: 16 }}>{lang.flag}</span>
+                {lang.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Insurance Report — Pro flagship feature */}
       <div style={{
         background: premium ? 'linear-gradient(135deg,#1a0a05,#0a0a0a)' : C.bg2,
@@ -276,7 +303,7 @@ export default function ProfileTab({
             {collection.length === 0 ? 'ADD RECORDS FIRST' : '📄 GENERATE REPORT (' + collection.length + ' ITEMS)'}
           </button>
         ) : (
-          <button onClick={onUpgrade}
+          <button onClick={() => window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'INSURANCE_REQUIRED' } }))}
             style={{
               width: '100%', background: 'linear-gradient(135deg,#dc2626,#991b1b)', border: 'none', borderRadius: 8,
               color: '#fff', padding: '12px', cursor: 'pointer',

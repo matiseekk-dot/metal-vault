@@ -11,9 +11,14 @@ export async function POST(request) {
   const { plan = 'monthly' } = await request.json().catch(() => ({}));
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
 
-  const priceId = plan === 'yearly'
-    ? process.env.STRIPE_PRICE_YEARLY
-    : process.env.STRIPE_PRICE_MONTHLY;
+  // Tier mapping — Pro (standard) vs Collector (arbitrage + AI + unlimited everything)
+  const PRICE_IDS = {
+    monthly:            process.env.STRIPE_PRICE_MONTHLY,
+    yearly:             process.env.STRIPE_PRICE_YEARLY,
+    collector_monthly:  process.env.STRIPE_PRICE_COLLECTOR_MONTHLY,
+    collector_yearly:   process.env.STRIPE_PRICE_COLLECTOR_YEARLY,
+  };
+  const priceId = PRICE_IDS[plan] || PRICE_IDS.monthly;
 
   if (!priceId) {
     return NextResponse.json({ error: 'Stripe price IDs not configured' }, { status: 503 });

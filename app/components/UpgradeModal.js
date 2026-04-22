@@ -1,30 +1,50 @@
 'use client';
 import { useState } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
+import { useT } from '@/lib/i18n';
 
 const FEATURES = [
-  { icon: '📦', free: 'Unlimited records',  pro: 'Unlimited records'     },
-  { icon: '🔔', free: '1 price alert',      pro: 'Unlimited alerts'      },
-  { icon: '📈', free: '—',                  pro: 'Price history charts'  },
-  { icon: '⚡', free: 'Daily price update', pro: 'On-demand refresh'     },
-  { icon: '📤', free: '—',                  pro: 'CSV / JSON export'     },
-  { icon: '📊', free: 'Basic stats',        pro: 'Full portfolio analytics'},
+  { icon: '📦', free: 'Unlimited',      pro: 'Unlimited'           },
+  { icon: '🔔', free: '3 alerts',       pro: 'Unlimited'           },
+  { icon: '🏛️', free: '—',             pro: 'Insurance PDF'       },
+  { icon: '💎', free: '—',              pro: 'Detailed grading'    },
+  { icon: '📈', free: '—',              pro: 'Price history'       },
+  { icon: '⚡', free: 'Daily',          pro: 'On-demand refresh'   },
+  { icon: '📤', free: '—',              pro: 'CSV / JSON export'   },
+  { icon: '🎭', free: 'Persona share',  pro: 'Persona + stats'     },
+  { icon: '📊', free: 'Basic stats',    pro: 'Full portfolio'      },
+  { icon: '🔔', free: 'Weekly digest',  pro: 'Daily + pre-orders'  },
+];
+
+// Feature matrix — tier unlocks
+const COLLECTOR_FEATURES = [
+  { icon: '📈', label: 'Market Intelligence (eBay + Discogs arbitrage)' },
+  { icon: '🤖', label: 'AI recommendations & similar bands' },
+  { icon: '🎯', label: 'Priority support' },
+  { icon: '⚙️', label: 'Bulk operations' },
+  { icon: '🚀', label: 'Early access to new features' },
 ];
 
 export default function UpgradeModal({ onClose, onCheckout, reason }) {
+  const t = useT();
+  const [tier,    setTier]    = useState('pro');           // 'pro' | 'collector'
   const [plan,    setPlan]    = useState('monthly');
   const [loading, setLoading] = useState(false);
 
   const handleUpgrade = async () => {
     setLoading(true);
-    await onCheckout(plan);
+    // Collector plans use prefix 'collector_' for Stripe price lookup
+    const planKey = tier === 'collector' ? ('collector_' + plan) : plan;
+    await onCheckout(planKey);
     setLoading(false);
   };
 
-  const reasonMessages = {
-    ALERT_LIMIT_REACHED: '🔔 Free plan includes 1 price alert.',
-    PREMIUM_REQUIRED:    '⚡ This feature requires Metal Vault Pro.',
-    PRICE_HISTORY:       '📈 Price history is a Pro feature.',
+  // Reason text pulled from i18n via key lookup: paywall.reason.<REASON>
+  const getReasonMessage = () => {
+    if (!reason) return null;
+    const key = 'paywall.reason.' + reason;
+    const translated = t(key);
+    return translated === key ? reason : translated;  // fallback to reason itself if no translation
   };
 
   return (
@@ -42,15 +62,15 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
 
         {/* Header */}
         <div style={{ padding: '20px 20px 0', textAlign: 'center' }}>
-          {reason && (reasonMessages[reason] || reason) && (
+          {reason && (
             <div style={{ background: '#1a0a00', border: '1px solid #f97316', borderRadius: 8,
               padding: '8px 14px', fontSize: 12, color: '#f97316', ...MONO, marginBottom: 16 }}>
-              {reasonMessages[reason] || reason}
+              {getReasonMessage()}
             </div>
           )}
           <div style={{ fontSize: 13, color: C.accent, ...MONO, letterSpacing: '0.25em',
             textTransform: 'uppercase', marginBottom: 6 }}>
-            Upgrade to
+            {t('paywall.upgradeTo')}
           </div>
           <div style={{ ...BEBAS, fontSize: 44, lineHeight: 1,
             background: 'linear-gradient(135deg, #dc2626, #f5c842)',
@@ -58,16 +78,41 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
             METAL VAULT PRO
           </div>
           <div style={{ fontSize: 12, color: C.muted, ...MONO, marginTop: 6, marginBottom: 20 }}>
-            7-day free trial · cancel anytime
+            {t('paywall.trial')}
           </div>
         </div>
 
-        {/* Plan toggle */}
+        {/* Tier toggle — Pro vs Collector */}
+        <div style={{ display: 'flex', margin: '0 20px 10px', background: C.bg3, borderRadius: 12, padding: 4, border: '1px solid ' + C.border }}>
+          {[
+            { id: 'pro',       label: 'PRO',       sub: 'Essentials' },
+            { id: 'collector', label: 'COLLECTOR', sub: 'Power user' },
+          ].map(tr => (
+            <button key={tr.id} onClick={() => setTier(tr.id)} style={{
+              flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: tier === tr.id
+                ? (tr.id === 'collector' ? 'linear-gradient(135deg,#f5c842,#b8860b)' : C.accent)
+                : 'transparent',
+              transition: 'all 0.2s',
+            }}>
+              <div style={{ ...BEBAS, fontSize: 14, letterSpacing: '0.08em',
+                color: tier === tr.id ? (tr.id === 'collector' ? '#1a0800' : '#fff') : C.dim }}>
+                {tr.label}
+              </div>
+              <div style={{ fontSize: 9, ...MONO,
+                color: tier === tr.id ? (tr.id === 'collector' ? '#3a2000' : '#ffffffaa') : C.muted }}>
+                {tr.sub}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Plan toggle (monthly vs yearly) */}
         <div style={{ display: 'flex', margin: '0 20px 20px', background: C.bg3,
           borderRadius: 12, padding: 4, border: '1px solid ' + C.border }}>
           {[
-            { id: 'monthly', label: 'Monthly', price: '9.99 PLN' },
-            { id: 'yearly',  label: 'Yearly',  price: '79.99 PLN', badge: 'SAVE 33%' },
+            { id: 'monthly', label: t('paywall.monthly'), price: tier === 'collector' ? '39.99 PLN' : '19.99 PLN' },
+            { id: 'yearly',  label: t('paywall.yearly'),  price: tier === 'collector' ? '299 PLN'   : '149 PLN',  badge: t('paywall.yearlyBadge') },
           ].map(p => (
             <button key={p.id} onClick={() => setPlan(p.id)} style={{
               flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', cursor: 'pointer',
@@ -96,8 +141,8 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
           <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr',
             padding: '8px 14px', borderBottom: '1px solid ' + C.border }}>
             <div />
-            <div style={{ fontSize: 9, color: C.dim, ...MONO, letterSpacing: '0.15em', textAlign: 'center' }}>FREE</div>
-            <div style={{ fontSize: 9, color: C.accent, ...MONO, letterSpacing: '0.15em', textAlign: 'center' }}>PRO</div>
+            <div style={{ fontSize: 9, color: C.dim, ...MONO, letterSpacing: '0.15em', textAlign: 'center' }}>{t('common.free')}</div>
+            <div style={{ fontSize: 9, color: C.accent, ...MONO, letterSpacing: '0.15em', textAlign: 'center' }}>{t('common.pro')}</div>
           </div>
           {FEATURES.map((f, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr',
@@ -114,25 +159,46 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
           ))}
         </div>
 
+        {/* Collector extras — shown only when Collector tier selected */}
+        {tier === 'collector' && (
+          <div style={{ margin: '0 20px 20px', background: 'linear-gradient(135deg, #1a1000, #0a0700)',
+            border: '1px solid #b8860b', borderRadius: 12, padding: 14 }}>
+            <div style={{ ...BEBAS, fontSize: 14, color: '#f5c842', letterSpacing: '0.1em', marginBottom: 10 }}>
+              ⭐ COLLECTOR EXTRAS
+            </div>
+            {COLLECTOR_FEATURES.map((f, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>{f.icon}</span>
+                <span style={{ fontSize: 11, color: '#f5c842', ...MONO }}>{f.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* CTA */}
         <div style={{ padding: '0 20px 12px' }}>
           <button onClick={handleUpgrade} disabled={loading} style={{
             width: '100%', padding: '16px',
-            background: loading ? C.bg3 : 'linear-gradient(135deg, #dc2626, #991b1b)',
-            border: 'none', borderRadius: 14, color: '#fff', cursor: loading ? 'default' : 'pointer',
+            background: loading ? C.bg3
+              : (tier === 'collector'
+                ? 'linear-gradient(135deg, #f5c842, #b8860b)'
+                : 'linear-gradient(135deg, #dc2626, #991b1b)'),
+            border: 'none', borderRadius: 14,
+            color: tier === 'collector' ? '#1a0800' : '#fff',
+            cursor: loading ? 'default' : 'pointer',
             ...BEBAS, fontSize: 22, letterSpacing: '0.08em',
-            boxShadow: loading ? 'none' : '0 4px 24px #dc262644',
+            boxShadow: loading ? 'none' : (tier === 'collector' ? '0 4px 24px #f5c84244' : '0 4px 24px #dc262644'),
             transition: 'all 0.2s',
           }}>
-            {loading ? 'REDIRECTING…' : '🤘 START FREE TRIAL'}
+            {loading ? t('paywall.cta.loading') : t('paywall.cta')}
           </button>
           <div style={{ fontSize: 10, color: C.dim, ...MONO, textAlign: 'center', marginTop: 10 }}>
-            Powered by Stripe · BLIK, P24, card accepted · cancel anytime
+            {t('paywall.powered')}
           </div>
           <button onClick={onClose} style={{ display: 'block', width: '100%', marginTop: 8,
             background: 'none', border: 'none', color: C.dim, cursor: 'pointer', ...MONO, fontSize: 11,
             padding: '8px', textAlign: 'center' }}>
-            Maybe later
+            {t('paywall.laterBtn')}
           </button>
         </div>
       </div>

@@ -56,6 +56,7 @@ export default function MetalVault() {
   const [genreInterests,  setGenreInterests]  = useState(() => loadLS('mv_genre_interests', []));
   const [showGenrePicker, setShowGenrePicker] = useState(false);
   const [pushEnabled,     setPushEnabled]     = useState(false);
+  const [streak,          setStreak]          = useState(0);
   const [pushLoading,     setPushLoading]     = useState(false);
   const [shareToken,      setShareToken]      = useState(null);
   const [discogsConnected,setDiscogsConnected]= useState(false);
@@ -132,6 +133,51 @@ export default function MetalVault() {
     window.addEventListener('mv:upgrade', handler);
     return () => window.removeEventListener('mv:upgrade', handler);
   }, []); // eslint-disable-line
+
+  // Refetch watchlist when ♥ toggle in discography modifies it
+  useEffect(() => {
+    const refetch = async () => {
+      if (!user) return;
+      try {
+        const r = await fetch('/api/watchlist');
+        const d = await r.json();
+        if (d.items) col.setWatchlist(d.items);
+      } catch {}
+    };
+    window.addEventListener('mv-watchlist-changed', refetch);
+    return () => window.removeEventListener('mv-watchlist-changed', refetch);
+  }, [user]); // eslint-disable-line
+
+  // Open scanner from anywhere (e.g., ManualAddForm "Scan barcode" button)
+  useEffect(() => {
+    const handler = () => setShowScanner(true);
+    window.addEventListener('mv:open-scanner', handler);
+    return () => window.removeEventListener('mv:open-scanner', handler);
+  }, []);
+
+  // Daily streak — ping server once per session (idempotent), display current count
+  useEffect(() => {
+    if (!user) { setStreak(0); return; }
+    const today = new Date().toISOString().split('T')[0];
+    const lastPinged = typeof localStorage !== 'undefined' ? localStorage.getItem('mv_streak_pinged') : null;
+    const run = async () => {
+      try {
+        if (lastPinged === today) {
+          // Already pinged today — just fetch display value
+          const r = await fetch('/api/streak');
+          const d = await r.json();
+          if (typeof d.current_streak === 'number') setStreak(d.current_streak);
+        } else {
+          // First open of the day — POST increments, returns new streak
+          const r = await fetch('/api/streak', { method: 'POST' });
+          const d = await r.json();
+          if (typeof d.current_streak === 'number') setStreak(d.current_streak);
+          try { localStorage.setItem('mv_streak_pinged', today); } catch {}
+        }
+      } catch {}
+    };
+    run();
+  }, [user]);
 
   // Push status + OAuth return params
   useEffect(() => {
@@ -369,7 +415,19 @@ export default function MetalVault() {
               {tab==='feed'?'RELEASES':tab==='collection'?'COLLECTION':tab==='profile'?'PROFILE':tab.toUpperCase()}
             </div>
           </div>
-          {/* Live collection value — the #1 reason to open the app */}
+          {/* Live collection value + streak — the #1 reason to open the app */}
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            {/* Streak badge — visible as soon as >= 2 days (day 1 is noise) */}
+            {user && streak >= 2 && (
+              <div title={streak + '-day streak'} style={{
+                display:'flex', alignItems:'center', gap:3,
+                background:'#1a0a00', border:'1px solid #7f1d1d', borderRadius:14,
+                padding:'3px 9px',
+              }}>
+                <span style={{ fontSize:11 }}>🔥</span>
+                <span style={{ ...BEBAS, fontSize:13, color:'#f5c842', lineHeight:1, letterSpacing:'0.02em' }}>{streak}</span>
+              </div>
+            )}
           {user && col.collectionSummary && col.collectionSummary.totalCurrent > 0 ? (
             <button onClick={()=>setTab('stats')} style={{ background:'none', border:'none', cursor:'pointer', textAlign:'right', padding:0 }}>
               <div style={{ ...BEBAS, fontSize:22, color:C.gold, lineHeight:1, letterSpacing:'0.04em' }}>
@@ -384,6 +442,7 @@ export default function MetalVault() {
           ) : user ? (
             <div style={{ fontSize:10, color:'#4ade80', ...MONO }}>✓ {user.email?.split('@')[0]}</div>
           ) : null}
+          </div>
         </div>
         {source==='mock' && <div style={{ fontSize:9, color:'#555', ...MONO, marginTop:2 }}>⚠ Demo mode — add Discogs API keys</div>}
       </div>
@@ -491,6 +550,7 @@ export default function MetalVault() {
             onAlbumClick={openAlbum} onRemove={col.removeFromCollection} onUpdate={col.setCollection} portfolio={col.portfolio} AlbumCover={AlbumCover}
             onManualAdd={async(item)=>{ await col.addToCollection(item); }}
             premium={premium} onUpgrade={triggerUpgrade}
+            onConnectDiscogs={connectDiscogs} discogsConnected={discogsConnected}
             followedArtists={col.followedArtists} onToggleFollow={col.toggleFollow}
             onBatchFollow={async (artists) => {
               // Add all newly followed artists to state
@@ -558,6 +618,9 @@ export default function MetalVault() {
             await connectDiscogs();
           }}
           isConnected={discogsConnected}
+          onTogglePush={togglePush}
+          pushEnabled={pushEnabled}
+          pushLoading={pushLoading}
         />
       )}
 
