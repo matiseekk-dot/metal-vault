@@ -1,11 +1,13 @@
 // ── Cache warmer for /api/releases ─────────────────────────────────
-// Runs every hour to keep `releases:global:DATE` cache fresh.
-// Without this, the first user of each hour pays a 25s wait while we
-// fetch 22 searches + 120 details from Discogs sequentially.
+// Runs daily at 7:30 UTC (~30 min before daily-digest cron at 8:00).
+// Vercel Hobby tier limits crons to once per day; on Pro tier you can
+// change to hourly ('5 * * * *') for sub-daily freshness.
 //
-// With this cron, /api/releases is always served from cache for the
-// 99.9% common case. Only edge cases (cache miss + first request) hit
-// Discogs live, and even then they get the 24h-cached details layer.
+// Daily warmup means: first user of the day might still hit a partial
+// cache miss if they open the app during the 23h between cron runs.
+// In practice this is fine — global cache TTL is 1h but the warmer
+// rebuilds it once a day, and the per-detail cache (24h TTL) covers
+// the rest with minimal Discogs hits.
 
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
