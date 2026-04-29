@@ -16,12 +16,13 @@ import UpgradeModal from '@/app/components/UpgradeModal';
 import nextDynamic from 'next/dynamic';
 export const dynamic = 'force-dynamic';
 
+// Dynamic imports — only for components actually used directly in this file.
+// SearchTab/StatsTab/ConcertsTab/CalendarTab used to be top-level tabs but are now
+// wrapped inside VaultTab/WhensOnTab → those imports created identifier collisions
+// with VaultTab's static imports of the same modules, causing production build
+// to crash with "VaultTab is not defined" after tree-shaking. Removed.
 const ScannerTab    = nextDynamic(() => import('@/app/scanner/ScannerTab'),    { ssr: false });
 const DiscogsImport = nextDynamic(() => import('@/app/import/DiscogsImport'),  { ssr: false });
-const SearchTab     = nextDynamic(() => import('@/app/search/SearchTab'),       { ssr: false });
-const StatsTab      = nextDynamic(() => import('@/app/stats/StatsTab'),         { ssr: false });
-const ConcertsTab   = nextDynamic(() => import('@/app/concerts/ConcertsTab'),   { ssr: false });
-const CalendarTab   = nextDynamic(() => import('@/app/calendar/CalendarTab'),   { ssr: false });
 
 const FILTERS = [
   { id:'all',      label:'🔥 All'       },
