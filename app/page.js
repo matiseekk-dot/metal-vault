@@ -416,7 +416,7 @@ export default function MetalVault() {
           <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
             <div style={{ ...BEBAS, fontSize:28, letterSpacing:'0.08em', color:C.text, lineHeight:1 }}>METAL VAULT</div>
             <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.2em', textTransform:'uppercase' }}>
-              {tab==='feed'?'RELEASES':tab==='collection'?'COLLECTION':tab==='profile'?'PROFILE':tab.toUpperCase()}
+              {tab==='feed'?'RELEASES':tab==='vault'?'VAULT':tab==='calendar'?"WHEN'S ON":tab==='profile'?'PROFILE':tab.toUpperCase()}
             </div>
           </div>
           {/* Live collection value + streak — the #1 reason to open the app */}
@@ -541,23 +541,21 @@ export default function MetalVault() {
           </>
         )}
 
-        {tab==='watchlist' && (
-          <WatchlistTab watchlist={col.watchlist}
-            onRemove={async(id)=>{ if(user)await fetch('/api/watchlist?album_id='+id,{method:'DELETE'}); col.setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id)); }}
-            onAlbumClick={openAlbum} user={user} AlbumCover={AlbumCover}/>
-        )}
-
-        {tab==='collection' && (
-          <ErrorBoundary name="Collection"><CollectionTab user={user} collection={col.collection} watchlist={col.watchlist}
+        {tab==='vault' && (
+          <ErrorBoundary name="Vault"><VaultTab
+            user={user}
+            collection={col.collection}
+            watchlist={col.watchlist}
+            collectionSummary={col.collectionSummary}
             onRemoveWatch={async(id)=>{ if(user)await fetch('/api/watchlist?album_id='+id,{method:'DELETE'}); col.setWatchlist(w=>w.filter(x=>(x.album_id||x.id)!==id)); }}
             onAddToWatchlist={async(artist,album)=>{ const item={artist,album:album.title,album_id:album.id,cover:album.cover}; col.setWatchlist(w=>[...w,{...item,id:album.id}]); if(user)await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)}); }}
-            onAlbumClick={openAlbum} onRemove={col.removeFromCollection} onUpdate={col.setCollection} portfolio={col.portfolio} AlbumCover={AlbumCover}
+            onAlbumClick={openAlbum} onRemove={col.removeFromCollection} onUpdate={col.setCollection}
+            portfolio={col.portfolio} AlbumCover={AlbumCover}
             onManualAdd={async(item)=>{ await col.addToCollection(item); }}
             premium={premium} onUpgrade={triggerUpgrade}
             onConnectDiscogs={connectDiscogs} discogsConnected={discogsConnected}
             followedArtists={col.followedArtists} onToggleFollow={col.toggleFollow}
             onBatchFollow={async (artists) => {
-              // Add all newly followed artists to state
               const newArtists = artists.map(name => ({ artist_name: name, user_id: user?.id }));
               col.setFollowedArtists(a => [...a, ...newArtists.filter(n => !a.some(x => x.artist_name === n.artist_name))]);
             }}
@@ -566,13 +564,16 @@ export default function MetalVault() {
               const d = await r.json();
               if(d.updated>0) await col.loadUserData(user);
               return d.message;
-            }}/></ErrorBoundary>
+            }}
+          /></ErrorBoundary>
         )}
 
-        {tab==='search'   && <ErrorBoundary name="Search"><SearchTab onWatch={col.toggleWatch} onAddCollection={item=>col.addToCollection(item)} watchlist={col.watchlist} collection={col.collection}/></ErrorBoundary>}
-        {tab==='concerts' && <ErrorBoundary name="Concerts"><ConcertsTab/></ErrorBoundary>}
-        {tab==='calendar' && <ErrorBoundary name="Calendar"><CalendarTab releases={releases} followedArtists={col.followedArtists}/></ErrorBoundary>}
-        {tab==='stats'    && <ErrorBoundary name="Stats & Persona"><StatsTab collection={col.collection} watchlist={col.watchlist} collectionSummary={col.collectionSummary}/></ErrorBoundary>}
+        {tab==='calendar' && (
+          <ErrorBoundary name="When's On"><WhensOnTab
+            releases={releases}
+            followedArtists={col.followedArtists}
+          /></ErrorBoundary>
+        )}
 
         {tab==='profile' && discogsError && (
           <div style={{margin:'12px 16px',padding:'14px',background:'#2a0000',border:'1px solid #7f1d1d',borderRadius:10,color:'#f87171',fontSize:12,fontFamily:"'Space Mono',monospace",lineHeight:1.6}}>
@@ -600,7 +601,7 @@ export default function MetalVault() {
         )}
       </div>
 
-      <BottomNav tab={tab} onChange={setTab} user={user}/>
+      <BottomNav tab={tab} onChange={setTab} user={user} onScan={()=>setShowScanner(true)}/>
 
       {showUpgrade && (
         <UpgradeModal
@@ -628,9 +629,7 @@ export default function MetalVault() {
         />
       )}
 
-      {(tab==='feed'||tab==='search'||tab==='collection') && (
-        <button onClick={()=>setShowScanner(true)} style={{ position:'fixed', bottom:80, right:16, zIndex:90, width:56, height:56, borderRadius:16, background:'linear-gradient(135deg,#dc2626,#991b1b)', border:'none', color:'#fff', cursor:'pointer', fontSize:24, boxShadow:'0 4px 24px rgba(220,38,38,0.5)', display:'flex', alignItems:'center', justifyContent:'center' }}>📷</button>
-      )}
+      {/* Floating scan FAB removed — Scan is now the centered tab in BottomNav */}
 
       {showScanner && (
         <div style={{ position:'fixed', inset:0, background:'#000000cc', zIndex:200, display:'flex', flexDirection:'column', justifyContent:'flex-end' }} onClick={e=>e.target===e.currentTarget&&setShowScanner(false)}>

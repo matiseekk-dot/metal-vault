@@ -331,16 +331,18 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
 }
 
 
-// ── BottomNav ─────────────────────────────────────────────────
-export function BottomNav({tab,onChange,watchCount,user}){
+// ── BottomNav (5-tab IA + center scan FAB) ─────────────────────
+// Structure: Feed · Vault · [Scan] · Calendar · Profile
+// Scan is a centered raised button that always opens the barcode scanner.
+import Icon from '@/app/components/Icon';
+
+export function BottomNav({tab,onChange,watchCount,user,onScan}){
   const tabs=[
-    {id:'feed',      icon:'🔥', label:'Feed'},
-    {id:'search',    icon:'🔍', label:'Search'},
-    {id:'collection',icon:'📦', label:'Vault'},
-    {id:'calendar',  icon:'📅', label:'Cal'},
-    {id:'concerts',  icon:'🎸', label:'Live'},
-    {id:'stats',     icon:'📊', label:'Stats'},
-    {id:'profile',   icon:'👤', label:'Me'},
+    {id:'feed',      iconName:'fire',     label:'Feed'},
+    {id:'vault',     iconName:'pkg',      label:'Vault'},
+    {id:'scan',      iconName:'scan',     label:'Scan',  isAction:true},
+    {id:'calendar',  iconName:'calendar', label:'When'},
+    {id:'profile',   iconName:'user',     label:'Me'},
   ];
   return(
     <div style={{
@@ -348,42 +350,66 @@ export function BottomNav({tab,onChange,watchCount,user}){
       borderTop:'1px solid '+C.border,zIndex:100,
       paddingBottom:'env(safe-area-inset-bottom,0px)',
       boxShadow:'0 -4px 20px #00000088',
-      display:'grid',gridTemplateColumns:'repeat(7,1fr)',
-      overflow:'hidden',
+      display:'grid',gridTemplateColumns:'repeat(5,1fr)',
+      overflow:'visible',
     }}>
-      {tabs.map(t=>(
-        <button key={t.id} onClick={()=>onChange(t.id)}
-          style={{
-            background:'none',border:'none',cursor:'pointer',
-            display:'flex',flexDirection:'column',alignItems:'center',
-            justifyContent:'center',padding:'6px 0 5px',
-            borderTop:tab===t.id?'2px solid '+C.accent:'2px solid transparent',
-            overflow:'hidden',minWidth:0,
-          }}>
-          <span style={{
-            fontSize:tab===t.id?18:15,
-            lineHeight:1,
-            color:tab===t.id?'#fff':'#555',
-            transition:'font-size 0.15s',
-            display:'block',
-          }}>{t.icon}</span>
-          <span style={{
-            fontSize:'8px',
-            color:tab===t.id?C.accent:'#444',
-            fontFamily:'system-ui,-apple-system,sans-serif',
-            fontWeight:tab===t.id?'600':'400',
-            lineHeight:1.3,
-            marginTop:2,
-            display:'block',
-            width:'100%',
-            textAlign:'center',
-            overflow:'hidden',
-            textOverflow:'ellipsis',
-            whiteSpace:'nowrap',
-            letterSpacing:'-0.01em',
-          }}>{t.label}</span>
-        </button>
-      ))}
+      {tabs.map(t=>{
+        // Center scan button is always raised, never selected
+        if (t.isAction) {
+          return (
+            <div key={t.id} style={{ position:'relative', display:'flex', justifyContent:'center', alignItems:'flex-start' }}>
+              <button onClick={()=>{ if (onScan) onScan(); else onChange('scan'); }}
+                style={{
+                  position:'absolute', top:-22,
+                  width:54, height:54, borderRadius:18,
+                  background:'linear-gradient(135deg,#dc2626,#991b1b)',
+                  border:'3px solid #0d0d0d',
+                  color:'#fff', cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  boxShadow:'0 4px 16px #dc262666',
+                }}
+                aria-label="Scan barcode">
+                <Icon name="scan" size={22} color="#fff"/>
+              </button>
+              {/* Reserve label space below */}
+              <span style={{
+                position:'absolute', bottom:6, fontSize:8,
+                color:'#888', fontFamily:'system-ui,sans-serif', fontWeight:600,
+                letterSpacing:'-0.01em',
+              }}>Scan</span>
+            </div>
+          );
+        }
+        const active = tab === t.id;
+        return (
+          <button key={t.id} onClick={()=>onChange(t.id)}
+            style={{
+              background:'none',border:'none',cursor:'pointer',
+              display:'flex',flexDirection:'column',alignItems:'center',
+              justifyContent:'center',padding:'8px 0 5px',
+              borderTop: active ? '2px solid '+C.accent : '2px solid transparent',
+              overflow:'hidden',minWidth:0,
+            }}>
+            <Icon name={t.iconName} size={active?20:18}
+              color={active ? '#fff' : '#666'}/>
+            <span style={{
+              fontSize:'9px',
+              color: active ? C.accent : '#555',
+              fontFamily:'system-ui,-apple-system,sans-serif',
+              fontWeight: active ? 600 : 400,
+              lineHeight:1.3,
+              marginTop:3,
+              display:'block',
+              width:'100%',
+              textAlign:'center',
+              overflow:'hidden',
+              textOverflow:'ellipsis',
+              whiteSpace:'nowrap',
+              letterSpacing:'-0.01em',
+            }}>{t.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
