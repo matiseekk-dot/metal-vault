@@ -133,7 +133,10 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
     setStatus('');
   }, []);
 
-  // Lookup barcode
+  // Lookup barcode — offline-first chain:
+  //   1) Check local IDB (own collection + watchlist)
+  //   2) Try /api/barcode (SW cached → live)
+  //   3) If offline + not in local, queue for later
   const lookup = useCallback(async (code) => {
     if (!code || code === lastScan) return;
     setLastScan(code);
@@ -142,15 +145,64 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
     setResult(null);
     setStatus(`Found: ${code}`);
 
+    // 1) Local IDB lookup — fastest, works fully offline.
+    //    Only matches items already in user's collection/watchlist.
+    try {
+      const local = await lookupBarcodeLocal(code);
+      if (local) {
+        setResult({
+          found: true,
+          barcode: code,
+          source: 'local',
+          local,                // { kind, artist, album, cover, format, item_id }
+          results: [{
+            artist: local.artist,
+            album:  local.album,
+            cover:  local.cover,
+            format: local.format,
+            id:     local.item_id,
+            owned:  local.kind === 'collection',
+            wanted: local.kind === 'watchlist',
+          }],
+        });
+        setScanCount(n => n + 1);
+        setLoading(false);
+        return;
+      }
+    } catch {}
+
+    // 2) Network or SW cache. SW serves stale-while-revalidate so previously
+    //    scanned barcodes work offline even if not in user's collection.
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+
     try {
       const r = await fetch(`/api/barcode?barcode=${encodeURIComponent(code)}`);
       const d = await r.json();
-      if (d.error) { setError(d.error); }
-      else if (!d.found) { setError(`No Discogs results for barcode: ${code}`); }
-      else { setResult(d); setScanCount(n => n + 1); }
+      if (d.error) {
+        // 3) Offline + no local match + no SW cache → queue for later replay
+        if (isOffline) {
+          queuePendingScan(code);
+          setError(`Saved offline: ${code} — we'll look it up when you're back online.`);
+        } else {
+          setError(d.error);
+        }
+      } else if (!d.found) {
+        if (isOffline) {
+          queuePendingScan(code);
+          setError(`Saved offline: ${code} — no local match, will retry when online.`);
+        } else {
+          setError(`No Discogs results for barcode: ${code}`);
+        }
+      } else {
+        setResult(d);
+        setScanCount(n => n + 1);
+      }
     } catch (e) {
-      setError(e.message);
+      // Total fail = network error AND no SW cache. Queue.
+      queuePendingScan(code);
+      setError(`Saved offline: ${code} — couldn't reach Discogs. Will look up later.`);
     }
+
     setLoading(false);
   }, [lastScan]);
 
@@ -370,6 +422,15 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
       {/* Results */}
       {result && !loading && (
         <div style={{ padding: '0 16px' }}>
+          {result.source === 'local' && (
+            <div style={{
+              background: '#0d1f0d', border: '1px solid #1a4d1a',
+              borderRadius: 8, padding: '8px 12px', marginBottom: 10,
+              fontSize: 11, color: '#4ade80', ...MONO, lineHeight: 1.5,
+            }}>
+              ✓ Found in your {result.local?.kind === 'collection' ? 'collection' : 'wantlist'} — works offline
+            </div>
+          )}
           {result.results.length > 1 && (
             <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.1em', marginBottom: 10 }}>
               {result.results.length} RESULTS FOUND

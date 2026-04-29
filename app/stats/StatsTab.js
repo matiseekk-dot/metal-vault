@@ -267,6 +267,63 @@ function TopLabels({ collection }) {
 }
 
 // ── Main export ───────────────────────────────────────────────
+
+// ── ConcertProximityCard — sub-card inside PersonaCard ──
+// Asynchronously fetches /api/concerts/proximity-score and renders a tour
+// archetype line ("Festival Hunter — 3 festivals feature your bands…").
+// Returns null if no data — never blocks PersonaCard render.
+function ConcertProximityCard() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    fetch('/api/concerts/proximity-score')
+      .then(r => r.json())
+      .then(d => { if (d && !d.error) setData(d); })
+      .catch(() => {});
+  }, []);
+  if (!data || data.score === 0) return null;
+
+  const colorByArchetype = {
+    'Festival Hunter':    '#f5c842',
+    'Tour Chaser':        '#dc2626',
+    'Active Concertgoer': '#dc2626',
+    'Selective Listener': '#888',
+    'Studio Loyalist':    '#888',
+  };
+  const color = colorByArchetype[data.archetype] || '#dc2626';
+
+  return (
+    <div style={{ background: '#0a0a0a', border: '1px solid ' + color + '44',
+      borderRadius: 8, padding: 10, marginBottom: 12 }}>
+      <div style={{ fontSize: 9, color, letterSpacing: '0.2em', ...MONO,
+        display: 'flex', alignItems: 'center', gap: 5 }}>
+        <Icon name="music" size={11} color={color}/> TOUR PERSONA
+      </div>
+      <div style={{ fontSize: 13, color: '#f0f0f0', ...BEBAS,
+        letterSpacing: '0.03em', marginTop: 3 }}>
+        {data.archetype}
+      </div>
+      <div style={{ fontSize: 11, color: '#888', ...MONO, marginTop: 2 }}>
+        {data.headline}
+      </div>
+      {data.stats && data.stats.bands > 0 && (
+        <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+          <div style={{ fontSize: 10, color: '#888', ...MONO }}>
+            <span style={{ color: '#f0f0f0', ...BEBAS, fontSize: 14 }}>{data.stats.bands}</span> bands
+          </div>
+          {data.stats.festivals > 0 && (
+            <div style={{ fontSize: 10, color: '#888', ...MONO }}>
+              <span style={{ color: color, ...BEBAS, fontSize: 14 }}>{data.stats.festivals}</span> festivals
+            </div>
+          )}
+          <div style={{ fontSize: 10, color: '#888', ...MONO }}>
+            <span style={{ color: '#f0f0f0', ...BEBAS, fontSize: 14 }}>{data.stats.total}</span> shows
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── PersonaCard — shareable metal identity card ──
 function PersonaCard() {
   const [persona, setPersona] = useState(null);
@@ -474,6 +531,9 @@ function PersonaCard() {
           </div>
         </div>
       )}
+
+      {/* Tour persona — concert proximity (hidden if no Bandsintown data) */}
+      <ConcertProximityCard/>
 
       <button onClick={sharePersona} disabled={sharing}
         style={{ width: '100%', background: '#dc2626', border: 'none', borderRadius: 8,

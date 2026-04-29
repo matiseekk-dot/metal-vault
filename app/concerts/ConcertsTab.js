@@ -50,6 +50,159 @@ function Stars({value,onChange}){
 }
 
 
+
+// ── AttendancePrompts — "Did you go to X?" banner ─────────────────
+// Shows pending events from concert_attendance_prompts. User can confirm
+// (auto-fills concert form via callback) or dismiss. Prompts come from
+// daily snapshot of followed artists' past Bandsintown events.
+function AttendancePrompts({ onAttendConfirm }) {
+  const [prompts, setPrompts] = useState([]);
+  const [hidden,  setHidden]  = useState(false);
+
+  useEffect(() => {
+    fetch('/api/concerts/attendance')
+      .then(r => r.json())
+      .then(d => setPrompts(d.prompts || []))
+      .catch(() => setPrompts([]));
+  }, []);
+
+  const respond = async (eventId, status, prompt) => {
+    setPrompts(p => p.filter(x => x.event_id !== eventId));
+    try {
+      await fetch('/api/concerts/attendance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: eventId, status }),
+      });
+    } catch {}
+    if (status === 'attended' && onAttendConfirm) onAttendConfirm(prompt);
+  };
+
+  if (hidden || prompts.length === 0) return null;
+
+  return (
+    <div style={{
+      margin: '10px 16px', background: '#0d1a0d',
+      border: '1px solid #1a4d1a', borderRadius: 10, padding: '12px 14px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: 10, color: '#4ade80', ...MONO,
+          letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+          {prompts.length} show{prompts.length > 1 ? 's' : ''} you may have attended
+        </div>
+        <button onClick={() => setHidden(true)}
+          style={{ background: 'none', border: 'none', color: C.dim,
+            cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+      </div>
+
+      {prompts.slice(0, 3).map(p => (
+        <div key={p.event_id} style={{
+          background: C.bg3, borderRadius: 8, padding: '10px 12px',
+          marginBottom: 6,
+        }}>
+          <div style={{ fontSize: 12, color: C.text, ...MONO, marginBottom: 2 }}>
+            <span style={{ ...BEBAS, fontSize: 14, letterSpacing: '0.04em' }}>{p.artist}</span>
+          </div>
+          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 8 }}>
+            {[p.venue, p.city].filter(Boolean).join(' · ')} · {p.event_date}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => respond(p.event_id, 'attended', p)}
+              style={{ flex: 1, padding: '7px',
+                background: '#0a3d0a', border: '1px solid #1a6d1a',
+                borderRadius: 6, color: '#4ade80', cursor: 'pointer',
+                ...MONO, fontSize: 11, letterSpacing: '0.04em' }}>
+              ✓ Yes, I went
+            </button>
+            <button onClick={() => respond(p.event_id, 'dismissed', p)}
+              style={{ flex: 1, padding: '7px',
+                background: 'transparent', border: '1px solid ' + C.border,
+                borderRadius: 6, color: C.dim, cursor: 'pointer',
+                ...MONO, fontSize: 11 }}>
+              No
+            </button>
+          </div>
+        </div>
+      ))}
+      {prompts.length > 3 && (
+        <div style={{ fontSize: 9, color: C.dim, ...MONO, textAlign: 'center', marginTop: 4 }}>
+          +{prompts.length - 3} more
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ── SetlistViewer — fetch + display setlist for a concert ──
+// Lazily loads setlist.fm data when user expands a concert in the list.
+// Caches per concert ID via state — no re-fetch on collapse/expand.
+function SetlistViewer({ artist, year, city, onClose }) {
+  const [data, setData] = useState({ loading: true, setlists: [] });
+
+  useEffect(() => {
+    const params = new URLSearchParams({ artist });
+    if (year) params.set('year', year);
+    if (city) params.set('city', city);
+    fetch('/api/setlist?' + params.toString())
+      .then(r => r.json())
+      .then(d => setData({ loading: false, setlists: d.setlists || [], skipped: d.skipped }))
+      .catch(() => setData({ loading: false, setlists: [] }));
+  }, [artist, year, city]);
+
+  if (data.loading) {
+    return (
+      <div style={{ padding: '12px', textAlign: 'center', color: C.dim, ...MONO, fontSize: 11 }}>
+        Searching setlist.fm…
+      </div>
+    );
+  }
+
+  if (data.skipped === 'not_configured') {
+    return (
+      <div style={{ padding: '12px', color: C.dim, ...MONO, fontSize: 10, lineHeight: 1.5 }}>
+        Setlist lookup not configured. Set SETLISTFM_API_KEY to enable.
+      </div>
+    );
+  }
+
+  if (data.setlists.length === 0) {
+    return (
+      <div style={{ padding: '12px', color: C.dim, ...MONO, fontSize: 11, textAlign: 'center' }}>
+        No setlist found for this show.
+        <a href={'https://www.setlist.fm/search?query=' + encodeURIComponent(artist + (year ? ' ' + year : ''))}
+          target="_blank" rel="noopener noreferrer"
+          style={{ display: 'block', marginTop: 6, color: C.accent, fontSize: 10 }}>
+          Search setlist.fm →
+        </a>
+      </div>
+    );
+  }
+
+  // Show first match — usually most relevant when filtered by year+city
+  const sl = data.setlists[0];
+  return (
+    <div style={{ padding: '10px 12px', background: C.bg3, borderRadius: 6 }}>
+      <div style={{ fontSize: 9, color: C.accent, ...MONO, letterSpacing: '0.15em',
+        textTransform: 'uppercase', marginBottom: 6 }}>
+        Setlist · {sl.eventDate}{sl.tour ? ' · ' + sl.tour : ''}
+      </div>
+      <ol style={{ margin: 0, paddingLeft: 22, color: C.text, fontSize: 11, ...MONO, lineHeight: 1.6 }}>
+        {sl.songs.map((song, i) => <li key={i}>{song}</li>)}
+      </ol>
+      {data.setlists.length > 1 && (
+        <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 6 }}>
+          {data.setlists.length} setlists found · showing first match
+        </div>
+      )}
+      <a href={sl.url} target="_blank" rel="noopener noreferrer"
+        style={{ display: 'inline-block', marginTop: 8, fontSize: 10, color: C.accent, ...MONO }}>
+        View on setlist.fm →
+      </a>
+    </div>
+  );
+}
+
 export default function ConcertsTab() {
   const [concerts,setConcerts] = useState([]);
   const [venues,setVenues]     = useState(VENUES);
@@ -63,6 +216,7 @@ export default function ConcertsTab() {
   const [error,setError]       = useState('');
   const [newVenue,setNewVenue] = useState('');
   const [showVenueAdd,setShowVenueAdd] = useState(false);
+  const [setlistOpen,setSetlistOpen] = useState({});  // concert.id → bool
   const inputRef = useRef();
 
   useEffect(()=>{
@@ -139,6 +293,22 @@ export default function ConcertsTab() {
           </div>
         ))}
       </div>
+
+      {/* Attendance prompts — "Did you go to that show?" */}
+      <AttendancePrompts onAttendConfirm={(prompt) => {
+        // Open form pre-filled with the prompt's artist + year
+        const year = (prompt.event_date || '').split('-')[0];
+        setForm({
+          band: prompt.artist,
+          venueId: null,
+          year: year || String(new Date().getFullYear()),
+          genre: 'Metal',
+          rating: 0,
+          price: '',
+          note: prompt.venue && prompt.city ? prompt.venue + ', ' + prompt.city : (prompt.venue || prompt.city || ''),
+        });
+        setShowForm(true);
+      }}/>
 
       <div style={{padding:'12px 16px 0'}}>
         {/* Subtabs */}
@@ -381,7 +551,17 @@ export default function ConcertsTab() {
                          <div style={{display:'flex',gap:6,marginTop:8}}>
                            <button onClick={()=>edit(c)} style={{flex:1,padding:'6px',background:C.bg3,border:`1px solid ${C.border}`,borderRadius:7,color:C.muted,cursor:'pointer',fontSize:11,...MONO}}>✏ Edit</button>
                            <button onClick={()=>copy(c)} style={{flex:1,padding:'6px',background:C.bg3,border:`1px solid ${C.border}`,borderRadius:7,color:C.muted,cursor:'pointer',fontSize:11,...MONO}}>⧉ Copy</button>
+                           <button onClick={()=>setSetlistOpen(s=>({...s,[c.id]:!s[c.id]}))} style={{flex:1,padding:'6px',background:setlistOpen[c.id]?C.accent+'22':C.bg3,border:`1px solid ${setlistOpen[c.id]?C.accent+'66':C.border}`,borderRadius:7,color:setlistOpen[c.id]?C.accent:C.muted,cursor:'pointer',fontSize:11,...MONO}}>♪ Setlist</button>
                          </div>
+                         {setlistOpen[c.id] && (
+                           <div style={{marginTop:8}}>
+                             <SetlistViewer
+                               artist={c.band}
+                               year={c.year}
+                               city={(venues.find(vn=>vn.id===c.venueId) || {}).city}
+                             />
+                           </div>
+                         )}
                        </div>
                        <button onClick={()=>del(c.id)} style={{background:'none',border:'none',color:'#333',cursor:'pointer',fontSize:20,padding:'2px 4px',flexShrink:0}}
                          onMouseEnter={e=>e.currentTarget.style.color=C.accent}

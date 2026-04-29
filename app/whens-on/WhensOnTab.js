@@ -7,11 +7,13 @@ import { C, MONO } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 import CalendarTab from '@/app/calendar/CalendarTab';
 import ConcertsTab from '@/app/concerts/ConcertsTab';
+import UpcomingConcertsTab from '@/app/concerts/UpcomingConcertsTab';
 
 const LS_KEY = 'mv_whenson_subtab';
 const SUB_TABS = [
   { id: 'calendar', iconName: 'calendar', label: 'Releases' },
-  { id: 'concerts', iconName: 'music',    label: 'Concerts' },
+  { id: 'upcoming', iconName: 'music',    label: 'Live'     },
+  { id: 'concerts', iconName: 'star',     label: 'My Shows' },
 ];
 
 export default function WhensOnTab(props) {
@@ -32,7 +34,7 @@ export default function WhensOnTab(props) {
   return (
     <div>
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
         background: C.bg2, borderBottom: '1px solid ' + C.border,
         position: 'sticky', top: 56, zIndex: 50,
       }}>
@@ -60,6 +62,7 @@ export default function WhensOnTab(props) {
 
       <div>
         {sub === 'calendar' && <CalendarTab releases={props.releases} followedArtists={props.followedArtists}/>}
+        {sub === 'upcoming' && <UpcomingConcertsTab user={props.user} followedArtists={props.followedArtists}/>}
         {sub === 'concerts' && <ConcertsTab/>}
       </div>
     </div>

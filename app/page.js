@@ -9,6 +9,8 @@ import { CollectionTab, WatchlistTab } from '@/app/collection/CollectionTab';
 import ProfileTab from '@/app/profile/ProfileTab';
 import ErrorBoundary from '@/app/components/ErrorBoundary';
 import OnboardingScreen from '@/app/components/OnboardingScreen';
+import VaultTab from '@/app/vault/VaultTab';
+import WhensOnTab from '@/app/whens-on/WhensOnTab';
 import Icon from '@/app/components/Icon';
 import UpgradeModal from '@/app/components/UpgradeModal';
 import nextDynamic from 'next/dynamic';
@@ -570,6 +572,7 @@ export default function MetalVault() {
 
         {tab==='calendar' && (
           <ErrorBoundary name="When's On"><WhensOnTab
+            user={user}
             releases={releases}
             followedArtists={col.followedArtists}
           /></ErrorBoundary>

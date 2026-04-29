@@ -1,7 +1,7 @@
 // ── Metal Vault Service Worker ────────────────────────────────
 // Auto-updates on every new deploy — no manual cache clearing needed.
 
-const VERSION    = 'mv-v37';  // bump this on every deploy
+const VERSION    = 'mv-v44';  // bump this on every deploy
 const CACHE_APP  = VERSION + '-app';
 const CACHE_DATA = VERSION + '-data';
 const CACHE_IMG  = VERSION + '-img';
@@ -14,6 +14,7 @@ const CACHE_API = [
   '/api/portfolio',
   '/api/releases',
   '/api/artists',
+  '/api/barcode',     // cache barcode lookups so re-scanning offline returns cached result
 ];
 
 // ── Install ───────────────────────────────────────────────────

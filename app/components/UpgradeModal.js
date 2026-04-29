@@ -3,10 +3,11 @@ import { useState } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
+import { TIERS } from '@/lib/stripe';
 
 const FEATURES = [
   { iconName: 'pkg',             free: 'Unlimited',      pro: 'Unlimited'           },
-  { iconName: 'bell',            free: '3 alerts',       pro: 'Unlimited'           },
+  { iconName: 'bell',            free: TIERS.free.alertLimit + ' alerts',       pro: 'Unlimited'           },
   { iconName: 'insurance',       free: '—',              pro: 'Insurance PDF'       },
   { iconName: 'detailedGrading', free: '—',              pro: 'Detailed grading'    },
   { iconName: 'priceHistory',    free: '—',              pro: 'Price history'       },
@@ -112,8 +113,11 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
         <div style={{ display: 'flex', margin: '0 20px 20px', background: C.bg3,
           borderRadius: 12, padding: 4, border: '1px solid ' + C.border }}>
           {[
-            { id: 'monthly', label: t('paywall.monthly'), price: tier === 'collector' ? '39.99 PLN' : '19.99 PLN' },
-            { id: 'yearly',  label: t('paywall.yearly'),  price: tier === 'collector' ? '299 PLN'   : '149 PLN',  badge: t('paywall.yearlyBadge') },
+            { id: 'monthly', label: t('paywall.monthly'),
+              price: TIERS[tier === 'collector' ? 'collector' : 'pro'].monthly + ' PLN' },
+            { id: 'yearly',  label: t('paywall.yearly'),
+              price: TIERS[tier === 'collector' ? 'collector' : 'pro'].yearly + ' PLN',
+              badge: t('paywall.yearlyBadge') },
           ].map(p => (
             <button key={p.id} onClick={() => setPlan(p.id)} style={{
               flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', cursor: 'pointer',

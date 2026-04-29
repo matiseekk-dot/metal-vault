@@ -1,9 +1,207 @@
 // ── ProfileTab — extracted from app/page.js, cleaned ───────────
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import { setLocale, getLocale } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
+
+
+// ── ConcertLocationCard ──
+// Manages user's location preference for concert proximity push alerts.
+// Three states:
+//   1. Not set → "Enable nearby alerts" button → geolocation prompt
+//   2. Set → shows current location + radius slider + "Update" + "Disable"
+//   3. Loading/error states
+function ConcertLocationCard({ userId }) {
+  const [loc,    setLoc]    = useState(null);   // { lat, lng, city, radius_km }
+  const [busy,   setBusy]   = useState(false);
+  const [error,  setError]  = useState(null);
+  const [draftRadius, setDraftRadius] = useState(300);
+  const [loaded, setLoaded] = useState(false);
+
+  // Load existing location from profile
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/profile');
+        const d = await r.json();
+        if (cancelled) return;
+        if (d?.profile?.location_lat != null) {
+          setLoc({
+            lat:       d.profile.location_lat,
+            lng:       d.profile.location_lng,
+            city:      d.profile.location_city || null,
+            radius_km: d.profile.location_radius_km || 300,
+          });
+          setDraftRadius(d.profile.location_radius_km || 300);
+        }
+      } catch {}
+      setLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  // Reverse geocode lat/lng → human city name (Nominatim — free, no key)
+  // Used after geolocation grant to show "Katowice, PL" instead of raw coords.
+  const reverseGeocode = async (lat, lng) => {
+    try {
+      const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&zoom=10', {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'MetalVault/1.0' },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!r.ok) return null;
+      const d = await r.json();
+      const a = d.address || {};
+      const city = a.city || a.town || a.village || a.county || null;
+      const cc = a.country_code ? a.country_code.toUpperCase() : null;
+      return city ? (cc ? city + ', ' + cc : city) : null;
+    } catch { return null; }
+  };
+
+  const enable = async () => {
+    setError(null);
+    if (!('geolocation' in navigator)) {
+      setError('Geolocation not supported by your browser.');
+      return;
+    }
+    setBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const city = await reverseGeocode(lat, lng);
+        try {
+          const r = await fetch('/api/profile/location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat, lng, city, radius_km: draftRadius }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'failed');
+          setLoc({ lat, lng, city, radius_km: draftRadius });
+        } catch (e) {
+          setError(e.message);
+        }
+        setBusy(false);
+      },
+      err => {
+        setBusy(false);
+        const msg = err.code === 1
+          ? 'Permission denied. Enable location in browser settings.'
+          : 'Could not get your location: ' + err.message;
+        setError(msg);
+      },
+      { timeout: 8000, maximumAge: 600_000 }
+    );
+  };
+
+  const updateRadius = async () => {
+    if (!loc) return;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/profile/location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ radius_km: draftRadius }),
+      });
+      if (r.ok) setLoc({ ...loc, radius_km: draftRadius });
+    } catch {}
+    setBusy(false);
+  };
+
+  const disable = async () => {
+    if (!confirm('Stop receiving nearby concert alerts?')) return;
+    setBusy(true);
+    try {
+      await fetch('/api/profile/location', { method: 'DELETE' });
+      setLoc(null);
+    } catch {}
+    setBusy(false);
+  };
+
+  if (!loaded) return null;  // wait for first load to avoid flash
+
+  // Card wrapper — same style as Push card above
+  return (
+    <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12,
+      padding: '16px', marginBottom: 12 }}>
+      <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase',
+        ...MONO, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Icon name="location" size={12} color={C.accent}/> Nearby Concert Alerts
+      </div>
+      <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 12 }}>
+        Push when followed bands play within your radius
+      </div>
+
+      {!loc ? (
+        // ── State 1: not set ──
+        <button onClick={enable} disabled={busy}
+          style={{ width: '100%', padding: '11px',
+            background: 'linear-gradient(135deg,#dc2626,#991b1b)',
+            border: 'none', borderRadius: 8, color: '#fff', cursor: busy ? 'wait' : 'pointer',
+            ...BEBAS, fontSize: 13, letterSpacing: '0.08em', opacity: busy ? 0.6 : 1 }}>
+          {busy ? 'GETTING LOCATION…' : 'ENABLE NEARBY ALERTS'}
+        </button>
+      ) : (
+        // ── State 2: set ──
+        <>
+          <div style={{ background: '#0a0a0a', borderRadius: 8, padding: '10px 12px',
+            marginBottom: 12, display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', gap: 10 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 12, color: C.text, ...MONO }}>
+                ✓ {loc.city || loc.lat.toFixed(2) + ', ' + loc.lng.toFixed(2)}
+              </div>
+              <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 2 }}>
+                {loc.radius_km} km radius
+              </div>
+            </div>
+            <button onClick={disable} disabled={busy}
+              style={{ background: 'none', border: '1px solid ' + C.border,
+                borderRadius: 6, color: C.dim, cursor: 'pointer',
+                ...MONO, fontSize: 10, padding: '5px 10px', flexShrink: 0 }}>
+              Disable
+            </button>
+          </div>
+
+          {/* Radius slider */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+              fontSize: 10, color: C.dim, ...MONO, marginBottom: 4 }}>
+              <span>Radius</span>
+              <span style={{ color: C.accent }}>{draftRadius} km</span>
+            </div>
+            <input type="range" min={50} max={1000} step={50}
+              value={draftRadius}
+              onChange={e => setDraftRadius(Number(e.target.value))}
+              style={{ width: '100%', accentColor: C.accent, cursor: 'pointer' }}/>
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+              fontSize: 9, color: C.dim, ...MONO }}>
+              <span>50</span><span>500</span><span>1000</span>
+            </div>
+          </div>
+
+          {draftRadius !== loc.radius_km && (
+            <button onClick={updateRadius} disabled={busy}
+              style={{ width: '100%', padding: '8px',
+                background: C.accent + '22', border: '1px solid ' + C.accent + '66',
+                borderRadius: 6, color: C.accent, cursor: 'pointer',
+                ...MONO, fontSize: 11, letterSpacing: '0.04em' }}>
+              Update radius to {draftRadius} km
+            </button>
+          )}
+        </>
+      )}
+
+      {error && (
+        <div style={{ fontSize: 10, color: '#f87171', ...MONO, marginTop: 8, lineHeight: 1.5 }}>
+          ⚠ {error}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ProfileTab({
   user, profile, followedArtists, collection = [],
@@ -384,6 +582,11 @@ export default function ProfileTab({
         {pushEnabled && <div style={{ fontSize: 10, color: '#4ade80', ...MONO, marginTop: 6 }}>✓ Enabled — price alerts + pre-orders from followed artists</div>}
       </div>
 
+      {/* Concert Location — for proximity push alerts */}
+      {pushEnabled && (
+        <ConcertLocationCard userId={user?.id}/>
+      )}
+
       {/* Discogs OAuth */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
         <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>Discogs Account</div>
@@ -561,3 +764,6 @@ export default function ProfileTab({
     </div>
   );
 }
+
+
+

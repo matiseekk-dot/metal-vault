@@ -2,6 +2,7 @@
 'use client';
 import { useState } from 'react';
 import { C, MONO, BEBAS, BADGE_STYLES, GENRE_COLOR } from '@/lib/theme';
+import MarketComparison from '@/app/components/MarketComparison';
 
 // ── formatDate helper ─────────────────────────────────────────
 function formatDate(dateStr) {
@@ -195,6 +196,16 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
               style={{fontSize:11,color:C.dim,...MONO,textDecoration:'none'}}>⬡ Discogs</a>
           )}
         </div>
+        <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
+
+        {/* Cross-marketplace price comparison — display-only, eBay-compliant */}
+        <MarketComparison
+          artist={album.artist}
+          album={album.album}
+          format={album.format}
+          discogsLowest={vinylData?.variants?.[0]?.lowestPrice || null}
+        />
+
         <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
         <div style={{padding:'14px 16px 16px'}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:12}}>

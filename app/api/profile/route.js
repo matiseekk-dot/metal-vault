@@ -21,7 +21,7 @@ export async function POST(request) {
   // SECURITY: Whitelist only user-modifiable fields. NEVER allow direct writes to
   // subscription_status, plan, stripe_customer_id, subscription_end, subscription_id,
   // or id — those are server-owned (via Stripe webhook only).
-  const ALLOWED_FIELDS = ['username', 'display_name', 'avatar_url', 'is_public'];
+  const ALLOWED_FIELDS = ['username', 'display_name', 'avatar_url', 'is_public', 'location_lat', 'location_lng', 'location_radius_km'];
   const safe = Object.fromEntries(
     Object.entries(body).filter(([k]) => ALLOWED_FIELDS.includes(k))
   );

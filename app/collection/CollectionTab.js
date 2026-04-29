@@ -9,6 +9,7 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { C, MONO, BEBAS, VINYL_GRADES, GRADE_COLOR, inputSt } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
+import Sparkline from '@/app/components/Sparkline';
 import dynamic from 'next/dynamic';
 const BandsTab = dynamic(() => import('@/app/artists/BandsTab'), { ssr: false });
 
@@ -497,6 +498,21 @@ function PriceModal({ item, onClose, onSave }) {
   );
 }
 
+
+// Holding period — human-readable "2y 3mo" / "5mo" / "" (empty if < 30 days)
+function holdingPeriod(addedAt) {
+  if (!addedAt) return '';
+  const days = Math.floor((Date.now() - new Date(addedAt).getTime()) / 86400000);
+  if (isNaN(days) || days < 30) return '';
+  if (days < 365) {
+    const months = Math.floor(days / 30);
+    return months + 'mo';
+  }
+  const years = Math.floor(days / 365);
+  const remMonths = Math.floor((days - years * 365) / 30);
+  return remMonths > 0 ? years + 'y ' + remMonths + 'mo' : years + 'y';
+}
+
 export function CollectionTab({
   user, collection, watchlist = [], onRemoveWatch, onRemove, onUpdate,
   portfolio, onAlbumClick, onAddToWatchlist, AlbumCover, onManualAdd,
@@ -509,9 +525,35 @@ export function CollectionTab({
   const [vaultSearch,    setVaultSearch]   = useState('');
   const [vaultFilter,    setVaultFilter]   = useState('all');
   const [showAddManual,  setShowAddManual] = useState(false);
+  const [priceHistories, setPriceHistories] = useState({});  // discogs_id → values[]
   const [refreshing,     setRefreshing]    = useState(false);
   const [refreshResult,  setRefreshResult] = useState(null);
   const [expandedId,     setExpandedId]    = useState(null);
+
+  // Batch fetch 30-day price history for all records in collection (Pro feature).
+  // One POST per collection load — sparklines render as data arrives. Empty
+  // response (Free tier or no history) just leaves cards without sparkline.
+  useEffect(() => {
+    if (!premium) return;
+    if (!collection || collection.length === 0) return;
+    const ids = collection.map(i => i.discogs_id).filter(Boolean);
+    if (ids.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/price-history/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ discogs_ids: ids }),
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!cancelled && d.histories) setPriceHistories(d.histories);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [collection.length, premium]);  // eslint-disable-line
   const [showAlertForm, setShowAlertForm] = useState(null);
   const [priceModalItem, setPriceModalItem] = useState(null);
   const [priceInputVal, setPriceInputVal] = useState('');
@@ -895,6 +937,14 @@ export function CollectionTab({
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>${paid.toFixed(0)}</span>}
                           {now > 0  && <span style={{ fontSize: 9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO }}>→${now.toFixed(0)}{gain !== null ? (gain >= 0 ? ' ▲' : ' ▼') : ''}</span>}
                           {now === 0 && paid > 0 && <span style={{ fontSize: 8, color: '#444', ...MONO }}>⏳</span>}
+                          {/* Holding period badge — free for all, shown only when ≥ 30 days */}
+                          {(() => { const hp = holdingPeriod(item.added_at); return hp ? <span title={'In your vault for ' + hp} style={{ fontSize: 8, color: C.dim, ...MONO, padding: '1px 4px', background: C.bg3, borderRadius: 3 }}>{hp}</span> : null; })()}
+                          {/* Per-record price sparkline — Pro feature, last 30 days median */}
+                          {premium && item.discogs_id && priceHistories[String(item.discogs_id)] && priceHistories[String(item.discogs_id)].length >= 2 && (
+                            <span title="30-day price trend" style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}>
+                              <Sparkline values={priceHistories[String(item.discogs_id)]} width={48} height={14} strokeWidth={1.4}/>
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>

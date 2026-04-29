@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+import { TIERS } from '@/lib/stripe';
 import { createClient } from '@/lib/supabase-server';
 
 async function getUser(sb) {
@@ -37,7 +38,7 @@ export async function POST(request) {
     const { count } = await supabase
       .from('price_alerts').select('id', { count: 'exact', head: true })
       .eq('user_id', user.id).eq('is_active', true);
-    const FREE_LIMIT = 3;
+    const FREE_LIMIT = TIERS.free.alertLimit;
     if ((count || 0) >= FREE_LIMIT) {
       return NextResponse.json({
         error:   'ALERT_LIMIT_REACHED',

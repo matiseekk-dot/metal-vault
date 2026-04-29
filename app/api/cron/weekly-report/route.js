@@ -6,6 +6,7 @@
 // new records added, persona snapshot, pending pre-orders.
 
 export const dynamic = 'force-dynamic';
+const BUDGET_MS_WEEKLY = 4 * 60 * 1000;  // 4min — leaves buffer below Vercel 5min cap
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 
@@ -141,6 +142,10 @@ export async function GET(request) {
       .from('profiles').select('id, display_name, username');
 
     for (const profile of profiles || []) {
+      if (budgetExpired()) {
+        results.skippedBudget = (results.skippedBudget || 0) + 1;
+        continue;
+      }
       try {
         // Get email from auth.users
         const { data: { user } } = await sb.auth.admin.getUserById(profile.id);

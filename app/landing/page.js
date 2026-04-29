@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PRO_MONTHLY_PLN, PRO_YEARLY_PLN, FREE_TRIAL_DAYS, YEARLY_SAVINGS_PCT } from '@/lib/pricing';
 
 export const metadata = {
   title: 'Metal Vault — Your Vinyl Collection, Tracked & Valued',
@@ -86,16 +87,17 @@ export default function LandingPage() {
           <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'18px 14px'}}>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,marginBottom:4}}>FREE</div>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:C.gold,marginBottom:14,lineHeight:1}}>0 PLN</div>
-            {['Unlimited records','Discogs sync','Price tracking','1 price alert','Barcode scanner','Offline mode'].map(f=>(
+            {['Unlimited records','Discogs sync','Price tracking','3 price alerts','Barcode scanner','Offline-aware'].map(f=>(
               <div key={f} style={{fontSize:10,color:C.muted,marginBottom:5,display:'flex',gap:5}}>
                 <span style={{color:'#4ade80'}}>✓</span>{f}
               </div>
             ))}
           </div>
           <div style={{background:'linear-gradient(135deg,#1a0800,#2a1000)',border:'2px solid '+C.gold,borderRadius:12,padding:'18px 14px',position:'relative'}}>
-            <div style={{position:'absolute',top:-10,right:10,background:C.gold,color:'#000',fontSize:8,padding:'2px 7px',borderRadius:10,fontWeight:'bold',letterSpacing:'0.1em'}}>7 DAYS FREE</div>
+            <div style={{position:'absolute',top:-10,right:10,background:C.gold,color:'#000',fontSize:8,padding:'2px 7px',borderRadius:10,fontWeight:'bold',letterSpacing:'0.1em'}}>{FREE_TRIAL_DAYS} DAYS FREE</div>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,marginBottom:4}}>PRO</div>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:C.gold,marginBottom:14,lineHeight:1}}>9.99 <span style={{fontSize:12,color:C.muted}}>PLN/mo</span></div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:C.gold,marginBottom:14,lineHeight:1}}>{PRO_MONTHLY_PLN} <span style={{fontSize:12,color:C.muted}}>PLN/mo</span></div>
+            <div style={{fontSize:10,color:C.muted,marginBottom:10}}>or {PRO_YEARLY_PLN} PLN/year (save {YEARLY_SAVINGS_PCT}%)</div>
             {['All Free features','Unlimited alerts','Price history charts','On-demand refresh','CSV / JSON export','Advanced analytics'].map(f=>(
               <div key={f} style={{fontSize:10,color:C.muted,marginBottom:5,display:'flex',gap:5}}>
                 <span style={{color:C.gold}}>⭐</span>{f}

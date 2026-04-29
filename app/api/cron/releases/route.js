@@ -26,6 +26,8 @@ async function sendEmail({ to, subject, html }) {
 
 
 // Called weekly on Monday 10:00 UTC by Vercel Cron
+const BUDGET_MS_RELEASES = 3 * 60 * 1000;
+
 export async function GET(request) {
   const auth = request.headers.get('authorization');
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -88,6 +90,10 @@ export async function GET(request) {
     } catch (e) { console.warn('MA fetch failed:', e.message); }
 
     for (const [userId, userData] of Object.entries(byUser)) {
+      if (budgetExpired()) {
+        results.skippedBudget = (results.skippedBudget || 0) + 1;
+        continue;
+      }
       try {
         const newReleases = [];
 
