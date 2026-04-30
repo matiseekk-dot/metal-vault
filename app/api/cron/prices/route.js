@@ -12,9 +12,11 @@
 //
 // If you outgrow this, add a second cron at 21:00 UTC and split the work.
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 const BUDGET_MS = 3 * 60 * 1000;        // 3 minutes hard ceiling per invocation
 const PACING_MS = 600;                  // Discogs rate-limit safe pacing
@@ -94,9 +96,11 @@ export async function GET(request) {
       const d = await r.json();
       const lowest = d.lowest_price?.value || null;
       const median = d.median?.value       || null;
+      const numForSale = d.num_for_sale ?? null;
       await sb.from('collection').update({
         current_price:    lowest,
         median_price:     median,
+        num_for_sale:     numForSale,
         last_price_check: new Date().toISOString(),
       }).eq('id', item.id);
       if (lowest || median) {
@@ -137,12 +141,46 @@ export async function GET(request) {
         if (!r.ok) continue;
         const d = await r.json();
         const lowest = Number(d.lowest_price?.value) || null;
-        if (!lowest) continue;
+        const numForSale = d.num_for_sale ?? null;
+        if (!lowest && alert.alert_type !== 'LOW_STOCK') continue;
 
-        const target = Number(alert.target_price);
-        const dir    = alert.direction || 'below';
-        const trigger = (dir === 'below' && lowest <= target)
-                     || (dir === 'above' && lowest >= target);
+        const target   = Number(alert.target_price);
+        const baseline = Number(alert.baseline_price) || null;
+        const type     = alert.alert_type || 'PRICE_DROP';
+        // Legacy 'direction' field still respected for backward compat:
+        const legacyDir = alert.direction || 'below';
+
+        let trigger = false;
+        let triggerMsg = '';
+        if (type === 'LOW_STOCK') {
+          // Stock alert: triggers when copies on Discogs drop ≤ target
+          if (numForSale != null && numForSale <= target) {
+            trigger = true;
+            triggerMsg = 'only ' + numForSale + ' copies for sale';
+          }
+        } else if (type === 'PRICE_DROP' || (type === 'PRICE_DROP' && legacyDir === 'below')) {
+          if (lowest <= target) {
+            trigger = true;
+            triggerMsg = 'is now $' + lowest.toFixed(0);
+          }
+        } else if (type === 'PRICE_RISE' || legacyDir === 'above') {
+          if (lowest >= target) {
+            trigger = true;
+            triggerMsg = 'is now $' + lowest.toFixed(0);
+          }
+        } else if (type === 'PERCENT_DROP' && baseline) {
+          const dropPct = ((baseline - lowest) / baseline) * 100;
+          if (dropPct >= target) {
+            trigger = true;
+            triggerMsg = 'dropped ' + dropPct.toFixed(0) + '% to $' + lowest.toFixed(0);
+          }
+        } else if (type === 'PERCENT_RISE' && baseline) {
+          const risePct = ((lowest - baseline) / baseline) * 100;
+          if (risePct >= target) {
+            trigger = true;
+            triggerMsg = 'rose ' + risePct.toFixed(0) + '% to $' + lowest.toFixed(0);
+          }
+        }
 
         if (trigger) {
           await sb.from('price_alerts').update({
@@ -153,7 +191,7 @@ export async function GET(request) {
 
           await sendPushToUser(alert.user_id, {
             title: '🎯 Price alert hit',
-            body:  alert.artist + ' — ' + alert.album + ' is now $' + lowest.toFixed(0),
+            body:  alert.artist + ' — ' + alert.album + ' ' + triggerMsg,
             url:   '/?tab=vault',
             tag:   'alert-' + alert.id,
           });

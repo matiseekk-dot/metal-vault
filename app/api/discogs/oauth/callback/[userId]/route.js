@@ -3,10 +3,12 @@
 // The CANONICAL route is /api/discogs/oauth/callback (no userId in path).
 // This route simply reads userId from the path and delegates to the
 // same logic — looking up by oauth_token from the query string.
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
 import { accessTokenHeader, apiCallHeader } from '@/lib/oauth';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request, { params }) {
   const { searchParams } = new URL(request.url);

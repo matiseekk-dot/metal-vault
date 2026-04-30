@@ -3,9 +3,11 @@
 //        from snapshot of followed artists). Lazy-generated on read.
 // PATCH → user confirms ('attended') or rejects ('dismissed') a prompt.
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, supabaseAdmin } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const sb = await createClient();

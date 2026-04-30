@@ -26,9 +26,11 @@
 // Sequential batching: cache misses are processed in batches of 5 with a
 // 1.1s delay between batches → max ~55 req/min, safely under the 60/min cap.
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 const UA = { 'User-Agent': 'MetalVault/1.0 +https://metal-vault-six.vercel.app' };
 
@@ -223,10 +225,13 @@ async function getArtistSearches(artists, headers, sb, curYear, nextYear) {
       const cached = await readCache(sb, cacheKey, TTL_ARTIST);
       if (cached) return cached;
 
+      // For followed artists, fetch more aggressively — user wants completeness.
+      // 25 per year × 3 years = up to 75 candidates per artist (after dedup).
+      // Discogs cap is 100/page; we use 25 to balance signal/noise.
       const urls = [
-        `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${curYear}&sort=date_added&sort_order=desc&per_page=10&page=1`,
-        `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${nextYear}&sort=date_added&sort_order=desc&per_page=5&page=1`,
-        `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${prevYear}&sort=date_added&sort_order=desc&per_page=5&page=1`,
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${curYear}&sort=date_added&sort_order=desc&per_page=25&page=1`,
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${nextYear}&sort=date_added&sort_order=desc&per_page=25&page=1`,
+        `https://api.discogs.com/database/search?type=release&format=Vinyl&artist=${encodeURIComponent(artist)}&year=${prevYear}&sort=date_added&sort_order=desc&per_page=25&page=1`,
       ];
       const pages = await Promise.all(urls.map(u => discogsSearch(u, headers)));
       const merged = [];
@@ -287,8 +292,10 @@ export async function GET(request) {
     }
 
     // ── Layer 3: fetch detail with per-release cache ──
-    // Cap at 120 candidates. Each cache hit = 0 Discogs requests.
-    const capped = candidates.slice(0, 120);
+    // Cap at 200 candidates — increased from 120 because followed-artist results
+    // were getting truncated for users with many follows. Each cache hit = 0
+    // Discogs requests, so the only real cost is first-time fetches per release.
+    const capped = candidates.slice(0, 200);
     const detailTasks = capped.map(c => () => getDetailCached(c.id, headers, sb));
     const fullDetails = await processBatched(detailTasks);
 

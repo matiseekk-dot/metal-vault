@@ -296,17 +296,54 @@ export default function ConcertsTab() {
 
       {/* Attendance prompts — "Did you go to that show?" */}
       <AttendancePrompts onAttendConfirm={(prompt) => {
-        // Open form pre-filled with the prompt's artist + year
+        // ── Auto-add concert to My Shows ──
+        // Bandsintown gave us artist + venue + city + date. We auto-create
+        // the venue (if not yet in user's venues list) and save the concert
+        // immediately with rating=0/price=null. User gets a toast offering
+        // to edit (add rating, price). This avoids the "Yes" → form → save
+        // double-click frustration for users with many prompts.
         const year = (prompt.event_date || '').split('-')[0];
-        setForm({
+
+        // Find or create venue (case-insensitive match on name+city)
+        let venueId = null;
+        let updatedVenues = venues;
+        if (prompt.venue) {
+          const existing = venues.find(v =>
+            v.name.toLowerCase() === prompt.venue.toLowerCase() &&
+            (v.city || '').toLowerCase() === (prompt.city || '').toLowerCase()
+          );
+          if (existing) {
+            venueId = existing.id;
+          } else {
+            const newVenue = {
+              id: Date.now(),
+              name: prompt.venue,
+              city: prompt.city || '',
+              cat: 'Other',
+            };
+            updatedVenues = [...venues, newVenue];
+            venueId = newVenue.id;
+          }
+        }
+
+        // Build concert record
+        const concert = {
+          id: Date.now() + 1,
           band: prompt.artist,
-          venueId: null,
+          venueId,
           year: year || String(new Date().getFullYear()),
           genre: 'Metal',
           rating: 0,
           price: '',
-          note: prompt.venue && prompt.city ? prompt.venue + ', ' + prompt.city : (prompt.venue || prompt.city || ''),
-        });
+          note: '',
+        };
+
+        // Save (this updates state + localStorage)
+        save([concert, ...concerts], updatedVenues);
+
+        // Show edit form so user can immediately add rating/price if they want
+        setForm(concert);
+        setEditId(concert.id);
         setShowForm(true);
       }}/>
 

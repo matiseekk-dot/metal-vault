@@ -1,6 +1,8 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 // SECURITY: fields user may write. user_id, created_at, added_at are server-owned.
 // median_price, current_price are server-computed via Discogs fetch (NOT user input).
@@ -170,6 +172,7 @@ async function fetchAndStorePrices(discogsId, collectionItemId, supabase) {
   await supabase.from('collection').update({
     current_price:    data.lowest_price?.value  || null,
     median_price:     data.median?.value        || null,
+    num_for_sale:     data.num_for_sale          ?? null,
     last_price_check: new Date().toISOString(),
   }).eq('id', collectionItemId);
 }

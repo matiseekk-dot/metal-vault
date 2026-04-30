@@ -19,12 +19,18 @@ const securityHeaders = [
   // Referrer privacy
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   // Disable dangerous APIs we don't use
-  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(), payment=(self)' },
+  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(self), payment=(self)' },
   // HSTS — force HTTPS for 1 year (Vercel serves HTTPS anyway)
   { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-  // CSP — starts in report-only; swap header name to enforce
+  // CSP — toggle between report-only and enforce via env var.
+  // Set CSP_ENFORCE=1 in Vercel env vars to switch to enforce mode.
+  // Report-only mode is default for safety — violations log to console
+  // without breaking functionality. Once you've verified no real violations
+  // for ~7 days in production, set CSP_ENFORCE=1 and redeploy.
   {
-    key: 'Content-Security-Policy-Report-Only',
+    key: process.env.CSP_ENFORCE === '1'
+      ? 'Content-Security-Policy'
+      : 'Content-Security-Policy-Report-Only',
     value: [
       "default-src 'self'",
       // Next.js + inline event handlers need unsafe-inline/unsafe-eval

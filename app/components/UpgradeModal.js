@@ -114,9 +114,9 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
           borderRadius: 12, padding: 4, border: '1px solid ' + C.border }}>
           {[
             { id: 'monthly', label: t('paywall.monthly'),
-              price: TIERS[tier === 'collector' ? 'collector' : 'pro'].monthly + ' PLN' },
+              price: '$' + TIERS[tier === 'collector' ? 'collector' : 'pro'].monthly },
             { id: 'yearly',  label: t('paywall.yearly'),
-              price: TIERS[tier === 'collector' ? 'collector' : 'pro'].yearly + ' PLN',
+              price: '$' + TIERS[tier === 'collector' ? 'collector' : 'pro'].yearly,
               badge: t('paywall.yearlyBadge') },
           ].map(p => (
             <button key={p.id} onClick={() => setPlan(p.id)} style={{

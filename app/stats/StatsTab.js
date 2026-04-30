@@ -549,7 +549,7 @@ function PersonaCard() {
   );
 }
 
-export default function StatsTab({collection,watchlist}){
+export default function StatsTab({collection,watchlist,collectionSummary,premium,onUpgrade}){
   const [portfolio,setPortfolio]=useState(null);
   const [loading,setLoading]=useState(true);
 
@@ -751,6 +751,8 @@ export default function StatsTab({collection,watchlist}){
         </div>
       )}
 
+      {/* Portfolio change 30d/90d (Pro) — replaces "Coming soon" placeholder */}
+      <PortfolioChangeCard premium={premium} onUpgrade={onUpgrade}/>
 
       {/* Yearly spending */}
       {collection.length > 0 && (() => {
@@ -803,18 +805,6 @@ export default function StatsTab({collection,watchlist}){
         );
       })()}
 
-      {/* Pro teaser */}
-      <div style={{background:'linear-gradient(135deg,#0a0a1a,#14142a)',
-        border:'1px solid #3333aa55',borderRadius:12,padding:'16px',marginBottom:16,position:'relative',overflow:'hidden'}}>
-        <div style={{position:'absolute',right:12,top:12,opacity:0.4}}><Icon name="lock" size={18} color={C.muted}/></div>
-        <div style={{fontSize:10,color:'#818cf8',...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:8}}>Advanced Analytics</div>
-        {[['up','Price history per record'],['bell','Smart price alerts'],['barChart','30d / 90d portfolio change'],['award','Rarity score per pressing']].map(([iconName,f],i)=>(
-          <div key={i} style={{fontSize:11,color:'#6366f1',...MONO,opacity:0.8,marginBottom:4}}><Icon name={iconName} size={12} color={C.dim} style={{marginRight:6,verticalAlign:'middle',display:'inline-block'}}/>{f}</div>
-        ))}
-        <div style={{background:'#4f46e5',borderRadius:8,padding:'8px 14px',fontSize:11,color:'#fff',...BEBAS,letterSpacing:'0.1em',textAlign:'center',opacity:0.85,marginTop:8}}>
-          Coming soon — Metal Vault Pro
-        </div>
-      </div>
 
       {collection.length===0&&(
         <div style={{textAlign:'center',padding:'40px 0',color:C.dim,...MONO}}>

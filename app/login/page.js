@@ -1,7 +1,9 @@
 'use client';
-export const dynamic = 'force-dynamic';
 import { useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
+
+
+export const dynamic = 'force-dynamic';
 
 const C = {
   bg: '#0a0a0a', bg2: '#141414', bg3: '#1e1e1e',

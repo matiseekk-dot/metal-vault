@@ -10,10 +10,12 @@
 // Values are median_price as numbers; dates are implied positional (last 30 days).
 // We collapse to value array (no dates) because sparklines only need the shape.
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
 import { isPremium } from '@/lib/stripe';
+
+
+export const dynamic = 'force-dynamic';
 
 const MAX_IDS = 200;
 const DAYS = 30;

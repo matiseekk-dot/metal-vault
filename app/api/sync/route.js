@@ -1,8 +1,10 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
 
 import { discogsApiHeaders } from '@/lib/oauth';
+
+
+export const dynamic = 'force-dynamic';
 
 const UA = { 'User-Agent': 'MetalVault/1.0 +https://metal-vault-six.vercel.app' };
 

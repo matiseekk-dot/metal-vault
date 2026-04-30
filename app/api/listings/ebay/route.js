@@ -7,9 +7,11 @@
 // Query params: ?artist=Gojira&album=Magma&format=Vinyl
 // Returns: { listings: [{title, price, currency, condition, sellerRating, url, image}] }
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 const EBAY_OAUTH = 'https://api.ebay.com/identity/v1/oauth2/token';
 const EBAY_BROWSE = 'https://api.ebay.com/buy/browse/v1/item_summary/search';

@@ -10,6 +10,7 @@ import { C, MONO, BEBAS, VINYL_GRADES, GRADE_COLOR, inputSt } from '@/lib/theme'
 import { useT } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
 import Sparkline from '@/app/components/Sparkline';
+import { rarityFromCount } from '@/lib/rarity';
 import dynamic from 'next/dynamic';
 const BandsTab = dynamic(() => import('@/app/artists/BandsTab'), { ssr: false });
 
@@ -558,6 +559,7 @@ export function CollectionTab({
   const [priceModalItem, setPriceModalItem] = useState(null);
   const [priceInputVal, setPriceInputVal] = useState('');
   const [targetPrice, setTargetPrice]     = useState('');
+  const [alertType,   setAlertType]       = useState('PRICE_DROP');
   const [gradingExpandedId, setGradingExpandedId] = useState(null);
   const [gradingDraft, setGradingDraft]   = useState({});  // per-item draft {sleeve_grade, vinyl_grade, inner_sleeve_grade, hype_sticker, playback_notes}
   const [gradingSaving, setGradingSaving] = useState(false);
@@ -607,18 +609,26 @@ export function CollectionTab({
   const createAlert = async (item) => {
     if (!targetPrice || isNaN(targetPrice)) return;
     setSaving(true);
+    // Capture current price as baseline for percent-based alerts
+    const currentPrice = Number(item.median_price || item.current_price) || null;
+    const payload = {
+      discogs_id:    item.discogs_id,
+      collection_id: item.id,
+      artist:        item.artist,
+      album:         item.album,
+      target_price:  parseFloat(targetPrice),
+      alert_type:    alertType,
+    };
+    // Set baseline only for percent-based or rise alerts (drop alerts don't need it)
+    if (alertType === 'PERCENT_DROP' || alertType === 'PERCENT_RISE' || alertType === 'PRICE_RISE') {
+      payload.baseline_price = currentPrice;
+    }
     await fetch('/api/alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        discogs_id:   item.discogs_id,
-        collection_id: item.id,
-        artist:       item.artist,
-        album:        item.album,
-        target_price: parseFloat(targetPrice),
-      }),
+      body: JSON.stringify(payload),
     });
-    setSaving(false); setShowAlertForm(null); setTargetPrice('');
+    setSaving(false); setShowAlertForm(null); setTargetPrice(''); setAlertType('PRICE_DROP');
   };
 
   if (!user) return (
@@ -937,6 +947,13 @@ export function CollectionTab({
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>${paid.toFixed(0)}</span>}
                           {now > 0  && <span style={{ fontSize: 9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO }}>→${now.toFixed(0)}{gain !== null ? (gain >= 0 ? ' ▲' : ' ▼') : ''}</span>}
                           {now === 0 && paid > 0 && <span style={{ fontSize: 8, color: '#444', ...MONO }}>⏳</span>}
+                          {/* Rarity badge — uses Discogs num_for_sale */}
+                          {(() => {
+                            const r = rarityFromCount(item.num_for_sale);
+                            // Hide for "Available" (1/5) — too common to be informative
+                            if (!r || r.score <= 1) return null;
+                            return <span title={r.description} style={{ fontSize: 8, color: r.color, ...MONO, padding: '1px 5px', background: r.color + '22', border: '1px solid ' + r.color + '55', borderRadius: 3, fontWeight: 600 }}>{r.label.toUpperCase()}</span>;
+                          })()}
                           {/* Holding period badge — free for all, shown only when ≥ 30 days */}
                           {(() => { const hp = holdingPeriod(item.added_at); return hp ? <span title={'In your vault for ' + hp} style={{ fontSize: 8, color: C.dim, ...MONO, padding: '1px 4px', background: C.bg3, borderRadius: 3 }}>{hp}</span> : null; })()}
                           {/* Per-record price sparkline — Pro feature, last 30 days median */}
@@ -1157,10 +1174,25 @@ export function CollectionTab({
                         {/* Alert + Delete */}
                         <div style={{ display: 'flex', gap: 6 }}>
                           {item.discogs_id && (showAlertForm === item.id ? (
-                            <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
-                              <input type="number" value={targetPrice} onChange={e => setTargetPrice(e.target.value)} placeholder="Alert ≤ $" style={{ ...inputSt, padding: '6px 10px', fontSize: 14, flex: 1 }} />
-                              <button onClick={() => createAlert(item)} disabled={saving} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>{saving ? '…' : 'OK'}</button>
-                              <button onClick={() => setShowAlertForm(null)} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <select value={alertType} onChange={e => setAlertType(e.target.value)} style={{ ...inputSt, padding: '5px 8px', fontSize: 11 }}>
+                                <option value="PRICE_DROP">Price drops to ≤ $</option>
+                                <option value="PRICE_RISE">Price rises to ≥ $</option>
+                                <option value="PERCENT_DROP">Drops by ≥ %</option>
+                                <option value="PERCENT_RISE">Rises by ≥ %</option>
+                                <option value="LOW_STOCK">Less than N copies for sale</option>
+                              </select>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <input type="number" value={targetPrice} onChange={e => setTargetPrice(e.target.value)}
+                                  placeholder={
+                                    alertType === 'PERCENT_DROP' || alertType === 'PERCENT_RISE' ? '%'
+                                    : alertType === 'LOW_STOCK' ? 'copies'
+                                    : '$'
+                                  }
+                                  style={{ ...inputSt, padding: '6px 10px', fontSize: 14, flex: 1 }} />
+                                <button onClick={() => createAlert(item)} disabled={saving} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>{saving ? '…' : 'OK'}</button>
+                                <button onClick={() => { setShowAlertForm(null); setAlertType('PRICE_DROP'); }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                              </div>
                             </div>
                           ) : (
                             <button onClick={() => setShowAlertForm(item.id)} style={{ flex: 1, background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 10px', cursor: 'pointer', ...MONO, fontSize: 10 }}>🔔 Set price alert</button>

@@ -26,6 +26,12 @@ const RATE_LIMITS = {
   '/api/persona':          { max: 30,  windowMs: 60_000 },
   '/api/price-history':    { max: 60,  windowMs: 60_000 },
   '/api/portfolio':        { max: 60,  windowMs: 60_000 },
+  // External marketplace + concerts — protect 3rd-party API quota
+  '/api/listings/ebay':    { max: 20,  windowMs: 60_000 },
+  '/api/setlist':          { max: 30,  windowMs: 60_000 },
+  '/api/concerts':         { max: 30,  windowMs: 60_000 },
+  // Photo upload flow — uploading 60+ photos/min is sus
+  '/api/photos':           { max: 30,  windowMs: 60_000 },
 };
 
 function checkRateLimit(ip, pathname) {

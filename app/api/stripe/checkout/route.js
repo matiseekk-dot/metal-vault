@@ -1,7 +1,9 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
 import { getStripe } from '@/lib/stripe';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   const supabase = await createClient();
@@ -9,6 +11,16 @@ export async function POST(request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { plan = 'monthly' } = await request.json().catch(() => ({}));
+
+  // Whitelist plan values — defense in depth.
+  // Collector tier is disabled at launch (lib/pricing.js TIERS.collector.available=false)
+  // but we keep mapping here for future enablement. UI doesn't expose collector_*
+  // currently, so any request with that plan is suspect.
+  const ALLOWED_PLANS = ['monthly', 'yearly'];
+  if (!ALLOWED_PLANS.includes(plan)) {
+    return NextResponse.json({ error: 'Invalid plan: must be monthly or yearly' }, { status: 400 });
+  }
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
 
   // Tier mapping — Pro (standard) vs Collector (arbitrage + AI + unlimited everything)
@@ -58,7 +70,7 @@ export async function POST(request) {
     },
     success_url: appUrl + '/?premium=success',
     cancel_url:  appUrl + '/?premium=cancel',
-    locale:      'pl',
+    locale:      'auto',  // Stripe auto-detects from browser; supports 30+ locales
     allow_promotion_codes: true,
     metadata: { supabase_user_id: user.id },
   });

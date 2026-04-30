@@ -1,7 +1,9 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { getAdminClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
   const token = new URL(request.url).searchParams.get('token');

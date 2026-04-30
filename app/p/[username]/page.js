@@ -75,7 +75,7 @@ export default async function PublicProfile({ params }) {
       <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}` }}>
         {[
           { l: 'Records', v: (collection || []).length },
-          { l: 'Value', v: totalValue > 0 ? `${totalValue.toFixed(0)} PLN` : '—' },
+          { l: 'Value', v: totalValue > 0 ? `$${totalValue.toFixed(0)}` : '—' },
         ].map(s => (
           <div key={s.l} style={{ flex: 1, padding: '16px', textAlign: 'center', borderRight: `1px solid ${C.border}` }}>
             <div style={{ ...BEBAS, fontSize: 28, color: C.accent, lineHeight: 1 }}>{s.v}</div>

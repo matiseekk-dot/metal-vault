@@ -1,6 +1,8 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 async function getUser(sb) {
   const { data: { user } } = await sb.auth.getUser();

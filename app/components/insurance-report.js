@@ -198,6 +198,133 @@ export async function generateInsuranceReport({ collection, profile, ownerInfo }
     },
   });
 
+  // ── Photo evidence pages (only for items with user-uploaded photos) ──
+  // Each page shows up to 4 items (2 columns × 2 rows). Items without photos are skipped.
+  const itemsWithPhotos = collection.filter(i => Array.isArray(i.user_photos) && i.user_photos.length > 0);
+
+  if (itemsWithPhotos.length > 0) {
+    doc.addPage();
+    doc.setFillColor(220, 38, 38); doc.rect(0, 0, pageW, 8, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(20, 20, 20);
+    doc.text('PHOTO EVIDENCE', 40, 50);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(80, 80, 80);
+    doc.text(itemsWithPhotos.length + ' items with documentation photos', 40, 70);
+
+    // Helper: load user's photo via our authenticated proxy endpoint.
+    // Direct signed-URL fetch can fail CORS or after TTL expiry; the proxy
+    // uses admin storage access + auth check (path must match user_id).
+    const loadImage = async (photoPath) => {
+      try {
+        const r = await fetch('/api/photos/blob?path=' + encodeURIComponent(photoPath), {
+          credentials: 'same-origin',  // include auth cookies
+        });
+        if (!r.ok) return null;
+        const blob = await r.blob();
+        return await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+      } catch { return null; }
+    };
+
+    let y = 90;
+    let col = 0;
+    const cellW = (pageW - 80 - 20) / 2;   // 2 columns, 20pt gap
+    const cellH = 280;                      // image + caption
+
+    for (const item of itemsWithPhotos) {
+      // Page break if needed
+      if (y + cellH > pageH - 60) {
+        doc.addPage();
+        doc.setFillColor(220, 38, 38); doc.rect(0, 0, pageW, 8, 'F');
+        y = 50;
+        col = 0;
+      }
+
+      const x = 40 + col * (cellW + 20);
+
+      // Caption block (artist + album, label, value)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(20, 20, 20);
+      const titleLines = doc.splitTextToSize((item.artist || '') + ' — ' + (item.album || ''), cellW);
+      doc.text(titleLines.slice(0, 2), x, y + 12);
+
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120, 120, 120);
+      const meta = [item.label, item.year, item.format].filter(Boolean).join(' · ');
+      doc.text(meta.substring(0, 60), x, y + 32);
+
+      const value = Number(item.median_price || item.current_price || item.purchase_price) || 0;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(220, 38, 38);
+      doc.text('Insured value: ' + fmtUSD(value), x, y + 46);
+
+      // Image (first user photo only — the primary evidence shot)
+      const photoPath = item.user_photos[0]?.path;
+      if (photoPath) {
+        const dataUrl = await loadImage(photoPath);
+        if (dataUrl) {
+          try {
+            // Detect type + load natural dimensions to preserve aspect ratio.
+            // Without this, portrait photos get squashed and landscape gets stretched.
+            const imgType = dataUrl.includes('image/png') ? 'PNG' : 'JPEG';
+            const imgDims = await new Promise((resolve) => {
+              const im = new Image();
+              im.onload = () => resolve({ w: im.naturalWidth, h: im.naturalHeight });
+              im.onerror = () => resolve(null);
+              im.src = dataUrl;
+            });
+
+            const boxW = cellW;
+            const boxH = cellH - 70;
+            let drawW = boxW, drawH = boxH, drawX = x, drawY = y + 56;
+
+            if (imgDims) {
+              const imgRatio = imgDims.w / imgDims.h;
+              const boxRatio = boxW / boxH;
+              if (imgRatio > boxRatio) {
+                // Image wider than box → fit to width, center vertically
+                drawW = boxW;
+                drawH = boxW / imgRatio;
+                drawY = (y + 56) + (boxH - drawH) / 2;
+              } else {
+                // Image taller than box → fit to height, center horizontally
+                drawH = boxH;
+                drawW = boxH * imgRatio;
+                drawX = x + (boxW - drawW) / 2;
+              }
+            }
+
+            doc.addImage(dataUrl, imgType, drawX, drawY, drawW, drawH);
+          } catch (e) {
+            // Fallback — placeholder rectangle
+            doc.setDrawColor(200, 200, 200);
+            doc.rect(x, y + 56, cellW, cellH - 70);
+            doc.setFontSize(8); doc.setTextColor(160, 160, 160);
+            doc.text('[Image unavailable]', x + cellW / 2, y + 56 + (cellH - 70) / 2, { align: 'center' });
+          }
+        } else {
+          // Photo proxy returned null (deleted, network fail, auth issue)
+          doc.setDrawColor(200, 200, 200);
+          doc.rect(x, y + 56, cellW, cellH - 70);
+          doc.setFontSize(8); doc.setTextColor(160, 160, 160);
+          doc.text('[Photo unavailable]', x + cellW / 2, y + 56 + (cellH - 70) / 2, { align: 'center' });
+        }
+      }
+
+      // Photo count indicator (bottom-right of cell)
+      if (item.user_photos.length > 1) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120, 120, 120);
+        doc.text('+' + (item.user_photos.length - 1) + ' more', x + cellW - 4, y + cellH - 4, { align: 'right' });
+      }
+
+      col++;
+      if (col >= 2) {
+        col = 0;
+        y += cellH + 20;
+      }
+    }
+  }
+
   // ── Final page: Breakdown summary ──
   doc.addPage();
   doc.setFillColor(220, 38, 38); doc.rect(0, 0, pageW, 8, 'F');

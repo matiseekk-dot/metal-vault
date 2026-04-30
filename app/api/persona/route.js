@@ -4,10 +4,12 @@
 // completionist scores per subgenre. All derived from collection data.
 // ────────────────────────────────────────────────────────────────
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { genreTagsForItem } from '@/lib/genre-helper';
+
+
+export const dynamic = 'force-dynamic';
 
 // ── Archetypes: pattern → title ──
 // Checked in order; first match wins. Fallback = "Metal Collector".

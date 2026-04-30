@@ -1,6 +1,8 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 // Send push notification to all user's devices
 async function sendPushToUser(userId, payload) {

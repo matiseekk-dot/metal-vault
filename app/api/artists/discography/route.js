@@ -1,5 +1,7 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+
+
+export const dynamic = 'force-dynamic';
 
 const UA = { 'User-Agent': 'MetalVault/1.0 +https://metal-vault-six.vercel.app' };
 

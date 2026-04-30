@@ -8,10 +8,12 @@
 // In your Discogs app settings, register:
 //   https://YOUR_APP_URL/api/discogs/oauth/callback
 // (no trailing slash, no dynamic segments)
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
 import { accessTokenHeader, apiCallHeader } from '@/lib/oauth';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -50,14 +52,11 @@ export async function GET(request) {
     }
 
     // Exchange request token for access token
-    // Build the signature we will send — show in error for debugging
+    // Build the access token request signature.
+    // computedSig is used only in error diagnostics below — it's not the
+    // actual signature sent (that's inside authHeader via OAuth1 flow).
     const computedSig = secret + '&' + requestTokenSecret;
     const authHeader = accessTokenHeader(key, secret, oauthToken, requestTokenSecret, oauthVerifier);
-
-    // Log key values to Vercel logs
-    console.log('[discogs-callback] oauth_token:', oauthToken.slice(0,8)+'...');
-    console.log('[discogs-callback] requestTokenSecret (from DB):', requestTokenSecret.slice(0,8)+'...'+requestTokenSecret.slice(-4), '(len='+requestTokenSecret.length+')');
-    console.log('[discogs-callback] computedSig:', computedSig.slice(0,20)+'...');
 
     const r = await fetch('https://api.discogs.com/oauth/access_token', {
       method: 'POST',

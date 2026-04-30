@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { C, MONO, BEBAS, BADGE_STYLES, GENRE_COLOR } from '@/lib/theme';
 import MarketComparison from '@/app/components/MarketComparison';
+import PhotoUploader from '@/app/components/PhotoUploader';
+import Icon from '@/app/components/Icon';
 
 // ── formatDate helper ─────────────────────────────────────────
 function formatDate(dateStr) {
@@ -79,20 +81,22 @@ export function StatsBar({releases}){
 
 
 // ── AlbumCard ─────────────────────────────────────────────────
-export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,onFollowToggle,user}){
+export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,onFollowToggle,user,isInCollection,onQuickAdd}){
   const today=new Date();
   const rd=new Date(album.releaseDate);
   const isPreorder=(rd>today)||album.preorder===true;
   const isNew=(today-rd)/(1000*60*60*24)<180&&!isPreorder;  // 6 months
   const isLimited=album.limited===true||vinylData?.hasLimited===true;
+  const owned=isInCollection===true;
   // Compact vertical card for 2-column grid
   return(
     <div onClick={onClick} style={{
-        background:C.bg2,
-        border:'1px solid '+(isFollowed ? C.accent+'55' : C.border),
+        background:owned ? C.bg3 : C.bg2,
+        border:'1px solid '+(owned ? '#22c55e44' : (isFollowed ? C.accent+'55' : C.border)),
         borderRadius:12, overflow:'hidden', cursor:'pointer',
         WebkitTapHighlightColor:'transparent', position:'relative',
-        boxShadow: isFollowed ? '0 0 0 1px '+C.accent+'22' : 'none',
+        boxShadow: isFollowed && !owned ? '0 0 0 1px '+C.accent+'22' : 'none',
+        opacity: owned ? 0.65 : 1,
       }}
       onTouchStart={e=>e.currentTarget.style.background=C.bg3}
       onTouchEnd={e=>e.currentTarget.style.background=C.bg2}
@@ -104,17 +108,32 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
         </div>
         {/* Badges overlay */}
         <div style={{position:'absolute',top:6,left:6,display:'flex',gap:3,flexWrap:'wrap'}}>
-          {isPreorder&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#dc262688',color:'#fff',...MONO}}>PRE</span>}
-          {isLimited&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#f5c84288',color:'#fff',...MONO}}>LTD</span>}
-          {isNew&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#4ade8088',color:'#fff',...MONO}}>NEW</span>}
+          {owned&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#22c55edd',color:'#fff',...MONO,fontWeight:700}}>✓ OWNED</span>}
+          {!owned&&isPreorder&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#dc262688',color:'#fff',...MONO}}>PRE</span>}
+          {!owned&&isLimited&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#f5c84288',color:'#fff',...MONO}}>LTD</span>}
+          {!owned&&isNew&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#4ade8088',color:'#fff',...MONO}}>NEW</span>}
         </div>
-        {/* Watch button */}
-        <button onClick={e=>{e.stopPropagation();onWatchToggle(album);}}
-          style={{position:'absolute',top:4,right:4,background:'#00000066',border:'none',
-            borderRadius:6,cursor:'pointer',fontSize:16,padding:'3px 5px',
-            color:isWatched?'#f5c842':'#ffffff88',lineHeight:1}}>
-          {isWatched?'★':'☆'}
-        </button>
+        {/* Watch / Quick-add — hidden when already owned */}
+        {!owned && (
+          <div style={{position:'absolute',top:4,right:4,display:'flex',gap:4}}>
+            {/* Quick add (+) — only shown if onQuickAdd provided */}
+            {onQuickAdd && (
+              <button onClick={e=>{e.stopPropagation();onQuickAdd(album);}}
+                title="Mark as owned"
+                style={{background:'#00000099',border:'1px solid #22c55e66',
+                  borderRadius:6,cursor:'pointer',fontSize:14,padding:'2px 6px',
+                  color:'#22c55e',lineHeight:1,fontWeight:700}}>
+                +
+              </button>
+            )}
+            <button onClick={e=>{e.stopPropagation();onWatchToggle(album);}}
+              style={{background:'#00000066',border:'none',
+                borderRadius:6,cursor:'pointer',fontSize:16,padding:'3px 5px',
+                color:isWatched?'#f5c842':'#ffffff88',lineHeight:1}}>
+              {isWatched?'★':'☆'}
+            </button>
+          </div>
+        )}
       </div>
       {/* Text */}
       <div style={{padding:'8px 10px 10px'}}>
@@ -148,7 +167,7 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
 
 
 // ── VinylModal ────────────────────────────────────────────────
-export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vinylData,loading,error,premium}){
+export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vinylData,loading,error,premium,collectionItem,onUpgrade,onPhotosChange}){
   const [history, setHistory] = useState(null);
   const [histLoading, setHistLoading] = useState(false);
 
@@ -197,6 +216,20 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
           )}
         </div>
         <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
+
+        {/* User photos — only when this album is in the user's collection */}
+        {collectionItem && (
+          <>
+            <PhotoUploader
+              collectionId={collectionItem.id}
+              photos={collectionItem.user_photos || []}
+              premium={premium}
+              onUpgrade={onUpgrade}
+              onPhotosChange={(photos) => onPhotosChange?.(collectionItem.id, photos)}
+            />
+            <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
+          </>
+        )}
 
         {/* Cross-marketplace price comparison — display-only, eBay-compliant */}
         <MarketComparison
@@ -345,7 +378,6 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
 // ── BottomNav (5-tab IA + center scan FAB) ─────────────────────
 // Structure: Feed · Vault · [Scan] · Calendar · Profile
 // Scan is a centered raised button that always opens the barcode scanner.
-import Icon from '@/app/components/Icon';
 
 export function BottomNav({tab,onChange,watchCount,user,onScan}){
   const tabs=[

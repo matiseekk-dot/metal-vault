@@ -10,9 +10,11 @@
 // Auth: when artist NOT specified, requires logged-in user (uses their
 // followed_artists). When artist IS specified, public lookup.
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 const BANDSINTOWN = 'https://rest.bandsintown.com/artists';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;  // 24h

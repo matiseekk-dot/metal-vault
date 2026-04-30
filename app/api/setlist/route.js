@@ -5,9 +5,11 @@
 // Query: ?artist=Gojira&year=2024&city=Warsaw
 // Returns: { setlists: [{ id, eventDate, venue, city, songs: [...] }] }
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 const SETLIST_FM = 'https://api.setlist.fm/rest/1.0/search/setlists';
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days — setlists don't change

@@ -9,8 +9,10 @@
 // rebuilds it once a day, and the per-detail cache (24h TTL) covers
 // the rest with minimal Discogs hits.
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
   const auth = request.headers.get('authorization');

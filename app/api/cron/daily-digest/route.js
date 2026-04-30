@@ -8,10 +8,11 @@
 // Skips users with no content. Idempotent: concert_notifications dedupes
 // per (user, event, kind) so users never see the same alert twice.
 
-export const dynamic = 'force-dynamic';
-const BUDGET_MS_DIGEST = 4 * 60 * 1000;
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
+
+export const dynamic = 'force-dynamic';
+const BUDGET_MS_DIGEST = 4 * 60 * 1000;
 
 const BANDSINTOWN = 'https://rest.bandsintown.com/artists';
 

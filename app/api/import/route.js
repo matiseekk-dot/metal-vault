@@ -1,5 +1,7 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+
+
+export const dynamic = 'force-dynamic';
 
 const HEADERS = (key, secret, token) => ({
   Authorization: key && secret

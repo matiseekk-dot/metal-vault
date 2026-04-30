@@ -1,10 +1,12 @@
 // ── Stripe Webhook ─────────────────────────────────────────────
 // Handles: checkout.session.completed, customer.subscription.*
 // IMPORTANT: must be excluded from middleware auth check
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
 import { getStripe, subscriptionToProfile } from '@/lib/stripe';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   const body      = await request.text();

@@ -2,9 +2,11 @@
 // Used by ProfileTab when user opts in to "concerts near me".
 // Stores lat/lng/city/radius_km in profiles table (RLS protected).
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   const sb = await createClient();

@@ -7,8 +7,11 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
     dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
     environment: process.env.NODE_ENV,
     tracesSampleRate: 0.1,         // 10% of transactions
-    replaysSessionSampleRate: 0,   // no session replay by default
-    replaysOnErrorSampleRate: 0.1, // 10% on error
+    // Session replays disabled — privacy concern + extra bandwidth/cost.
+    // Stack traces from regular errors give us enough to debug.
+    // If re-enabling, MUST add replayIntegration with maskAllText/blockAllMedia.
+    replaysSessionSampleRate: 0,
+    replaysOnErrorSampleRate: 0,
     beforeSend(event) {
       // Drop errors from known-noisy extensions/sources
       if (event.exception?.values?.[0]?.value?.includes('ResizeObserver')) return null;

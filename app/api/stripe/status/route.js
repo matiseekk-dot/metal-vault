@@ -1,7 +1,9 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
 import { isPremium, FREE_LIMIT_RECORDS } from '@/lib/stripe';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const supabase = await createClient();

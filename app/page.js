@@ -10,6 +10,7 @@ import ProfileTab from '@/app/profile/ProfileTab';
 import ErrorBoundary from '@/app/components/ErrorBoundary';
 import OnboardingScreen from '@/app/components/OnboardingScreen';
 import VaultTab from '@/app/vault/VaultTab';
+import { initPayments, startPurchase, openSubscriptionManagement, restorePurchases } from '@/lib/payments';
 import WhensOnTab from '@/app/whens-on/WhensOnTab';
 import Icon from '@/app/components/Icon';
 import UpgradeModal from '@/app/components/UpgradeModal';
@@ -80,10 +81,14 @@ export default function MetalVault() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user || null);
+      // Initialize payments SDK once user is known. No-op for non-TWA browsers.
+      if (session?.user) initPayments(session.user.id).catch(() => {});
       if (session?.user) { col.loadUserData(session.user); loadProfile(session.user); loadPremium(); }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
+      // Initialize payments SDK once user is known. No-op for non-TWA browsers.
+      if (session?.user) initPayments(session.user.id).catch(() => {});
       if (session?.user) {
         col.loadUserData(session.user);
         loadProfile(session.user);
@@ -349,23 +354,21 @@ export default function MetalVault() {
   };
 
   const startCheckout = async (plan = 'monthly') => {
-    try {
-      const r = await fetch('/api/stripe/checkout', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
-      });
-      const d = await r.json();
-      if (d.url) window.location.href = d.url;
-      else alert(d.error || 'Failed to open checkout');
-    } catch { alert('Checkout failed'); }
+    // Routes to RevenueCat (Play Store TWA) or Stripe (web) based on platform.
+    const result = await startPurchase(plan);
+    if (!result.success && result.error !== 'cancelled') {
+      alert(result.error || 'Checkout failed');
+    }
+    // Success: webhook updates profile, refreshProfile() re-fetches premium state.
+    if (result.success) {
+      await refreshProfile?.();
+    }
   };
 
   const openPortal = async () => {
-    try {
-      const r = await fetch('/api/stripe/portal', { method: 'POST' });
-      const d = await r.json();
-      if (d.url) window.location.href = d.url;
-    } catch {}
+    // Web: Stripe Customer Portal. Play Store: native Google Play subscriptions.
+    const result = await openSubscriptionManagement();
+    if (!result.success) alert(result.error || 'Failed to open subscription settings');
   };
 
   const triggerUpgrade = (reason = '') => {
@@ -409,6 +412,7 @@ export default function MetalVault() {
     });
 
   const isWatched  = id   => col.watchlist.some(w => (w.id||w.album_id) === id);
+  const isInCollection = id => col.collection.some(c => String(c.discogs_id) === String(id) || c.album_id === id);
   const isFollowed = name => col.followedArtists.some(a => a.artist_name === name);
 
   return (
@@ -537,7 +541,7 @@ export default function MetalVault() {
             {!feedLoading && !feedError && (feedTab!=='following' || followedNames.size>0) && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, padding:'10px 16px 16px' }}>
                 {filtered.map(album=>(
-                  <AlbumCard key={album.id} album={album} isWatched={isWatched(album.id)} onWatchToggle={col.toggleWatch} onClick={()=>openAlbum(album)} vinylData={col.vinylCache[album.id]||null} isFollowed={isFollowed(album.artist)} onFollowToggle={col.toggleFollow} user={user}/>
+                  <AlbumCard key={album.id} album={album} isWatched={isWatched(album.id)} onWatchToggle={col.toggleWatch} onClick={()=>openAlbum(album)} vinylData={col.vinylCache[album.id]||null} isFollowed={isFollowed(album.artist)} onFollowToggle={col.toggleFollow} user={user} isInCollection={isInCollection(album.id)} onQuickAdd={a => col.addToCollection({ id:a.id, discogs_id:a.id, artist:a.artist, album:a.album, cover:a.cover, year:(a.releaseDate||'').slice(0,4) })}/>
                 ))}
               </div>
             )}
@@ -663,7 +667,11 @@ export default function MetalVault() {
           onWatchToggle={col.toggleWatch} isWatched={isWatched(selected.id)}
           onAddToCollection={item=>col.addToCollection(item,()=>setSelected(null))}
           vinylData={col.vinylCache[selected.id]||null}
-          loading={col.vinylLoading} error={col.vinylError} premium={premium}/>
+          loading={col.vinylLoading} error={col.vinylError} premium={premium}
+          collectionItem={col.collection.find(c => String(c.discogs_id) === String(selected.id) || c.album_id === selected.id) || null}
+          onUpgrade={triggerUpgrade}
+          onPhotosChange={(itemId, photos) => col.setCollection(prev => prev.map(c => c.id === itemId ? { ...c, user_photos: photos } : c))}
+        />
       )}
     </div>
   );

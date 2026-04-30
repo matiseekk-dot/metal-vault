@@ -8,12 +8,14 @@ import { CollectionTab } from '@/app/collection/CollectionTab';
 import { WatchlistTab } from '@/app/collection/CollectionTab';
 import BandsTab from '@/app/artists/BandsTab';
 import StatsTab from '@/app/stats/StatsTab';
+import SearchTab from '@/app/search/SearchTab';
 
 const LS_KEY = 'mv_vault_subtab';
 const SUB_TABS = [
   { id: 'collection', iconName: 'pkg',      label: 'Vault' },
   { id: 'watchlist',  iconName: 'heart',    label: 'Wantlist' },
   { id: 'bands',      iconName: 'music',    label: 'Bands' },
+  { id: 'search',     iconName: 'search',   label: 'Find' },
   { id: 'stats',      iconName: 'barChart', label: 'Stats' },
 ];
 
@@ -50,7 +52,7 @@ export default function VaultTab(props) {
   return (
     <div>
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+        display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
         background: C.bg2, borderBottom: '1px solid ' + C.border,
         position: 'sticky', top: 56, zIndex: 50,
       }}>
@@ -105,10 +107,19 @@ export default function VaultTab(props) {
             premium={props.premium} onUpgrade={props.onUpgrade}
           />
         )}
+        {sub === 'search' && (
+          <SearchTab
+            collection={props.collection}
+            watchlist={props.watchlist}
+            onAddCollection={props.onAddToCollection}
+            onWatch={props.onWatchToggle}
+          />
+        )}
         {sub === 'stats' && (
           <StatsTab
             collection={props.collection} watchlist={props.watchlist}
             collectionSummary={props.collectionSummary}
+            premium={props.premium} onUpgrade={props.onUpgrade}
           />
         )}
       </div>

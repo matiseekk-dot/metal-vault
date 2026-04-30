@@ -3,9 +3,11 @@
 // GET: returns current streak state.
 // Idempotent: calling POST multiple times per day is safe.
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];

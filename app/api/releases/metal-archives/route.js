@@ -6,8 +6,10 @@
 // Route is still /api/releases/metal-archives for backward compat.
 // ────────────────────────────────────────────────────────────────
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+
+
+export const dynamic = 'force-dynamic';
 
 const UA = 'MetalVault/1.0 (https://metal-vault-six.vercel.app)'; // MB requires identifiable UA
 const METAL_TAGS = [

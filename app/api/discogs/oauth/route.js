@@ -1,9 +1,11 @@
 // ── Discogs OAuth 1.0a — Step 1: get request token ───────────────
 // PLAINTEXT signature over HTTPS (the Discogs-documented approach).
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
 import { requestTokenHeader } from '@/lib/oauth';
+
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
   const supabase = await createClient();

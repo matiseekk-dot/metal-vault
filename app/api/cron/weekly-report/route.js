@@ -5,10 +5,11 @@
 // Content: week-over-week value change, top gainer, top loser,
 // new records added, persona snapshot, pending pre-orders.
 
-export const dynamic = 'force-dynamic';
-const BUDGET_MS_WEEKLY = 4 * 60 * 1000;  // 4min — leaves buffer below Vercel 5min cap
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
+
+export const dynamic = 'force-dynamic';
+const BUDGET_MS_WEEKLY = 4 * 60 * 1000;  // 4min — leaves buffer below Vercel 5min cap
 
 async function sendEmail({ to, subject, html }) {
   const key = process.env.RESEND_API_KEY;

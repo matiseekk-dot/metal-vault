@@ -1,7 +1,9 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { TIERS } from '@/lib/stripe';
 import { createClient } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 async function getUser(sb) {
   const { data: { user } } = await sb.auth.getUser();
@@ -51,7 +53,7 @@ export async function POST(request) {
   const body = await request.json();
 
   // SECURITY: whitelist writable fields — user_id, created_at, triggered_at are server-owned
-  const ALLOWED = ['collection_item_id', 'album_id', 'target_price', 'direction', 'is_active'];
+  const ALLOWED = ['collection_item_id', 'album_id', 'target_price', 'direction', 'is_active', 'alert_type', 'baseline_price'];
   const safe = Object.fromEntries(
     Object.entries(body || {}).filter(([k]) => ALLOWED.includes(k))
   );
@@ -86,7 +88,7 @@ export async function PATCH(request) {
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
   const body = await request.json();
 
-  const ALLOWED = ['target_price', 'direction', 'is_active'];
+  const ALLOWED = ['target_price', 'direction', 'is_active', 'alert_type', 'baseline_price'];
   const safe = Object.fromEntries(
     Object.entries(body || {}).filter(([k]) => ALLOWED.includes(k))
   );

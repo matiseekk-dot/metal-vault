@@ -4,9 +4,11 @@
 //   • Festival presence (count of festival-tagged events)
 //   • Concert frequency tier
 
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, supabaseAdmin } from '@/lib/supabase-server';
+
+
+export const dynamic = 'force-dynamic';
 
 function distanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371, toRad = d => d * Math.PI / 180;

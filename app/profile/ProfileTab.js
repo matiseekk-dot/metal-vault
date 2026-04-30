@@ -2,7 +2,6 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
-import { setLocale, getLocale } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
 
 
@@ -306,9 +305,9 @@ export default function ProfileTab({
             <div>
               <div style={{ ...BEBAS, fontSize: 18, color: '#f5c842', letterSpacing: '0.08em', lineHeight: 1 }}>⭐ METAL VAULT PRO</div>
               <div style={{ fontSize: 10, color: '#a16207', ...MONO, marginTop: 3 }}>
-                {profile?.subscription_status === 'trialing' ? '7-day free trial active' : 'Active subscription'}
+                {profile?.subscription_status === 'trialing' ? '14-day free trial active' : 'Active subscription'}
                 {profile?.subscription_end && (
-                  <span> · renews {new Date(profile.subscription_end).toLocaleDateString('pl-PL')}</span>
+                  <span> · renews {new Date(profile.subscription_end).toLocaleDateString()}</span>
                 )}
               </div>
             </div>
@@ -317,6 +316,24 @@ export default function ProfileTab({
               Manage
             </button>
           </div>
+        </div>
+      )}
+      {/* Restore Purchases — required for Play Store listings to surface this option */}
+      {premium === false && typeof window !== 'undefined' && window.document?.referrer?.startsWith('android-app://') && (
+        <div style={{ marginBottom: 12, textAlign: 'center' }}>
+          <button onClick={async () => {
+            const result = await import('@/lib/payments').then(m => m.restorePurchases());
+            if (result.success && result.hasPro) {
+              alert('Pro restored! Please refresh the app.');
+              window.location.reload();
+            } else if (result.success) {
+              alert('No previous Pro subscription found on this account.');
+            } else {
+              alert(result.error || 'Restore failed');
+            }
+          }} style={{ background: 'transparent', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 14px', fontSize: 10, ...MONO, cursor: 'pointer' }}>
+            ↻ Restore previous purchase
+          </button>
         </div>
       )}
       {premium === false && (
@@ -443,31 +460,6 @@ export default function ProfileTab({
 
 
       {/* Language switcher — i18n */}
-      <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Icon name="globe" size={12} color={C.accent}/> Language / Język
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {[{id:'en', label:'English', flag:'🇬🇧'}, {id:'pl', label:'Polski', flag:'🇵🇱'}].map(lang => {
-            const active = getLocale() === lang.id;
-            return (
-              <button key={lang.id} onClick={() => setLocale(lang.id)}
-                style={{
-                  flex: 1, padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-                  background: active ? C.accent + '22' : C.bg3,
-                  border: '1px solid ' + (active ? C.accent : C.border),
-                  color: active ? C.accent : C.dim,
-                  ...MONO, fontSize: 12, letterSpacing: '0.04em',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}>
-                <span style={{ fontSize: 16 }}>{lang.flag}</span>
-                {lang.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Insurance Report — Pro flagship feature */}
       <div style={{
         background: premium ? 'linear-gradient(135deg,#1a0a05,#0a0a0a)' : C.bg2,
