@@ -177,6 +177,46 @@ export async function GET(request) {
 
     const data    = await res.json();
     const results = (data.results || []).slice(0, 12);
+
+    // ── 2b. Enrich top 5 results with marketplace stats ─────
+    // Discogs search results don't include lowest_price — we need a separate
+    // call per release. To avoid rate limit (60/min), only fetch for top 5
+    // sequentially with 200ms delay. Failures are silent (lowest_price stays null).
+    const TOP_FOR_STATS = 5;
+    for (let i = 0; i < Math.min(results.length, TOP_FOR_STATS); i++) {
+      const r = results[i];
+      if (!r.id) continue;
+      try {
+        const sr = await fetch(
+          `https://api.discogs.com/marketplace/stats/${r.id}`,
+          {
+            headers: {
+              Authorization: authHeader,
+              'User-Agent': 'MetalVault/1.0 +https://metal-vault.app',
+            },
+            signal: AbortSignal.timeout(3000),
+          }
+        );
+        if (sr.ok) {
+          const stats = await sr.json();
+          // stats.lowest_price = { value, currency } or null
+          // stats.num_for_sale = number
+          if (stats?.lowest_price?.value) {
+            r.lowest_price = Number(stats.lowest_price.value);
+          }
+          if (stats?.num_for_sale != null) {
+            r.num_for_sale = Number(stats.num_for_sale);
+          }
+        }
+      } catch {
+        // silent — leave lowest_price as null
+      }
+      // Throttle: 200ms between requests = max 5/sec, well under 60/min limit
+      if (i < TOP_FOR_STATS - 1) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
+
     const payload = buildResponse(results, artist, album);
 
     // ── 3. Store in cache ───────────────────────────────────

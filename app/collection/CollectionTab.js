@@ -143,6 +143,38 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
     setAlertSaving(false); setAlertItem(null); setAlertPrice(''); setAlertType('PRICE_DROP');
   };
 
+
+  const removeAlert = async (album) => {
+    if (!user) return;
+    const id = album.album_id || album.id;
+    // Optimistic UI: remove from local map immediately
+    setAlertDone(m => {
+      const copy = { ...m };
+      delete copy[String(id)];
+      return copy;
+    });
+    try {
+      await fetch('/api/alerts?discogs_id=' + encodeURIComponent(id), { method: 'DELETE' });
+    } catch {
+      // On error, refetch authoritative state from server
+      try {
+        const r = await fetch('/api/alerts').then(r => r.json());
+        if (r.alerts) {
+          const map = {};
+          for (const a of r.alerts) {
+            if (a.is_active !== false) {
+              map[String(a.discogs_id)] = {
+                price: Number(a.target_price),
+                type:  a.alert_type || 'PRICE_DROP',
+              };
+            }
+          }
+          setAlertDone(map);
+        }
+      } catch {}
+    }
+  };
+
   function formatDate(d) {
     if (!d) return '';
     if (/^\d{4}$/.test(d)) return d;
@@ -228,15 +260,24 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                     fontSize: 26, padding: 0, lineHeight: 1, width: 40, height: 40,
                     display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               </div>
-              <button onClick={() => { setAlertItem(alertItem === id ? null : id); setAlertPrice(''); }}
-                style={{ width: '100%', padding: '8px 14px', background: alertItem === id ? '#1a0a00' : 'transparent', border: 'none', borderTop: '1px solid ' + C.border, color: alertItem === id ? '#f5c842' : hasAlert ? '#f5c842' : '#555', cursor: 'pointer', fontSize: 11, ...MONO, display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.05em', textAlign: 'left' }}>
-                🔔 {hasAlert ? (
-                  hasAlert.type === 'PRICE_DROP'   ? 'Alert active: ≤$' + hasAlert.price + ' · edit' :
-                  hasAlert.type === 'PERCENT_DROP' ? 'Alert active: drop ' + hasAlert.price + '% · edit' :
-                  hasAlert.type === 'LOW_STOCK'    ? 'Alert active: stock ≤' + hasAlert.price + ' · edit' :
-                  'Alert active · edit'
-                ) : 'Set price alert'}
-              </button>
+              <div style={{ display: 'flex', borderTop: '1px solid ' + C.border }}>
+                <button onClick={() => { setAlertItem(alertItem === id ? null : id); setAlertPrice(''); }}
+                  style={{ flex: 1, padding: '8px 14px', background: alertItem === id ? '#1a0a00' : 'transparent', border: 'none', color: alertItem === id ? '#f5c842' : hasAlert ? '#f5c842' : '#555', cursor: 'pointer', fontSize: 11, ...MONO, display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.05em', textAlign: 'left' }}>
+                  🔔 {hasAlert ? (
+                    hasAlert.type === 'PRICE_DROP'   ? 'Alert active: ≤$' + hasAlert.price + ' · edit' :
+                    hasAlert.type === 'PERCENT_DROP' ? 'Alert active: drop ' + hasAlert.price + '% · edit' :
+                    hasAlert.type === 'LOW_STOCK'    ? 'Alert active: stock ≤' + hasAlert.price + ' · edit' :
+                    'Alert active · edit'
+                  ) : 'Set price alert'}
+                </button>
+                {hasAlert && (
+                  <button onClick={(e) => { e.stopPropagation(); if (confirm('Remove price alert for this record?')) removeAlert(album); }}
+                    title="Remove alert"
+                    style={{ padding: '8px 14px', background: 'transparent', border: 'none', borderLeft: '1px solid ' + C.border, color: '#f87171', cursor: 'pointer', fontSize: 14, lineHeight: 1, flexShrink: 0 }}>
+                    🗑
+                  </button>
+                )}
+              </div>
               {alertItem === id && (
                 <div style={{ borderTop: '1px solid ' + C.border, padding: '10px 14px', background: '#1a0a00', borderRadius: '0 0 10px 10px' }}>
                   <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginBottom: 6 }}>🔔 Alert type</div>
@@ -775,21 +816,11 @@ export function CollectionTab({
         </div>
       )}
 
-      {/* Sub-tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid ' + C.border, padding: '0 16px', flexShrink: 0 }}>
-        {[['vinyl', `💿 Vinyl (${collection.length})`], ['watchlist', `★ Watchlist (${watchlist.length})`], ['bands', '🎸 Bands']].map(([k, l]) => (
-          <button key={k} onClick={() => setView(k)}
-            style={{ padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', borderBottom: view === k ? '2px solid ' + C.accent : '2px solid transparent', color: view === k ? C.text : C.dim, ...MONO, fontSize: 11, marginBottom: -1 }}>
-            {l}
-          </button>
-        ))}
-      </div>
+      {/* Sub-tabs Vinyl/Watchlist/Bands removed — these duplicate the top-level
+          Vault sub-tabs (VAULT/WANTLIST/BANDS/FIND/STATS) in the parent IA.
+          Always render the vinyl list directly. */}
 
-      {view === 'watchlist' && <WatchlistTab watchlist={watchlist} user={user} onRemove={onRemoveWatch} onAlbumClick={onAlbumClick} AlbumCover={AlbumCover} />}
-      {view === 'bands'     && <BandsTab collection={collection} watchlist={watchlist} onAddToWatchlist={onAddToWatchlist || (() => {})} followedArtists={followedArtists} onToggleFollow={onToggleFollow} onBatchFollow={onBatchFollow} />}
-
-      {view === 'vinyl' && (
-        <div style={{ padding: '16px' }}>
+      <div style={{ padding: '16px' }}>
           {/* Search + Add */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <input value={vaultSearch} onChange={e => { setVaultSearch(e.target.value); setExpandedId(null); }}
@@ -1256,7 +1287,6 @@ export function CollectionTab({
             </div>
           )}
         </div>
-      )}
 
       {/* ═══ PRICE MODAL — rendered outside card list to avoid iOS re-render bug ═══ */}
       {priceModalItem && (

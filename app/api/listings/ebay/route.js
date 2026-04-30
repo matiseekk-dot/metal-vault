@@ -60,7 +60,7 @@ export async function GET(request) {
   }
 
   // Cache key — same as Discogs cache pattern
-  const cacheKey = 'ebay::' + (artist + '::' + album + '::' + format).toLowerCase().replace(/\s+/g, '_');
+  const cacheKey = 'ebay-v2::' + (artist + '::' + album + '::' + format).toLowerCase().replace(/\s+/g, '_');
   const sb = getAdminClient();
 
   // 1) Try cache (6h TTL)
@@ -106,16 +106,24 @@ export async function GET(request) {
 
     // Map to our schema. PREFER itemAffiliateWebUrl when available — that's
     // how eBay Partner Network attributes the click and pays commission.
-    listings = (d.itemSummaries || []).slice(0, 5).map(item => ({
-      title:        item.title,
-      price:        Number(item.price?.value) || 0,
-      currency:     item.price?.currency || 'USD',
-      condition:    item.condition || 'Unknown',
-      sellerRating: item.seller?.feedbackPercentage || null,
-      url:          item.itemAffiliateWebUrl || item.itemWebUrl,
-      image:        item.image?.imageUrl || item.thumbnailImages?.[0]?.imageUrl || null,
-      location:     item.itemLocation?.country || null,
-    })).filter(l => l.price > 0);
+    // Quality filter — eBay returns noise like digital downloads or chinese
+    // bootlegs at <$5. Vinyl LP never realistically sells under $5 in reality,
+    // so anything below is treated as outlier (digital/scam/wrong category).
+    listings = (d.itemSummaries || []).map(item => ({
+      title:           item.title,
+      price:           Number(item.price?.value) || 0,
+      currency:        item.price?.currency || 'USD',
+      condition:       item.condition || 'Unknown',
+      sellerRating:    item.seller?.feedbackPercentage ? Number(item.seller.feedbackPercentage) : null,
+      sellerFeedback:  item.seller?.feedbackScore ? Number(item.seller.feedbackScore) : null,
+      url:             item.itemAffiliateWebUrl || item.itemWebUrl,
+      image:           item.image?.imageUrl || item.thumbnailImages?.[0]?.imageUrl || null,
+      location:        item.itemLocation?.country || null,
+    }))
+      // Skip listings under $5 — vinyl LP never legitimately sells that cheap;
+      // these are digital downloads, scams, or wrong category.
+      .filter(l => l.price >= 5)
+      .slice(0, 5);
 
     // 3) Cache result
     await sb.from('discogs_cache').upsert(

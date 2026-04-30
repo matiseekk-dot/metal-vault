@@ -66,6 +66,17 @@ export default function MarketComparison({ artist, album, format, discogsLowest 
   const allegroSearchUrl = 'https://allegro.pl/listing?string='
     + encodeURIComponent((artist + ' ' + album + ' winyl').trim());
 
+  // Amazon deep-link — Amazon doesn't have a public marketplace API for music
+  // listings, so we send users to search results. Music > Vinyl department.
+  const amazonSearchUrl = 'https://www.amazon.com/s?k='
+    + encodeURIComponent((artist + ' ' + album + ' vinyl').trim())
+    + '&i=music';
+
+  // JPC.de — German metal-friendly music store. No public API; deep-link only.
+  // Their search handles diacritics and Latin chars well.
+  const jpcSearchUrl = 'https://www.jpc.de/s/'
+    + encodeURIComponent((artist + ' ' + album).trim());
+
   const ebayLowest = ebay.listings.length > 0
     ? Math.min(...ebay.listings.map(l => l.price))
     : null;
@@ -129,6 +140,26 @@ export default function MarketComparison({ artist, album, format, discogsLowest 
           color="#ff5a00"
           iconName="external"
           href={allegroSearchUrl}
+          searchOnly
+        />
+
+        {/* Amazon row — link-only, search Amazon Music */}
+        <Row
+          label="Amazon"
+          sublabel="Search vinyl on Amazon"
+          color="#ff9900"
+          iconName="external"
+          href={amazonSearchUrl}
+          searchOnly
+        />
+
+        {/* JPC.de — German metal-friendly music retailer */}
+        <Row
+          label="JPC.de"
+          sublabel="Search German metal store"
+          color="#005ea8"
+          iconName="external"
+          href={jpcSearchUrl}
           searchOnly
         />
 

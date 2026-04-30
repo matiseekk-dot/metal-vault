@@ -113,11 +113,19 @@ export async function DELETE(request) {
   const user = await getUser(supabase);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const id = new URL(request.url).searchParams.get('id');
-  const { error } = await supabase
-    .from('price_alerts').delete()
-    .eq('id', id).eq('user_id', user.id);
+  const url = new URL(request.url);
+  const id         = url.searchParams.get('id');
+  const discogsId  = url.searchParams.get('discogs_id');
 
+  if (!id && !discogsId) {
+    return NextResponse.json({ error: 'id or discogs_id required' }, { status: 400 });
+  }
+
+  let q = supabase.from('price_alerts').delete().eq('user_id', user.id);
+  if (id)        q = q.eq('id', id);
+  if (discogsId) q = q.eq('discogs_id', discogsId);
+
+  const { error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

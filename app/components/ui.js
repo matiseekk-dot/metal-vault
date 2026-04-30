@@ -265,10 +265,18 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                         {v.color&&<span style={{fontSize:9,color:'#aaa',...MONO}}>🎨 {v.color}</span>}
                       </div>
                     </div>
-                    {v.lowestPrice&&(
+                    {v.lowestPrice ? (
                       <div style={{textAlign:'right',flexShrink:0}}>
                         <div style={{...BEBAS,fontSize:20,color:C.accent,lineHeight:1}}>${v.lowestPrice.toFixed(0)}</div>
-                        <div style={{fontSize:8,color:C.dim,...MONO}}>lowest</div>
+                        <div style={{fontSize:8,color:C.dim,...MONO}}>
+                          {v.numForSale > 0 ? `lowest · ${v.numForSale} for sale` : 'lowest'}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{textAlign:'right',flexShrink:0,opacity:0.5}}>
+                        <div style={{fontSize:9,color:C.dim,...MONO,lineHeight:1.2}}>
+                          Price<br/>unavailable
+                        </div>
                       </div>
                     )}
                   </div>
