@@ -39,7 +39,11 @@ CREATE INDEX IF NOT EXISTS idx_revenuecat_events_user
 
 ALTER TABLE revenuecat_events ENABLE ROW LEVEL SECURITY;
 
--- Only service_role can read/write (this table is internal billing infra)
+-- Only service_role can read/write (this table is internal billing infra).
+-- DROP IF EXISTS first so re-running migration doesn't fail with policy conflict.
+DROP POLICY IF EXISTS "deny_anon_revenuecat_events" ON revenuecat_events;
+DROP POLICY IF EXISTS "deny_auth_revenuecat_events" ON revenuecat_events;
+
 CREATE POLICY "deny_anon_revenuecat_events" ON revenuecat_events
   FOR ALL TO anon USING (false) WITH CHECK (false);
 CREATE POLICY "deny_auth_revenuecat_events" ON revenuecat_events

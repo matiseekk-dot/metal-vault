@@ -3,6 +3,8 @@
 -- Lets users upload sleeve/condition photos for insurance and
 -- personal cataloging beyond the generic Discogs cover.
 -- ============================================================
+-- IDEMPOTENT — safe to re-run multiple times. Each section uses
+-- IF NOT EXISTS or DROP-then-CREATE to handle partial-runs gracefully.
 
 -- 1) Add user_photos column to collection table
 -- JSONB array of photo metadata: [{ url, path, uploaded_at, label }]
@@ -34,6 +36,14 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- 3) Storage RLS policies — users can only access their own photos.
 -- Path convention: {user_id}/{collection_item_id}/{uuid}.{ext}
+--
+-- Postgres doesn't support CREATE POLICY IF NOT EXISTS, so we DROP first.
+-- This is safe even on first run — DROP IF EXISTS is no-op if missing.
+
+DROP POLICY IF EXISTS "Users upload own photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users read own photos"   ON storage.objects;
+DROP POLICY IF EXISTS "Users delete own photos" ON storage.objects;
+DROP POLICY IF EXISTS "Anon no access"          ON storage.objects;
 
 -- Users can upload to their own folder
 CREATE POLICY "Users upload own photos"
@@ -68,3 +78,4 @@ CREATE POLICY "Anon no access"
 -- Verify after migration:
 -- SELECT column_name FROM information_schema.columns WHERE table_name='collection' AND column_name='user_photos';
 -- SELECT * FROM storage.buckets WHERE id='collection-photos';
+-- SELECT policyname FROM pg_policies WHERE tablename='objects' AND policyname LIKE '%photo%';
