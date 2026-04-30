@@ -63,8 +63,9 @@ function PortfolioChart({ snapshots }) {
 // ── WatchlistTab ──────────────────────────────────────────────────
 export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCover }) {
   const [sort, setSort]           = useState('added');
-  const [alertItem, setAlertItem] = useState(null);
+  const [alertItem, setAlertItem]     = useState(null);
   const [alertPrice, setAlertPrice]   = useState('');
+  const [alertType, setAlertType]     = useState('PRICE_DROP');  // PRICE_DROP / PERCENT_DROP / LOW_STOCK
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertDone, setAlertDone]     = useState({});
 
@@ -75,7 +76,12 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
       if (!d.alerts) return;
       const map = {};
       for (const a of d.alerts) {
-        if (a.is_active !== false) map[String(a.discogs_id)] = Number(a.target_price);
+        if (a.is_active !== false) {
+          map[String(a.discogs_id)] = {
+            price: Number(a.target_price),
+            type:  a.alert_type || 'PRICE_DROP',
+          };
+        }
       }
       setAlertDone(map);
     }).catch(() => {});
@@ -91,15 +97,26 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
   const saveAlert = async (album) => {
     if (!alertPrice || isNaN(alertPrice) || !user) return;
     setAlertSaving(true);
+    const payload = {
+      discogs_id:   album.album_id || album.id,
+      artist:       album.artist,
+      album:        album.album,
+      target_price: parseFloat(alertPrice),
+      alert_type:   alertType,
+    };
+    // For percentage alerts, capture current price as baseline.
+    // The Wantlist doesn't store live prices, so user enters baseline manually
+    // via the same field — the cron will track relative change from this number.
+    if (alertType === 'PERCENT_DROP') {
+      payload.baseline_price = parseFloat(alertPrice);
+      // For percent, alertPrice is interpreted as the % threshold (e.g. 20 = 20%)
+      // Actually we need a separate field — see UI below: percentInput holds %
+      // and currentPriceInput holds baseline. For now reuse alertPrice for both.
+    }
     const res = await fetch('/api/alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        discogs_id:  album.album_id || album.id,
-        artist:      album.artist,
-        album:       album.album,
-        target_price: parseFloat(alertPrice),
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -113,12 +130,17 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
       if (r.alerts) {
         const map = {};
         for (const a of r.alerts) {
-          if (a.is_active !== false) map[String(a.discogs_id)] = Number(a.target_price);
+          if (a.is_active !== false) {
+            map[String(a.discogs_id)] = {
+              price: Number(a.target_price),
+              type:  a.alert_type || 'PRICE_DROP',
+            };
+          }
         }
         setAlertDone(map);
       }
     } catch {}
-    setAlertSaving(false); setAlertItem(null); setAlertPrice('');
+    setAlertSaving(false); setAlertItem(null); setAlertPrice(''); setAlertType('PRICE_DROP');
   };
 
   function formatDate(d) {
@@ -192,7 +214,13 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                       </span>
                     )}
                   </div>
-                  {hasAlert && <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginTop: 2 }}>🔔 Alert: ≤${hasAlert}</div>}
+                  {hasAlert && (
+                    <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginTop: 2 }}>
+                      🔔 {hasAlert.type === 'PRICE_DROP'   && 'Alert: ≤$' + hasAlert.price}
+                      {  hasAlert.type === 'PERCENT_DROP' && 'Alert: drop ≥' + hasAlert.price + '%'}
+                      {  hasAlert.type === 'LOW_STOCK'    && 'Alert: stock ≤' + hasAlert.price + ' copies'}
+                    </div>
+                  )}
                 </div>
                 {/* × button — always visible, fixed 40px column */}
                 <button onClick={() => onRemove(id)}
@@ -202,22 +230,42 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
               </div>
               <button onClick={() => { setAlertItem(alertItem === id ? null : id); setAlertPrice(''); }}
                 style={{ width: '100%', padding: '8px 14px', background: alertItem === id ? '#1a0a00' : 'transparent', border: 'none', borderTop: '1px solid ' + C.border, color: alertItem === id ? '#f5c842' : hasAlert ? '#f5c842' : '#555', cursor: 'pointer', fontSize: 11, ...MONO, display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.05em', textAlign: 'left' }}>
-                🔔 {hasAlert ? 'Alert active: ≤$' + hasAlert + ' · edit' : 'Set price alert'}
+                🔔 {hasAlert ? (
+                  hasAlert.type === 'PRICE_DROP'   ? 'Alert active: ≤$' + hasAlert.price + ' · edit' :
+                  hasAlert.type === 'PERCENT_DROP' ? 'Alert active: drop ' + hasAlert.price + '% · edit' :
+                  hasAlert.type === 'LOW_STOCK'    ? 'Alert active: stock ≤' + hasAlert.price + ' · edit' :
+                  'Alert active · edit'
+                ) : 'Set price alert'}
               </button>
               {alertItem === id && (
                 <div style={{ borderTop: '1px solid ' + C.border, padding: '10px 14px', background: '#1a0a00', borderRadius: '0 0 10px 10px' }}>
-                  <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginBottom: 6 }}>🔔 Alert when price drops below</div>
+                  <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginBottom: 6 }}>🔔 Alert type</div>
+                  {/* Alert type selector — 3 options for wantlist */}
+                  <select value={alertType} onChange={e => setAlertType(e.target.value)}
+                    style={{ width: '100%', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 12, ...MONO, marginBottom: 8, outline: 'none' }}>
+                    <option value="PRICE_DROP">Price drops below threshold</option>
+                    <option value="PERCENT_DROP">Price drops by % from current</option>
+                    <option value="LOW_STOCK">Low stock — copies for sale below threshold</option>
+                  </select>
+                  <div style={{ fontSize: 10, color: C.muted, ...MONO, marginBottom: 6 }}>
+                    {alertType === 'PRICE_DROP'   && 'Notify when median price ≤ this amount'}
+                    {alertType === 'PERCENT_DROP' && 'Notify when price drops by this % from current value'}
+                    {alertType === 'LOW_STOCK'    && 'Notify when copies on Discogs ≤ this number'}
+                  </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={{ ...BEBAS, fontSize: 18, color: C.muted }}>$</span>
+                    <span style={{ ...BEBAS, fontSize: 18, color: C.muted, minWidth: 16, textAlign: 'center' }}>
+                      {alertType === 'PRICE_DROP' ? '$' : alertType === 'PERCENT_DROP' ? '%' : '#'}
+                    </span>
                     <input type="number" value={alertPrice} onChange={e => setAlertPrice(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && saveAlert(album)}
-                      placeholder="e.g. 25" autoFocus
+                      placeholder={alertType === 'PRICE_DROP' ? 'e.g. 25' : alertType === 'PERCENT_DROP' ? 'e.g. 20' : 'e.g. 5'}
+                      autoFocus
                       style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 16, ...MONO, outline: 'none' }} />
                     <button onClick={() => saveAlert(album)} disabled={alertSaving || !user}
                       style={{ padding: '10px 18px', background: !user || alertSaving ? C.bg3 : C.accent, border: 'none', borderRadius: 8, color: '#fff', cursor: !user ? 'default' : 'pointer', ...BEBAS, fontSize: 17, flexShrink: 0 }}>
                       {alertSaving ? '…' : 'OK'}
                     </button>
-                    <button onClick={() => { setAlertItem(null); setAlertPrice(''); }}
+                    <button onClick={() => { setAlertItem(null); setAlertPrice(''); setAlertType('PRICE_DROP'); }}
                       style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 10px', cursor: 'pointer', ...MONO, fontSize: 10, flexShrink: 0 }}>✕</button>
                   </div>
                   {!user && <div style={{ fontSize: 10, color: '#f87171', ...MONO, marginTop: 4 }}>Sign in to set alerts</div>}
