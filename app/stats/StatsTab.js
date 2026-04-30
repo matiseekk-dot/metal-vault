@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { realGenre } from '@/lib/genre-helper';
 import Icon from '@/app/components/Icon';
+import PortfolioChangeCard from '@/app/components/PortfolioChangeCard';
 
 const GRADE_COLORS = {M:'#a78bfa',NM:'#4ade80','VG+':'#60a5fa',VG:'#f5c842','G+':'#f97316',G:'#f87171',F:'#888',P:'#555'};
 const GRADE_ORDER  = ['M','NM','VG+','VG','G+','G','F','P'];
