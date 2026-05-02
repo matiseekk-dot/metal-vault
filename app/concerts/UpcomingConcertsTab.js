@@ -210,6 +210,54 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
           ))}
         </div>
       )}
+
+      {/* Missing bands — followed artists with no Ticketmaster events.
+          Niche metal bands often aren't in Ticketmaster's database (they
+          favor mainstream tours). For these we offer a deep-link to
+          Bandsintown which has stronger underground/indie coverage. */}
+      {!loading && !error && followedArtists.length > 0 && (() => {
+        const bandsWithEvents = new Set(events.map(ev => (ev.artist || '').toLowerCase()));
+        const missing = followedArtists
+          .filter(name => name && !bandsWithEvents.has(name.toLowerCase()))
+          .sort((a, b) => a.localeCompare(b));
+
+        if (missing.length === 0) return null;
+
+        return (
+          <div style={{
+            margin: '0 16px 24px', padding: '14px 16px',
+            background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12,
+          }}>
+            <div style={{
+              fontSize: 10, color: C.muted, ...MONO, letterSpacing: '0.12em',
+              textTransform: 'uppercase', marginBottom: 4,
+            }}>
+              <Icon name="info" size={11} color={C.muted}/> {missing.length} band{missing.length !== 1 ? 's' : ''} without ticketmaster events
+            </div>
+            <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 10, lineHeight: 1.5 }}>
+              These bands aren&apos;t in Ticketmaster&apos;s database. Check Bandsintown — they often have indie/underground coverage.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {missing.map(name => (
+                <a key={name}
+                  href={'https://www.bandsintown.com/a/' + encodeURIComponent(name)}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{
+                    fontSize: 11, ...MONO,
+                    padding: '6px 10px', borderRadius: 6,
+                    background: C.bg3, border: '1px solid ' + C.border,
+                    color: C.text, textDecoration: 'none',
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    transition: 'all 150ms',
+                  }}>
+                  <span style={{ color: C.muted, fontSize: 10 }}>🎫</span>
+                  {name}
+                </a>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
