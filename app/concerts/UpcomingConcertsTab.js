@@ -216,9 +216,15 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
           favor mainstream tours). For these we offer a deep-link to
           Bandsintown which has stronger underground/indie coverage. */}
       {!loading && !error && followedArtists.length > 0 && (() => {
+        // followedArtists may be either string[] or { artist_name }[] depending on caller.
+        // Normalize to plain string array first to avoid .toLowerCase on objects.
+        const normalizedNames = followedArtists
+          .map(a => typeof a === 'string' ? a : a?.artist_name)
+          .filter(Boolean);
+
         const bandsWithEvents = new Set(events.map(ev => (ev.artist || '').toLowerCase()));
-        const missing = followedArtists
-          .filter(name => name && !bandsWithEvents.has(name.toLowerCase()))
+        const missing = normalizedNames
+          .filter(name => !bandsWithEvents.has(name.toLowerCase()))
           .sort((a, b) => a.localeCompare(b));
 
         if (missing.length === 0) return null;
