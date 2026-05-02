@@ -156,7 +156,7 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
           color: '#f87171', fontSize: 12, ...MONO,
         }}>
           {error.includes('no_app_id')
-            ? 'Concert lookup not configured (BANDSINTOWN_APP_ID missing).'
+            ? 'Concert lookup not configured (TICKETMASTER_API_KEY missing).'
             : 'Could not load concerts: ' + error}
         </div>
       )}

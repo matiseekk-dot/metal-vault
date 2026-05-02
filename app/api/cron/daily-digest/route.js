@@ -14,7 +14,7 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 export const dynamic = 'force-dynamic';
 const BUDGET_MS_DIGEST = 4 * 60 * 1000;
 
-const BANDSINTOWN = 'https://rest.bandsintown.com/artists';
+const TICKETMASTER_BASE = 'https://app.ticketmaster.com/discovery/v2';
 
 // Haversine — same as in /api/concerts
 function distanceKm(lat1, lon1, lat2, lon2) {
@@ -35,30 +35,45 @@ async function sendPushToUser(userId, payload) {
   }
 }
 
-// Fetch Bandsintown events for an artist, dedupe vs snapshot to detect announcements.
+// Fetch Ticketmaster events for an artist, dedupe vs snapshot to detect announcements.
 // Returns { events: [...], newAnnouncements: [...] }.
+// Migrated from Bandsintown after they enforced partnership-only API access (Apr 2026).
 async function fetchAndDiff(artistName, sb) {
-  const appId = process.env.BANDSINTOWN_APP_ID;
-  if (!appId) return { events: [], newAnnouncements: [] };
+  const apiKey = process.env.TICKETMASTER_API_KEY;
+  if (!apiKey) return { events: [], newAnnouncements: [] };
 
   let events = [];
   try {
-    const safeArtist = encodeURIComponent(artistName).replace(/!/g, '%21');
-    const r = await fetch(BANDSINTOWN + '/' + safeArtist + '/events?app_id=' + appId,
-      { signal: AbortSignal.timeout(5000) });
+    const params = new URLSearchParams({
+      apikey:             apiKey,
+      keyword:            artistName,
+      classificationName: 'Music',
+      size:               '20',
+      sort:               'date,asc',
+    });
+    const r = await fetch(TICKETMASTER_BASE + '/events.json?' + params.toString(),
+      { signal: AbortSignal.timeout(6000) });
     if (!r.ok) return { events: [], newAnnouncements: [] };
 
     const raw = await r.json();
-    events = (Array.isArray(raw) ? raw : []).map(e => ({
-      id:        e.id,
-      datetime:  e.datetime,
-      venue:     e.venue?.name || '',
-      city:      e.venue?.city || '',
-      country:   e.venue?.country || '',
-      lat:       e.venue?.latitude  ? Number(e.venue.latitude)  : null,
-      lng:       e.venue?.longitude ? Number(e.venue.longitude) : null,
-      ticketsUrl: e.offers?.find(o => o.type === 'Tickets')?.url || e.url,
-    })).filter(ev => ev.id && ev.datetime);
+    const tmEvents = raw._embedded?.events || [];
+    events = tmEvents.map(e => {
+      const v = e._embedded?.venues?.[0] || {};
+      const dates = e.dates?.start || {};
+      const datetime = dates.dateTime
+        || (dates.localDate && dates.localTime ? dates.localDate + 'T' + dates.localTime : null)
+        || (dates.localDate ? dates.localDate + 'T20:00:00' : null);
+      return {
+        id:         e.id,
+        datetime,
+        venue:      v.name || '',
+        city:       v.city?.name || '',
+        country:    v.country?.countryCode || v.country?.name || '',
+        lat:        v.location?.latitude  ? Number(v.location.latitude)  : null,
+        lng:        v.location?.longitude ? Number(v.location.longitude) : null,
+        ticketsUrl: e.url,
+      };
+    }).filter(ev => ev.id && ev.datetime);
   } catch { return { events: [], newAnnouncements: [] }; }
 
   // Diff vs snapshot: load existing event IDs for this artist
@@ -101,7 +116,7 @@ export async function GET(request) {
   const fortnight = new Date(now); fortnight.setDate(fortnight.getDate() + 14);
 
   const results = { usersChecked: 0, pushed: 0, skipped: 0, errors: 0,
-                    bandsintown: { artistsScanned: 0, announcementsTotal: 0 } };
+                    ticketmaster: { artistsScanned: 0, announcementsTotal: 0 } };
 
   try {
     // Step 1: Build artist→events map for ALL followed artists (deduplicated across users)
@@ -121,8 +136,8 @@ export async function GET(request) {
         artistEventMap.set(a, fetched[idx].events);
         artistAnnouncementMap.set(a, fetched[idx].newAnnouncements);
       });
-      results.bandsintown.artistsScanned += batch.length;
-      results.bandsintown.announcementsTotal +=
+      results.ticketmaster.artistsScanned += batch.length;
+      results.ticketmaster.announcementsTotal +=
         fetched.reduce((s, r) => s + r.newAnnouncements.length, 0);
     }
 

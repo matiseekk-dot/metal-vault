@@ -833,7 +833,7 @@ export function CollectionTab({
           </div>
           {/* Filter pills */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto' }}>
-            {[['all','⚡ All'],['vinyl','💿 Vinyl'],['cd','💽 CD'],['limited','💎 Limited'],['no_price','💳 No price']].map(([id, label]) => (
+            {[['all','⚡ All'],['vinyl','💿 Vinyl'],['cd','💽 CD'],['cassette','📼 Cassette'],['box_set','📦 Box Set'],['limited','💎 Limited'],['no_price','💳 No price']].map(([id, label]) => (
               <button key={id} onClick={() => { setVaultFilter(id); setExpandedId(null); }}
                 style={{ padding: '5px 11px', borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer', fontSize: 10, ...MONO, flexShrink: 0,
                   background: vaultFilter === id ? C.accent + '22' : C.bg3,
@@ -972,6 +972,8 @@ export function CollectionTab({
                   if (q && !item.artist?.toLowerCase().includes(q) && !item.album?.toLowerCase().includes(q)) return false;
                   if (vaultFilter === 'vinyl')    return (item.format || '').toLowerCase().includes('vinyl') || !item.format;
                   if (vaultFilter === 'cd')       return (item.format || '').toLowerCase().includes('cd');
+                  if (vaultFilter === 'cassette') return (item.format || '').toLowerCase().includes('cassette');
+                  if (vaultFilter === 'box_set')  return (item.format || '').toLowerCase().includes('box');
                   if (vaultFilter === 'limited')  return (item.format || '').toLowerCase().includes('limited');
                   if (vaultFilter === 'no_price') return !item.purchase_price;
                   return true;

@@ -204,6 +204,62 @@ function SellSuggestions({ collection }) {
 }
 
 // ── Grade distribution ────────────────────────────────────────
+function FormatBreakdown({ collection }) {
+  // Group by canonical format. Discogs returns multi-token formats like "Vinyl, LP, Album"
+  // — we normalize to first matching primary format keyword.
+  const buckets = {
+    'Vinyl':    { count: 0, value: 0, color: '#dc2626', icon: '💿' },
+    'CD':       { count: 0, value: 0, color: '#629aa9', icon: '💽' },
+    'Cassette': { count: 0, value: 0, color: '#a855f7', icon: '📼' },
+    'Box Set':  { count: 0, value: 0, color: '#f5c842', icon: '📦' },
+    'Other':    { count: 0, value: 0, color: '#888',    icon: '🎵' },
+  };
+
+  for (const item of collection) {
+    const fmt = (item.format || '').toLowerCase();
+    let bucket = 'Other';
+    if (fmt.includes('cassette'))  bucket = 'Cassette';
+    else if (fmt.includes('box'))  bucket = 'Box Set';
+    else if (fmt.includes('cd'))   bucket = 'CD';
+    else if (fmt.includes('vinyl') || fmt.includes('lp') || !fmt) bucket = 'Vinyl';
+
+    buckets[bucket].count += 1;
+    buckets[bucket].value += Number(item.median_price || item.current_price || item.purchase_price || 0);
+  }
+
+  // Don't render if all items in single bucket — feature only useful for multi-format collections
+  const nonEmpty = Object.entries(buckets).filter(([_, v]) => v.count > 0);
+  if (nonEmpty.length < 2) return null;
+
+  const total = collection.length;
+
+  return (
+    <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
+      <div style={{ fontSize: 10, color: C.accent, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Icon name="layers" size={12} color={C.accent}/> Format breakdown
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {nonEmpty.map(([name, b]) => {
+          const pct = total > 0 ? (b.count / total) * 100 : 0;
+          return (
+            <div key={name}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 11, ...MONO }}>
+                <span style={{ color: C.text }}>{b.icon} {name}</span>
+                <span style={{ color: C.dim }}>
+                  {b.count} ({pct.toFixed(0)}%) · ${b.value.toFixed(0)}
+                </span>
+              </div>
+              <div style={{ background: C.bg3, height: 6, borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ background: b.color, height: '100%', width: pct + '%', transition: 'width 300ms' }}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GradeChart({ collection }) {
   const gradeMap = {};
   collection.forEach(i => {
@@ -686,6 +742,9 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
           <PortfolioChart snapshots={portfolio.snapshots}/>
         </div>
       )}
+
+      {/* Format breakdown — only renders if 2+ formats in collection */}
+      <FormatBreakdown collection={collection}/>
 
       {/* Grade distribution */}
       <GradeChart collection={collection}/>
