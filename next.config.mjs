@@ -71,10 +71,14 @@ const nextConfig = {
   },
 };
 
-// Wrap with Sentry only if a DSN AND auth token are configured for the build.
-// In local dev or PR previews without Sentry, fall through unchanged.
+// Wrap with Sentry only when monitoring is fully configured for the
+// build: an auth token (so source maps can upload) AND a DSN to point
+// at. We accept either the server-side SENTRY_DSN or the public
+// NEXT_PUBLIC_SENTRY_DSN — typical setups only set the public one,
+// and demanding both would silently disable source-map uploads.
 async function maybeWithSentry(cfg) {
-  if (!process.env.SENTRY_AUTH_TOKEN || !process.env.SENTRY_DSN) return cfg;
+  const hasDsn = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN;
+  if (!process.env.SENTRY_AUTH_TOKEN || !hasDsn) return cfg;
   try {
     const { withSentryConfig } = await import('@sentry/nextjs');
     return withSentryConfig(cfg, {

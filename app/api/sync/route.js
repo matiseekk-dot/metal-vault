@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
 
 import { discogsApiHeaders } from '@/lib/oauth';
@@ -94,7 +95,12 @@ export async function POST(req) {
             access_secret: oauthToken?.access_secret || null,
           }, { onConflict: 'user_id' });
         }
-      } catch {}
+      } catch (e) {
+        // Username persist failed — sync can still proceed using the
+        // body-supplied username, but downstream syncs won't be able
+        // to recover it without OAuth. Capture so we see it.
+        Sentry.captureException(e, { tags: { route: '/api/sync', step: 'persist-discogs-username' }, extra: { userId: user.id } });
+      }
     }
 
     if (!username) {
@@ -229,7 +235,12 @@ export async function POST(req) {
           item_count:    allItems.length,
         }, { onConflict: 'user_id,snapshot_date' });
       }
-    } catch {}
+    } catch (e) {
+      // Snapshot write failed — collection sync already succeeded for
+      // the user, so don't propagate. The portfolio chart will gap one
+      // day but recover on the next successful sync.
+      Sentry.captureException(e, { tags: { route: '/api/sync', step: 'portfolio-snapshot' }, extra: { userId: user.id } });
+    }
 
     return NextResponse.json({ success: true, ...result });
   } catch (e) {
