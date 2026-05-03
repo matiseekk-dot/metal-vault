@@ -51,7 +51,8 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
-  output: 'standalone',
+  // No `output: 'standalone'` — we deploy to Vercel, which doesn't need the
+  // standalone server bundle. Re-add it only if/when we self-host.
   experimental: {},
   images: {
     remotePatterns: [
@@ -61,6 +62,8 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.discogs.com' },
       { protocol: 'https', hostname: 'coverartarchive.org' },
       { protocol: 'https', hostname: '*.coverartarchive.org' },
+      { protocol: 'https', hostname: 'archive.org' },
+      { protocol: 'https', hostname: '*.archive.org' },
     ],
   },
   async headers() {
@@ -68,4 +71,21 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap with Sentry only if a DSN AND auth token are configured for the build.
+// In local dev or PR previews without Sentry, fall through unchanged.
+async function maybeWithSentry(cfg) {
+  if (!process.env.SENTRY_AUTH_TOKEN || !process.env.SENTRY_DSN) return cfg;
+  try {
+    const { withSentryConfig } = await import('@sentry/nextjs');
+    return withSentryConfig(cfg, {
+      silent: true,
+      widenClientFileUpload: true,
+      hideSourceMaps: true,           // don't expose .map files publicly
+      disableLogger: true,
+    });
+  } catch {
+    return cfg;
+  }
+}
+
+export default await maybeWithSentry(nextConfig);

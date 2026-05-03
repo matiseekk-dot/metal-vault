@@ -1,0 +1,14 @@
+{
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "react-hooks/exhaustive-deps": "warn",
+    "react/no-unescaped-entities": "off",
+    "@next/next/no-img-element": "off"
+  },
+  "ignorePatterns": [
+    "scripts/**",
+    "public/sw.js",
+    ".next/**",
+    "node_modules/**"
+  ]
+}
