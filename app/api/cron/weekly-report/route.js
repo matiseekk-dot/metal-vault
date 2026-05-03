@@ -11,6 +11,9 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 export const dynamic = 'force-dynamic';
 const BUDGET_MS_WEEKLY = 4 * 60 * 1000;  // 4min — leaves buffer below Vercel 5min cap
 
+let _weeklyStartedAt = 0;
+const budgetExpired = () => Date.now() - _weeklyStartedAt > BUDGET_MS_WEEKLY;
+
 async function sendEmail({ to, subject, html }) {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { skipped: 'no_resend_key' };
@@ -135,6 +138,7 @@ export async function GET(request) {
     return NextResponse.json({ skipped: 'RESEND_API_KEY not set' });
   }
 
+  _weeklyStartedAt = Date.now();
   const sb = supabaseAdmin;
   const results = { sent: 0, skipped: 0, errors: 0 };
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';

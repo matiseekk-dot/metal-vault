@@ -30,6 +30,9 @@ async function sendEmail({ to, subject, html }) {
 // Called weekly on Monday 10:00 UTC by Vercel Cron
 const BUDGET_MS_RELEASES = 3 * 60 * 1000;
 
+let _releasesStartedAt = 0;
+const budgetExpired = () => Date.now() - _releasesStartedAt > BUDGET_MS_RELEASES;
+
 export async function GET(request) {
   if (!process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Server misconfigured: CRON_SECRET unset' }, { status: 500 });
@@ -39,6 +42,7 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  _releasesStartedAt = Date.now();
   const results = { usersNotified: 0, newReleases: 0, errors: [] };
 
   try {

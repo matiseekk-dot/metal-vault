@@ -14,6 +14,12 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 export const dynamic = 'force-dynamic';
 const BUDGET_MS_DIGEST = 4 * 60 * 1000;
 
+// Vercel kills cron jobs at the 5-minute hard limit. We track our own
+// soft budget so iteration loops can bail out gracefully and report
+// `skippedBudget` instead of getting hard-killed mid-write.
+let _digestStartedAt = 0;
+const budgetExpired = () => Date.now() - _digestStartedAt > BUDGET_MS_DIGEST;
+
 const TICKETMASTER_BASE = 'https://app.ticketmaster.com/discovery/v2';
 
 // Haversine — same as in /api/concerts
@@ -113,6 +119,7 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  _digestStartedAt = Date.now();
   const sb = supabaseAdmin;
   const now = new Date();
   const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);

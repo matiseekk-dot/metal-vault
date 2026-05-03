@@ -150,9 +150,13 @@ export async function GET(request) {
 
         const target   = Number(alert.target_price);
         const baseline = Number(alert.baseline_price) || null;
-        const type     = alert.alert_type || 'PRICE_DROP';
-        // Legacy 'direction' field still respected for backward compat:
-        const legacyDir = alert.direction || 'below';
+        // Resolve effective alert type. Older rows predate alert_type
+        // and only have `direction`; honour that here. Without this
+        // mapping every legacy row falls through to PRICE_DROP and
+        // misses every "alert me when price RISES above X" intent.
+        const legacyDir   = alert.direction || 'below';
+        const type        = alert.alert_type
+          || (legacyDir === 'above' ? 'PRICE_RISE' : 'PRICE_DROP');
 
         let trigger = false;
         let triggerMsg = '';
@@ -162,12 +166,12 @@ export async function GET(request) {
             trigger = true;
             triggerMsg = 'only ' + numForSale + ' copies for sale';
           }
-        } else if (type === 'PRICE_DROP' || (type === 'PRICE_DROP' && legacyDir === 'below')) {
+        } else if (type === 'PRICE_DROP') {
           if (lowest <= target) {
             trigger = true;
             triggerMsg = 'is now $' + lowest.toFixed(0);
           }
-        } else if (type === 'PRICE_RISE' || legacyDir === 'above') {
+        } else if (type === 'PRICE_RISE') {
           if (lowest >= target) {
             trigger = true;
             triggerMsg = 'is now $' + lowest.toFixed(0);
