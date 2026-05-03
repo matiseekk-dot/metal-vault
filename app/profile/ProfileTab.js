@@ -5,6 +5,7 @@ import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm as mvConfirm } from '@/app/components/Toast';
+import { useT, useLocale, setLocale, SUPPORTED_LOCALES } from '@/lib/i18n';
 
 
 // ── ConcertLocationCard ──
@@ -748,6 +749,9 @@ export default function ProfileTab({
         )}
       </div>
 
+      {/* Language picker — every locale defined in lib/i18n.js shows up */}
+      <LanguagePicker/>
+
       {/* Sign out */}
       <button onClick={onSignOut}
         style={{
@@ -760,6 +764,45 @@ export default function ProfileTab({
 
       {/* Danger zone — account deletion (GDPR/COPPA) */}
       <DangerZone email={user?.email} onDeleted={onSignOut}/>
+    </div>
+  );
+}
+
+// ── LanguagePicker — switches between English and Polish ─────────
+// Persists to localStorage (`mv_locale`). useT() subscribers re-render
+// on the `mv:locale-changed` custom event, so the change propagates
+// across the whole app without a reload.
+function LanguagePicker() {
+  const t = useT();
+  const locale = useLocale();
+  return (
+    <div style={{ marginTop: 16, padding: 14, border: '1px solid ' + C.border, borderRadius: 10, background: C.bg2 }}>
+      <div style={{ ...MONO, fontSize: 9, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 4 }}>
+        {t('profile.language.title')}
+      </div>
+      <div style={{ ...MONO, fontSize: 11, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
+        {t('profile.language.desc')}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {SUPPORTED_LOCALES.map(l => {
+          const active = l.code === locale;
+          return (
+            <button key={l.code} onClick={() => setLocale(l.code)}
+              style={{
+                flex: 1, padding: '10px 8px',
+                background: active ? C.accent + '22' : C.bg3,
+                border: '1px solid ' + (active ? C.accent + '66' : C.border),
+                borderRadius: 8,
+                color: active ? C.accent : C.dim,
+                cursor: 'pointer', ...MONO, fontSize: 12,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}>
+              <span style={{ fontSize: 16 }}>{l.flag}</span>
+              <span>{l.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
