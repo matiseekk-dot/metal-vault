@@ -23,6 +23,7 @@
 import { useEffect, useState } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { useBackButton } from '@/lib/hooks/useBackButton';
+import { useT } from '@/lib/i18n';
 
 // ── Version + changelog ───────────────────────────────────────────
 // Keep entries newest-first when adding. Three at most are shown.
@@ -58,6 +59,7 @@ function newer(a, b) {
 }
 
 export default function WhatsNew() {
+  const t = useT();
   const [unseen, setUnseen] = useState([]);   // versions newer than `seen`
   const [open, setOpen]     = useState(false);
   useBackButton(open, () => dismiss());
@@ -124,7 +126,7 @@ export default function WhatsNew() {
 
         <div style={{ padding: '20px 22px 8px' }}>
           <div style={{ ...MONO, fontSize: 10, color: C.accent, letterSpacing: '0.25em', textTransform: 'uppercase' }}>
-            What&rsquo;s new
+            {t('whatsnew.heading')}
           </div>
           <div style={{ ...BEBAS, fontSize: 30, color: C.text, letterSpacing: '0.04em', lineHeight: 1.05, marginTop: 6 }}>
             Metal Vault {APP_VERSION}
@@ -173,7 +175,7 @@ export default function WhatsNew() {
               cursor: 'pointer', ...BEBAS, fontSize: 18,
               letterSpacing: '0.08em',
             }}>
-            🤘 Let&rsquo;s go
+            {t('whatsnew.cta')}
           </button>
         </div>
       </div>

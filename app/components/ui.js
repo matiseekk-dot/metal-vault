@@ -6,6 +6,7 @@ import MarketComparison from '@/app/components/MarketComparison';
 import PhotoUploader from '@/app/components/PhotoUploader';
 import Icon from '@/app/components/Icon';
 import { useBackButton } from '@/lib/hooks/useBackButton';
+import { useT } from '@/lib/i18n';
 
 // ── formatDate helper ─────────────────────────────────────────
 function formatDate(dateStr) {
@@ -396,12 +397,13 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
 // Scan is a centered raised button that always opens the barcode scanner.
 
 export function BottomNav({tab,onChange,watchCount,user,onScan}){
+  const t = useT();
   const tabs=[
-    {id:'feed',      iconName:'fire',     label:'Feed'},
-    {id:'vault',     iconName:'pkg',      label:'Vault'},
-    {id:'scan',      iconName:'scan',     label:'Scan',  isAction:true},
-    {id:'calendar',  iconName:'calendar', label:'When'},
-    {id:'profile',   iconName:'user',     label:'Me'},
+    {id:'feed',      iconName:'fire',     label:t('bottomNav.feed')},
+    {id:'vault',     iconName:'pkg',      label:t('bottomNav.vault')},
+    {id:'scan',      iconName:'scan',     label:t('bottomNav.scan'), isAction:true},
+    {id:'calendar',  iconName:'calendar', label:t('bottomNav.when')},
+    {id:'profile',   iconName:'user',     label:t('bottomNav.me')},
   ];
   return(
     <div style={{
@@ -435,7 +437,7 @@ export function BottomNav({tab,onChange,watchCount,user,onScan}){
                 position:'absolute', bottom:6, fontSize:8,
                 color:'#888', fontFamily:'system-ui,sans-serif', fontWeight:600,
                 letterSpacing:'-0.01em',
-              }}>Scan</span>
+              }}>{t.label}</span>
             </div>
           );
         }

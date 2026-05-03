@@ -17,6 +17,7 @@ import UpgradeModal from '@/app/components/UpgradeModal';
 import WhatsNew from '@/app/components/WhatsNew';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm } from '@/app/components/Toast';
+import { useT } from '@/lib/i18n';
 import nextDynamic from 'next/dynamic';
 export const dynamic = 'force-dynamic';
 
@@ -28,19 +29,15 @@ export const dynamic = 'force-dynamic';
 const ScannerTab    = nextDynamic(() => import('@/app/scanner/ScannerTab'),    { ssr: false });
 const DiscogsImport = nextDynamic(() => import('@/app/import/DiscogsImport'),  { ssr: false });
 
-const FILTERS = [
-  { id:'all',      label:'🔥 All'       },
-  { id:'preorder', label:'⏳ Upcoming'  },
-  { id:'new',      label:'🆕 Released'  },
-  { id:'limited',  label:'💎 Limited'   },
-  { id:'vinyl',    label:'💿 Has Vinyl' },
-];
+// Filter ids stay stable for URL/state — labels resolve via t() in render.
+const FILTER_IDS = ['all', 'preorder', 'new', 'limited', 'vinyl'];
 const ALL_GENRES = ['Heavy Metal','Death Metal','Black Metal','Thrash Metal','Doom Metal',
   'Progressive Metal','Power Metal','Metalcore','Groove Metal','Nu-Metal',
   'Symphonic Metal','Sludge Metal','Industrial Metal','Folk Metal','Post-Metal'];
 
 export default function MetalVault() {
   const supabase = useRef(createClient()).current;
+  const t = useT();
 
   // Auth
   const [user,    setUser]    = useState(null);
@@ -52,8 +49,13 @@ export default function MetalVault() {
   const [feedLoading, setFeedLoading] = useState(true);
   const [feedError,   setFeedError]   = useState('');
 
-  // UI
-  const [tab,             setTab]             = useState('feed');
+  // UI — initial tab from URL ?tab=… (manifest shortcuts use this).
+  // Only honour known tab ids; anything else falls back to feed.
+  const [tab,             setTab]             = useState(() => {
+    if (typeof window === 'undefined') return 'feed';
+    const fromUrl = new URLSearchParams(window.location.search).get('tab');
+    return ['feed','vault','calendar','profile'].includes(fromUrl) ? fromUrl : 'feed';
+  });
   const [filter,          setFilter]          = useState('all');
   const [sort,            setSort]            = useState('date_desc');
   const [search,          setSearch]          = useState('');
@@ -443,7 +445,7 @@ export default function MetalVault() {
           <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
             <div style={{ ...BEBAS, fontSize:28, letterSpacing:'0.08em', color:C.text, lineHeight:1 }}>METAL VAULT</div>
             <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.2em', textTransform:'uppercase' }}>
-              {tab==='feed'?'RELEASES':tab==='vault'?'VAULT':tab==='calendar'?"WHEN'S ON":tab==='profile'?'PROFILE':tab.toUpperCase()}
+              {tab==='feed'?t('header.feed'):tab==='vault'?t('header.vault'):tab==='calendar'?t('header.calendar'):tab==='profile'?t('header.profile'):tab.toUpperCase()}
             </div>
           </div>
           {/* Live collection value + streak — the #1 reason to open the app */}
@@ -475,7 +477,7 @@ export default function MetalVault() {
           ) : null}
           </div>
         </div>
-        {source==='mock' && <div style={{ fontSize:9, color:'#555', ...MONO, marginTop:2 }}>⚠ Demo mode — add Discogs API keys</div>}
+        {source==='mock' && <div style={{ fontSize:9, color:'#555', ...MONO, marginTop:2 }}>{t('header.demoMode')}</div>}
       </div>
 
       <div style={{ paddingBottom:100 }}>
@@ -485,37 +487,40 @@ export default function MetalVault() {
             {/* Following / All tabs — only show Following if user is logged in */}
             <div style={{ display:'flex', borderBottom:'1px solid '+C.border }}>
               {[
-                ...(user ? [{ id:'following', label: col.followedArtists.length > 0 ? `🔔 Following (${col.followedArtists.length})` : '🔔 Following' }] : []),
-                { id:'all', label: '🔥 All Metal' },
-              ].map(t => (
-                <button key={t.id} onClick={()=>setFeedTab(t.id)} style={{
+                ...(user ? [{ id:'following', label: col.followedArtists.length > 0 ? `${t('feed.tab.following')} (${col.followedArtists.length})` : t('feed.tab.following') }] : []),
+                { id:'all', label: t('feed.tab.all') },
+              ].map(tab => (
+                <button key={tab.id} onClick={()=>setFeedTab(tab.id)} style={{
                   flex:1, padding:'10px 0', background:'none', border:'none',
-                  borderBottom: feedTab===t.id ? '2px solid '+C.accent : '2px solid transparent',
-                  color: feedTab===t.id ? C.text : C.dim,
+                  borderBottom: feedTab===tab.id ? '2px solid '+C.accent : '2px solid transparent',
+                  color: feedTab===tab.id ? C.text : C.dim,
                   cursor:'pointer', fontSize:12, ...MONO,
                 }}>
-                  {t.label}
+                  {tab.label}
                 </button>
               ))}
             </div>
             <div style={{ display:'flex', gap:6, padding:'8px 16px', overflow:'auto', borderBottom:'1px solid '+C.border }}>
-              {FILTERS.map(f => (
-                <button key={f.id} onClick={()=>setFilter(f.id)} style={{ padding:'5px 10px', borderRadius:20, whiteSpace:'nowrap', background:filter===f.id?C.accent+'22':C.bg3, color:filter===f.id?C.accent:C.dim, border:'1px solid '+(filter===f.id?C.accent+'66':C.border), cursor:'pointer', fontSize:10, ...MONO }}>
-                  {f.label}
+              {FILTER_IDS.map(id => {
+                const label = t('feed.filter.' + (id === 'preorder' ? 'upcoming' : id));
+                return (
+                <button key={id} onClick={()=>setFilter(id)} style={{ padding:'5px 10px', borderRadius:20, whiteSpace:'nowrap', background:filter===id?C.accent+'22':C.bg3, color:filter===id?C.accent:C.dim, border:'1px solid '+(filter===id?C.accent+'66':C.border), cursor:'pointer', fontSize:10, ...MONO }}>
+                  {label}
                 </button>
-              ))}
+                );
+              })}
             </div>
             <div style={{ padding:'10px 16px 0', display:'flex', gap:8 }}>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search artist, album…" style={{ ...inputSt, flex:1 }}/>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t('feed.search')} style={{ ...inputSt, flex:1 }}/>
               <select value={sort} onChange={e=>setSort(e.target.value)} style={{ background:C.bg3, border:'1px solid '+C.border, borderRadius:8, color:C.muted, padding:'0 10px', fontSize:13, ...MONO, cursor:'pointer', outline:'none', flexShrink:0 }}>
-                <option value="date_desc">Newest</option><option value="date_asc">Oldest</option><option value="artist">A–Z</option>
+                <option value="date_desc">{t('feed.sort.newest')}</option><option value="date_asc">{t('feed.sort.oldest')}</option><option value="artist">{t('feed.sort.artist')}</option>
               </select>
             </div>
             {!feedLoading && (
               <div style={{ padding:'4px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <div style={{ fontSize:10, color:C.dim, ...MONO }}>{filtered.length} release{filtered.length!==1?'s':''}{genreInterests.length>0?' · filtered':''}</div>
+                <div style={{ fontSize:10, color:C.dim, ...MONO }}>{filtered.length} {t('feed.count')}{genreInterests.length>0?' · '+t('feed.genres'):''}</div>
                 <button onClick={()=>setShowGenrePicker(p=>!p)} style={{ fontSize:10, color:genreInterests.length>0?C.accent:C.dim, ...MONO, background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>
-                  🎸 {genreInterests.length>0?genreInterests.length+' genres':'genres'}
+                  🎸 {genreInterests.length>0?genreInterests.length+' '+t('feed.genres'):t('feed.genres')}
                 </button>
               </div>
             )}
@@ -549,12 +554,12 @@ export default function MetalVault() {
             {!feedLoading && !feedError && feedTab==='following' && followedNames.size===0 && (
               <div style={{ textAlign:'center', padding:'60px 24px', color:C.dim, ...MONO }}>
                 <div style={{ fontSize:48, marginBottom:16 }}>🎸</div>
-                <div style={{ fontSize:14, color:C.muted, marginBottom:8 }}>No followed artists yet</div>
+                <div style={{ fontSize:14, color:C.muted, marginBottom:8 }}>{t('feed.empty.title')}</div>
                 <div style={{ fontSize:11, lineHeight:1.6 }}>
-                  Follow artists from album cards in the feed<br/>to see their upcoming releases here.
+                  {t('feed.empty.desc')}
                 </div>
                 <button onClick={()=>setFeedTab('all')} style={{ marginTop:20, background:C.accent, border:'none', borderRadius:10, color:'#fff', padding:'10px 24px', cursor:'pointer', ...BEBAS, fontSize:16, letterSpacing:'0.08em' }}>
-                  Browse All Metal →
+                  {t('feed.empty.cta')}
                 </button>
               </div>
             )}
@@ -622,8 +627,8 @@ export default function MetalVault() {
           ) : (
             <div style={{ textAlign:'center', padding:'80px 24px' }}>
               <div style={{ ...BEBAS, fontSize:40, color:C.text, marginBottom:8, lineHeight:1 }}>METAL VAULT</div>
-              <div style={{ fontSize:12, color:C.dim, ...MONO, marginBottom:32, lineHeight:1.7 }}>Sign in to sync your watchlist,<br/>manage your collection and get price alerts.</div>
-              <button onClick={()=>window.location.href='/login'} style={{ background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')', border:'none', borderRadius:12, color:'#fff', padding:'15px 32px', ...BEBAS, fontSize:22, letterSpacing:'0.1em', cursor:'pointer' }}>SIGN IN</button>
+              <div style={{ fontSize:12, color:C.dim, ...MONO, marginBottom:32, lineHeight:1.7 }}>{t('home.signedOut.desc')}</div>
+              <button onClick={()=>window.location.href='/login'} style={{ background:'linear-gradient(135deg,'+C.accent+','+C.accent2+')', border:'none', borderRadius:12, color:'#fff', padding:'15px 32px', ...BEBAS, fontSize:22, letterSpacing:'0.1em', cursor:'pointer' }}>{t('home.signedOut.cta')}</button>
             </div>
           )
         )}
