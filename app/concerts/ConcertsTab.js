@@ -356,9 +356,15 @@ export default function ConcertsTab() {
   const totalSpent = concerts.reduce((s,c)=>s+(Number(c.price)||0),0);
   const mostSeen   = Object.entries(bandMap).sort((a,b)=>b[1].length-a[1].length)[0];
 
+  // Compare venue ids as strings — built-ins use numeric ids, user-added
+  // venues use crypto.randomUUID() strings, and the <select> option value
+  // is always serialized to string. String() coercion makes the lookup
+  // type-agnostic.
+  const findVenue = (id) => venues.find(v => String(v.id) === String(id));
+
   const filtered = concerts.filter(c=>{
     const q=search.toLowerCase();
-    const v=venues.find(vn=>vn.id===c.venueId);
+    const v=findVenue(c.venueId);
     return c.band.toLowerCase().includes(q)||(v?.name||'').toLowerCase().includes(q);
   }).sort((a,b)=>{
     if(sortBy==='year_desc')return (b.year||'0').localeCompare(a.year||'0');
@@ -372,7 +378,7 @@ export default function ConcertsTab() {
     .filter(([b])=>b.toLowerCase().includes(search.toLowerCase()))
     .sort((a,b)=>b[1].length-a[1].length||(a[0].localeCompare(b[0])));
 
-  const venue = venues.find(v=>v.id===form.venueId);
+  const venue = findVenue(form.venueId);
 
   return(
     <div style={{padding:'0 0 16px'}}>
@@ -471,7 +477,7 @@ export default function ConcertsTab() {
             <button onClick={()=>{
               const headers = ['Band','Year','Genre','Rating','Price','Venue','Note'];
               const rows = concerts.map(c => {
-                const v = venues.find(x=>x.id===c.venueId);
+                const v = findVenue(c.venueId);
                 return [c.band,c.year||'',c.genre||'',c.rating||'',c.price||'',v?v.name:'',c.note||'']
                   .map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',');
               });
@@ -572,7 +578,12 @@ export default function ConcertsTab() {
             {/* Venue */}
             <div>
               <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>Venue</label>
-              <select value={form.venueId||''} onChange={e=>setForm(f=>({...f,venueId:e.target.value?Number(e.target.value):null}))}
+              {/* Keep value as string — built-in venues use numeric ids
+                  but user-added venues use crypto.randomUUID() strings.
+                  Number(uuidString) returns NaN, breaking lookup. The
+                  venues.find(v => v.id === ...) call works for both
+                  shapes because <option value> is always stringified. */}
+              <select value={form.venueId==null?'':String(form.venueId)} onChange={e=>setForm(f=>({...f,venueId:e.target.value||null}))}
                 style={{...inputSt,cursor:'pointer'}}>
                 <option value="">— Select venue —</option>
                 {['Arena','Club','Festival','Hall','Other'].map(cat=>{
@@ -663,7 +674,7 @@ export default function ConcertsTab() {
              </div>
             :<div style={{display:'flex',flexDirection:'column',gap:8}}>
                {filtered.map(c=>{
-                 const v=venues.find(vn=>vn.id===c.venueId);
+                 const v=findVenue(c.venueId);
                  const col=v?CAT_COLOR[v.cat]||'#aaa':'#555';
                  return(
                    <div key={c.id} style={{background:C.bg2,border:`1px solid ${C.border}`,
