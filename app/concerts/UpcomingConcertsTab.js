@@ -4,6 +4,7 @@
 // shows next 90 days by default with "Show all" expansion.
 
 import { useState, useEffect } from 'react';
+import { useT } from '@/lib/i18n';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 
@@ -28,6 +29,7 @@ function daysUntil(iso) {
 }
 
 export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
+  const t = useT();
   const [events,    setEvents]    = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState(null);
@@ -88,7 +90,7 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
       <div style={{ textAlign: 'center', padding: '60px 24px' }}>
         <Icon name="user" size={36} color={C.dim}/>
         <div style={{ fontSize: 14, color: C.muted, ...MONO, marginTop: 12 }}>
-          Sign in to see upcoming concerts for your followed artists.
+          {t('upcoming.empty.desc')}
         </div>
       </div>
     );

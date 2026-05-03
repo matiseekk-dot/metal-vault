@@ -8,21 +8,24 @@ import Icon from '@/app/components/Icon';
 import CalendarTab from '@/app/calendar/CalendarTab';
 import ConcertsTab from '@/app/concerts/ConcertsTab';
 import UpcomingConcertsTab from '@/app/concerts/UpcomingConcertsTab';
+import { useT } from '@/lib/i18n';
 
 const LS_KEY = 'mv_whenson_subtab';
-const SUB_TABS = [
-  { id: 'calendar', iconName: 'calendar', label: 'Releases' },
-  { id: 'upcoming', iconName: 'music',    label: 'Live'     },
-  { id: 'concerts', iconName: 'star',     label: 'My Shows' },
+const SUB_TAB_IDS = [
+  { id: 'calendar', iconName: 'calendar', i18n: 'whensOn.tab.calendar' },
+  { id: 'upcoming', iconName: 'music',    i18n: 'whensOn.tab.upcoming' },
+  { id: 'concerts', iconName: 'star',     i18n: 'whensOn.tab.concerts' },
 ];
 
 export default function WhensOnTab(props) {
+  const t = useT();
+  const SUB_TABS = SUB_TAB_IDS.map(s => ({ ...s, label: t(s.i18n) }));
   const [sub, setSub] = useState('calendar');
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem(LS_KEY);
-      if (stored && SUB_TABS.some(s => s.id === stored)) setSub(stored);
+      if (stored && SUB_TAB_IDS.some(s => s.id === stored)) setSub(stored);
     } catch {}
   }, []);
 

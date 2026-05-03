@@ -16,6 +16,7 @@
 // root for toast() / confirm() to work.
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/i18n';
 
 // ── Public API — module-level singletons backed by a CustomEvent bus.
 // We use events instead of a React context so non-component code (e.g.
@@ -50,8 +51,8 @@ export function confirm(message, opts = {}) {
       detail: {
         id,
         message,
-        confirmLabel: opts.confirmLabel || 'OK',
-        cancelLabel:  opts.cancelLabel  || 'Cancel',
+        confirmLabel: opts.confirmLabel || t('toast.confirm.ok'),
+        cancelLabel:  opts.cancelLabel  || t('toast.confirm.cancel'),
         kind:         opts.kind         || 'info',
       },
     }));

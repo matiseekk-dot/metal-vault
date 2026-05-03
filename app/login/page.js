@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
+import { useT, t as plainT } from '@/lib/i18n';
 
 
 export const dynamic = 'force-dynamic';
@@ -16,29 +17,31 @@ const BEBAS = { fontFamily: "var(--font-bebas-neue), sans-serif" };
 const RESEND_COOLDOWN_S = 30;
 
 // Map common Supabase / network errors to copy a non-technical user can act on.
-// Returns the original message for anything we don't recognize, so we don't
-// silently hide a meaningful error.
+// Falls back to the original message for anything we don't recognize, so we
+// don't silently hide a meaningful error. Reads via plainT() so it works
+// from outside React (still picks up the active locale).
 function friendlyError(message) {
   const m = String(message || '').toLowerCase();
   if (m.includes('rate limit') || m.includes('too many') || m.includes('429')) {
-    return 'Too many attempts — try again in a few minutes.';
+    return plainT('login.error.rateLimit');
   }
   if (m.includes('invalid email') || m.includes('email_address_invalid')) {
-    return 'That doesn’t look like a valid email address.';
+    return plainT('login.error.invalidEmail');
   }
   if (m.includes('signups not allowed') || m.includes('signup is disabled')) {
-    return 'New sign-ups are temporarily paused — try again soon.';
+    return plainT('login.error.signupsClosed');
   }
   if (m.includes('failed to fetch') || m.includes('networkerror')) {
-    return 'No internet connection — check your network and retry.';
+    return plainT('login.error.network');
   }
   if (m.includes('email link is invalid') || m.includes('expired')) {
-    return 'That login link expired — request a new one below.';
+    return plainT('login.error.expired');
   }
-  return message || 'Something went wrong — please try again.';
+  return message || plainT('common.error');
 }
 
 export default function LoginPage() {
+  const t = useT();
   const [email,    setEmail]    = useState('');
   const [loading,  setLoading]  = useState(false);
   const [sent,     setSent]     = useState(false);
@@ -54,10 +57,10 @@ export default function LoginPage() {
     if (typeof window === 'undefined') return;
     const p = new URLSearchParams(window.location.search);
     if (p.get('deleted') === '1') {
-      setInfo('Your account has been deleted. You’re fully signed out.');
+      setInfo(plainT('login.banner.deleted'));
     }
     if (p.get('error') === 'auth_failed') {
-      setError('Sign-in failed. Please request a new link.');
+      setError(plainT('login.banner.authFailed'));
     }
   }, []);
 
@@ -82,7 +85,7 @@ export default function LoginPage() {
   };
 
   const signInWithEmail = async () => {
-    if (!email.trim()) { setError('Enter your email address'); return; }
+    if (!email.trim()) { setError(plainT('login.error.empty')); return; }
     setLoading(true); setError(''); setInfo('');
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
@@ -113,7 +116,7 @@ export default function LoginPage() {
             METAL VAULT
           </div>
           <div style={{ fontSize: 11, color: C.accent, ...MONO, letterSpacing: '0.25em', marginTop: 4 }}>
-            VINYL COLLECTOR TOOL
+            {t('login.subtitle')}
           </div>
         </div>
 
@@ -136,15 +139,14 @@ export default function LoginPage() {
           }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>📬</div>
             <div style={{ ...BEBAS, fontSize: 22, color: '#4ade80', marginBottom: 8 }}>
-              Check your email
+              {t('login.checkEmail')}
             </div>
             <div style={{ fontSize: 12, color: '#6ee7b7', ...MONO, lineHeight: 1.6 }}>
-              We sent a login link to<br />
+              {t('login.checkEmailDesc')}<br />
               <strong>{email}</strong>
             </div>
             <div style={{ fontSize: 10, color: '#86efac', ...MONO, marginTop: 14, lineHeight: 1.6 }}>
-              Tip: the link can take up to 60 seconds to arrive. Check your
-              spam folder if it doesn&rsquo;t show up.
+              {t('login.checkEmailTip')}
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
@@ -155,7 +157,7 @@ export default function LoginPage() {
                   borderRadius: 8, color: C.dim, padding: '10px',
                   cursor: 'pointer', fontSize: 11, ...MONO,
                 }}>
-                Use different email
+                {t('login.useDifferentEmail')}
               </button>
               <button
                 onClick={resend}
@@ -170,7 +172,7 @@ export default function LoginPage() {
                   cursor: cooldown > 0 || loading ? 'default' : 'pointer',
                   fontSize: 11, ...MONO,
                 }}>
-                {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend link'}
+                {cooldown > 0 ? t('login.resendIn', { n: cooldown }) : t('login.resend')}
               </button>
             </div>
 
@@ -197,13 +199,13 @@ export default function LoginPage() {
                 <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/>
                 <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/>
               </svg>
-              Sign in with Google
+              {t('login.google')}
             </button>
 
             {/* Divider */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, height: 1, background: C.border }} />
-              <span style={{ fontSize: 10, color: C.dim, ...MONO }}>OR</span>
+              <span style={{ fontSize: 10, color: C.dim, ...MONO }}>{t('login.or')}</span>
               <div style={{ flex: 1, height: 1, background: C.border }} />
             </div>
 
@@ -214,7 +216,7 @@ export default function LoginPage() {
               autoComplete="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder={t('login.emailPlaceholder')}
               onKeyDown={e => e.key === 'Enter' && signInWithEmail()}
               style={{
                 width: '100%', background: C.bg3, border: `1px solid ${C.border}`,
@@ -230,7 +232,7 @@ export default function LoginPage() {
                 ...BEBAS, fontSize: 18, letterSpacing: '0.1em',
                 opacity: loading ? 0.7 : 1,
               }}>
-              {loading ? 'SENDING…' : 'SEND LOGIN LINK'}
+              {loading ? t('login.sending') : t('login.send')}
             </button>
 
             {error && (
@@ -240,13 +242,21 @@ export default function LoginPage() {
             )}
 
             <div style={{ fontSize: 10, color: C.dim, ...MONO, textAlign: 'center', lineHeight: 1.6, marginTop: 8 }}>
-              No password — just click the link in your email.<br />
-              By signing in you accept the{' '}
-              <a href="/legal/terms.html" target="_blank" rel="noopener noreferrer"
-                style={{ color: C.muted, textDecoration: 'underline' }}>terms</a>
-              {' '}and{' '}
-              <a href="/legal/privacy.html" target="_blank" rel="noopener noreferrer"
-                style={{ color: C.muted, textDecoration: 'underline' }}>privacy policy</a>.
+              {t('login.helper')}<br />
+              {t('login.consent', {
+                terms:   '__TERMS__',
+                privacy: '__PRIVACY__',
+              }).split(/(__TERMS__|__PRIVACY__)/).map((part, i) => {
+                if (part === '__TERMS__') return (
+                  <a key={i} href="/legal/terms.html" target="_blank" rel="noopener noreferrer"
+                    style={{ color: C.muted, textDecoration: 'underline' }}>{t('login.terms')}</a>
+                );
+                if (part === '__PRIVACY__') return (
+                  <a key={i} href="/legal/privacy.html" target="_blank" rel="noopener noreferrer"
+                    style={{ color: C.muted, textDecoration: 'underline' }}>{t('login.privacy')}</a>
+                );
+                return part;
+              })}
             </div>
           </div>
         )}

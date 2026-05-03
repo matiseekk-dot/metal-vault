@@ -214,6 +214,7 @@ export default function ProfileTab({
   shareToken, onGetShareToken,
   premium, onUpgrade, onOpenPortal,
 }) {
+  const t = useT();
   const [username, setUsername] = useState(profile?.username || '');
   const [isPublic, setIsPublic] = useState(profile?.is_public || false);
   const [saving,   setSaving]   = useState(false);
@@ -229,7 +230,7 @@ export default function ProfileTab({
 
   const handleGenerateInsurance = async () => {
     if (!collection || collection.length === 0) {
-      toast.error('Your collection is empty. Add records before generating a report.');
+      toast.error(t('profile.insurance.modal.empty'));
       return;
     }
     setInsuranceLoading(true);
@@ -244,7 +245,7 @@ export default function ProfileTab({
     } catch (e) {
       const { logError } = await import('@/lib/log');
       logError('Insurance report error', e);
-      toast.error('Failed to generate report: ' + e.message);
+      toast.error(t('profile.insurance.modal.failed') + ' ' + e.message);
     }
     setInsuranceLoading(false);
   };
@@ -260,21 +261,21 @@ export default function ProfileTab({
     });
     const d = await r.json();
     setSaving(false);
-    setMsg(d.error || '✓ Saved');
+    setMsg(d.error || ('✓ ' + t('common.save').replace(/[A-Z]/g, c => c.toLowerCase()).replace(/^./, c => c.toUpperCase()) + 'd'));
     if (!d.error) onUpdateProfile({ username, is_public: isPublic });
   };
 
   if (!user) return (
     <div style={{ textAlign: 'center', padding: '60px 24px', color: C.dim, ...MONO }}>
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="user" size={40} color={C.accent}/></div>
-      <div style={{ fontSize: 13, marginBottom: 20, lineHeight: 1.7 }}>Sign in to manage your profile</div>
+      <div style={{ fontSize: 13, marginBottom: 20, lineHeight: 1.7 }}>{t('home.signedOut.desc')}</div>
       <button onClick={() => window.location.href = '/login'}
         style={{
           background: 'linear-gradient(135deg,' + C.accent + ',' + C.accent2 + ')',
           border: 'none', borderRadius: 10, color: '#fff', padding: '13px 24px',
           ...BEBAS, fontSize: 18, letterSpacing: '0.1em', cursor: 'pointer',
         }}>
-        SIGN IN
+        {t('home.signedOut.cta')}
       </button>
     </div>
   );
@@ -404,7 +405,7 @@ export default function ProfileTab({
 
       {/* Profile settings */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 12 }}>Profile settings</div>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 12 }}>{t('common.settings')}</div>
 
         <label style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
           Username (@)
@@ -518,7 +519,7 @@ export default function ProfileTab({
           <div style={{ background: C.bg2, borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 500, padding: '20px 18px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))' }}>
             <div style={{ width: 40, height: 4, background: C.border2, borderRadius: 2, margin: '0 auto 16px' }}/>
             <div style={{ fontSize: 10, color: '#f5c842', letterSpacing: '0.2em', ...MONO, marginBottom: 4 }}>INSURANCE REPORT</div>
-            <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.04em', marginBottom: 4 }}>Owner Information</div>
+            <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.04em', marginBottom: 4 }}>{t('profile.insurance.modal.title')}</div>
             <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 16, lineHeight: 1.5 }}>
               This info appears on the appraisal cover page. Insurers typically require owner name + address.
             </div>
@@ -560,7 +561,7 @@ export default function ProfileTab({
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 4 }}>Push Notifications</div>
+            <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 4 }}>{t('profile.push.title')}</div>
             <div style={{ fontSize: 11, color: C.dim, ...MONO }}>Price alerts + new pre-orders</div>
           </div>
           <button onClick={onTogglePush} disabled={pushLoading}
@@ -586,7 +587,7 @@ export default function ProfileTab({
 
       {/* Discogs OAuth */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>Discogs Account</div>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>{t('profile.discogs.title')}</div>
         {discogsConnected ? (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -731,7 +732,7 @@ export default function ProfileTab({
 
       {/* Share */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>Share Collection</div>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 8 }}>{t('profile.share.title')}</div>
         {shareToken ? (
           <div>
             <div style={{ fontSize: 10, color: '#60a5fa', ...MONO, wordBreak: 'break-all', marginBottom: 8, lineHeight: 1.5 }}>
@@ -759,7 +760,7 @@ export default function ProfileTab({
           background: 'none', border: '1px solid ' + C.border,
           borderRadius: 10, color: C.dim, cursor: 'pointer', ...MONO, fontSize: 12,
         }}>
-        Sign out
+        {t('common.signOut')}
       </button>
 
       {/* Danger zone — account deletion (GDPR/COPPA) */}
@@ -814,6 +815,7 @@ function LanguagePicker() {
 // any Stripe sub, wipes storage photos, and removes the auth.users row
 // (cascading to every user-data table).
 function DangerZone({ email, onDeleted }) {
+  const t = useT();
   const [open, setOpen]         = useState(false);
   const [typed, setTyped]       = useState('');
   const [busy, setBusy]         = useState(false);
@@ -821,7 +823,7 @@ function DangerZone({ email, onDeleted }) {
   const submit = async () => {
     if (busy) return;
     if (typed.trim().toLowerCase() !== (email || '').toLowerCase()) {
-      toast.error('Email does not match');
+      toast.error(t('profile.danger.mismatch'));
       return;
     }
     setBusy(true);
@@ -833,11 +835,11 @@ function DangerZone({ email, onDeleted }) {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.ok) {
-        toast.error(d.error || 'Could not delete account — try again later');
+        toast.error(d.error || t('profile.danger.failed'));
         setBusy(false);
         return;
       }
-      toast.success('Account deleted');
+      toast.success(t('profile.danger.deleted'));
       // Clear local caches and redirect home; onDeleted (= onSignOut)
       // takes care of supabase signout state at the parent level.
       try { localStorage.clear(); } catch {}
@@ -845,7 +847,7 @@ function DangerZone({ email, onDeleted }) {
       onDeleted?.();
       if (typeof window !== 'undefined') window.location.href = '/login?deleted=1';
     } catch (e) {
-      toast.error('Network error — try again');
+      toast.error(t('profile.danger.network'));
       setBusy(false);
     }
   };
@@ -853,7 +855,7 @@ function DangerZone({ email, onDeleted }) {
   return (
     <div style={{ marginTop: 24, padding: 14, border: '1px solid #3a0a0a', borderRadius: 10, background: '#0a0000' }}>
       <div style={{ ...MONO, fontSize: 9, color: '#7f1d1d', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8 }}>
-        Danger zone
+        {t('profile.danger.title')}
       </div>
       {!open ? (
         <button onClick={() => setOpen(true)}
@@ -862,16 +864,19 @@ function DangerZone({ email, onDeleted }) {
             border: '1px solid #7f1d1d', borderRadius: 8,
             color: '#f87171', cursor: 'pointer', ...MONO, fontSize: 11,
           }}>
-          Delete my account
+          {t('profile.danger.cta')}
         </button>
       ) : (
         <div>
           <div style={{ fontSize: 11, color: '#fca5a5', ...MONO, lineHeight: 1.6, marginBottom: 10 }}>
-            This permanently deletes your account, your collection, watchlist,
-            photos, and any active subscription. This cannot be undone.
+            {t('profile.danger.warning')}
           </div>
           <div style={{ fontSize: 10, color: '#fca5a5', ...MONO, marginBottom: 6 }}>
-            Type <strong>{email}</strong> to confirm:
+            {t('profile.danger.confirm', { email: '__E__' }).split('__E__').map((p, i, arr) =>
+              i < arr.length - 1
+                ? <span key={i}>{p}<strong>{email}</strong></span>
+                : <span key={i}>{p}</span>
+            )}
           </div>
           <input
             value={typed}
@@ -890,7 +895,7 @@ function DangerZone({ email, onDeleted }) {
               style={{ flex: 1, padding: '10px', background: 'none',
                 border: '1px solid ' + C.border, borderRadius: 8,
                 color: C.dim, cursor: busy ? 'default' : 'pointer', ...MONO, fontSize: 11 }}>
-              Cancel
+              {t('profile.danger.cancel')}
             </button>
             <button onClick={submit} disabled={busy || !typed.trim()}
               style={{ flex: 2, padding: '10px',
@@ -898,7 +903,7 @@ function DangerZone({ email, onDeleted }) {
                 border: 'none', borderRadius: 8, color: '#fff',
                 cursor: busy || !typed.trim() ? 'default' : 'pointer',
                 ...BEBAS, fontSize: 14, letterSpacing: '0.06em' }}>
-              {busy ? 'DELETING…' : 'PERMANENTLY DELETE'}
+              {busy ? t('profile.danger.deleting') : t('profile.danger.button')}
             </button>
           </div>
         </div>

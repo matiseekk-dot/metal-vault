@@ -68,6 +68,7 @@ export function AlbumCover({src,artist='',size=64}){
 
 // ── StatsBar ──────────────────────────────────────────────────
 export function StatsBar({releases}){
+  const t = useT();
   const today=new Date();
   const upcoming = releases.filter(r=>r.preorder===true||(r.releaseDate&&new Date(r.releaseDate)>today)).length;
   const recent   = releases.filter(r=>{
@@ -76,7 +77,7 @@ export function StatsBar({releases}){
   }).length;
   return(
     <div style={{display:'flex',borderBottom:'1px solid '+C.border,background:C.bg2}}>
-      {[{icon:'🔥',val:releases.length,label:'releases'},{icon:'⏳',val:upcoming,label:'upcoming'},{icon:'🆕',val:recent,label:'released'}].map(s=>(
+      {[{icon:'🔥',val:releases.length,label:t('stats.releases')},{icon:'⏳',val:upcoming,label:t('stats.upcoming')},{icon:'🆕',val:recent,label:t('stats.released')}].map(s=>(
         <div key={s.label} style={{flex:1,textAlign:'center',padding:'10px 4px'}}>
           <div style={{fontSize:11,...MONO,color:C.dim}}>{s.icon}</div>
           <div style={{...BEBAS,fontSize:22,color:C.accent,lineHeight:1}}>{s.val}</div>

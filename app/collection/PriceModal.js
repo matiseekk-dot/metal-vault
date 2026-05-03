@@ -6,9 +6,11 @@
 import { useState } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { useBackButton } from '@/lib/hooks/useBackButton';
+import { useT } from '@/lib/i18n';
 
 export default function PriceModal({ item, onClose, onSave }) {
   useBackButton(true, onClose);
+  const t = useT();
   const [val, setVal] = useState(item.purchase_price ? String(item.purchase_price) : '');
   const [saving, setSaving] = useState(false);
 
@@ -33,7 +35,7 @@ export default function PriceModal({ item, onClose, onSave }) {
         border: '2px solid ' + C.accent, borderRadius: 14, padding: 20,
       }}>
         <div style={{ ...BEBAS, fontSize: 18, color: C.text, marginBottom: 4, letterSpacing: '0.05em' }}>
-          PURCHASE PRICE
+          {t('vault.priceModal.title')}
         </div>
         <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {item.artist} — {item.album}
@@ -43,7 +45,7 @@ export default function PriceModal({ item, onClose, onSave }) {
           value={val}
           onChange={e => setVal(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-          placeholder="e.g. 25"
+          placeholder={t('vault.priceModal.placeholder')}
           autoFocus
           style={{ width: '100%', background: C.bg3, border: '1px solid ' + C.border,
             borderRadius: 6, color: C.text, padding: '10px 12px', fontSize: 16,
@@ -54,13 +56,13 @@ export default function PriceModal({ item, onClose, onSave }) {
             style={{ flex: 1, background: 'none', border: '1px solid ' + C.border,
               borderRadius: 8, color: C.dim, padding: '10px', cursor: 'pointer',
               ...MONO, fontSize: 12 }}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button onClick={handleSave} disabled={saving}
             style={{ flex: 2, background: C.accent, border: 'none', borderRadius: 8,
               color: '#fff', padding: '10px', cursor: 'pointer',
               ...BEBAS, fontSize: 16, letterSpacing: '0.06em', opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'SAVING…' : 'SAVE'}
+            {saving ? t('common.saving').replace(/[a-z]+…/, m => m.toUpperCase()) : t('common.save')}
           </button>
         </div>
       </div>

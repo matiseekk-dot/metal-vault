@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
+import { useT } from '@/lib/i18n';
 
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -21,6 +22,7 @@ function AlbumCover({src,artist,size=40}){
 }
 
 export default function CalendarTab({releases=[],followedArtists=[]}){
+  const t = useT();
   const now   = new Date();
   const [year,setYear]   = useState(now.getFullYear());
   const [month,setMonth] = useState(now.getMonth());
@@ -76,8 +78,8 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
       {/* Header */}
       <div style={{padding:'16px 16px 8px',display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
         <div>
-          <div style={{...BEBAS,fontSize:26,color:C.text,letterSpacing:'0.06em',lineHeight:1}}>RELEASE CALENDAR</div>
-          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>UPCOMING & RECENT</div>
+          <div style={{...BEBAS,fontSize:26,color:C.text,letterSpacing:'0.06em',lineHeight:1}}>{t('header.calendar')}</div>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>{t('calendar.upcoming') + ' · ' + t('calendar.recent')}</div>
         </div>
         <div style={{display:'flex',gap:6}}>
           {['calendar','list'].map(v=>(

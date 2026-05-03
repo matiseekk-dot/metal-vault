@@ -7,16 +7,18 @@ import { useState } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 import { useBackButton } from '@/lib/hooks/useBackButton';
+import { useT } from '@/lib/i18n';
 
 export default function ManualAddForm({ onAdd, onClose }) {
   useBackButton(true, onClose);
+  const t = useT();
   const [form, setForm] = useState({ artist: '', album: '', format: 'Vinyl', label: '', year: '', purchase_price: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async () => {
-    if (!form.artist.trim() || !form.album.trim()) { setError('Artist and album are required'); return; }
+    if (!form.artist.trim() || !form.album.trim()) { setError(t('vault.manualAdd.required')); return; }
     setSaving(true);
     await onAdd({
       artist: form.artist.trim(), album: form.album.trim(),
@@ -37,7 +39,7 @@ export default function ManualAddForm({ onAdd, onClose }) {
       <div style={{ background: C.bg2, borderRadius: '16px 16px 0 0', padding: '16px', maxHeight: '90vh', overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom,24px)' }}>
         <div style={{ width: 40, height: 4, background: C.border2, borderRadius: 2, margin: '0 auto 16px' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.06em' }}>ADD RECORD MANUALLY</div>
+          <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.06em' }}>{t('vault.manualAdd.title')}</div>
           {/* Quick switch to barcode scanner */}
           <button onClick={() => {
             onClose();
@@ -45,35 +47,35 @@ export default function ManualAddForm({ onAdd, onClose }) {
           }} style={{ background: '#1a0a0a', border: '1px solid #7f1d1d', borderRadius: 8,
             color: '#f87171', padding: '6px 12px', cursor: 'pointer', ...MONO, fontSize: 10,
             letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="scan" size={12} color="#f87171"/> SCAN BARCODE
+            <Icon name="scan" size={12} color="#f87171"/> {t('vault.manualAdd.scan')}
           </button>
         </div>
-        <label style={lbl}>Artist *</label>
-        <input value={form.artist} onChange={e => set('artist', e.target.value)} placeholder="e.g. Metallica" style={fld} autoFocus />
-        <label style={lbl}>Album *</label>
-        <input value={form.album} onChange={e => set('album', e.target.value)} placeholder="e.g. Master of Puppets" style={fld} />
+        <label style={lbl}>{t('vault.manualAdd.artist')} *</label>
+        <input value={form.artist} onChange={e => set('artist', e.target.value)} placeholder={t('vault.manualAdd.placeholderArtist')} style={fld} autoFocus />
+        <label style={lbl}>{t('vault.manualAdd.album')} *</label>
+        <input value={form.album} onChange={e => set('album', e.target.value)} placeholder={t('vault.manualAdd.placeholderAlbum')} style={fld} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
           <div>
-            <label style={lbl}>Format</label>
+            <label style={lbl}>{t('vault.manualAdd.format')}</label>
             <select value={form.format} onChange={e => set('format', e.target.value)} style={{ ...fld, cursor: 'pointer', marginBottom: 0 }}>
               {['Vinyl','CD','Cassette','Box Set','Digital','Other'].map(f => <option key={f}>{f}</option>)}
             </select>
           </div>
           <div>
-            <label style={lbl}>Year</label>
-            <input type="number" value={form.year} onChange={e => set('year', e.target.value)} placeholder="e.g. 1986" style={{ ...fld, marginBottom: 0 }} />
+            <label style={lbl}>{t('vault.manualAdd.year')}</label>
+            <input type="number" value={form.year} onChange={e => set('year', e.target.value)} placeholder={t('vault.manualAdd.placeholderYear')} style={{ ...fld, marginBottom: 0 }} />
           </div>
         </div>
-        <label style={lbl}>Label</label>
-        <input value={form.label} onChange={e => set('label', e.target.value)} placeholder="e.g. Elektra Records" style={fld} />
-        <label style={lbl}>Purchase price ($)</label>
+        <label style={lbl}>{t('vault.manualAdd.label')}</label>
+        <input value={form.label} onChange={e => set('label', e.target.value)} placeholder={t('vault.manualAdd.placeholderLabel')} style={fld} />
+        <label style={lbl}>{t('vault.manualAdd.price')}</label>
         <input type="number" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)} placeholder="0.00" style={fld} />
         {error && <div style={{ color: '#f87171', fontSize: 11, ...MONO, marginBottom: 8 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: '12px', background: 'none', border: '1px solid ' + C.border, borderRadius: 10, color: C.dim, cursor: 'pointer', ...MONO, fontSize: 12 }}>Cancel</button>
+          <button onClick={onClose} style={{ flex: 1, padding: '12px', background: 'none', border: '1px solid ' + C.border, borderRadius: 10, color: C.dim, cursor: 'pointer', ...MONO, fontSize: 12 }}>{t('common.cancel')}</button>
           <button onClick={handleSubmit} disabled={saving}
             style={{ flex: 2, padding: '12px', background: 'linear-gradient(135deg,' + C.accent + ',' + C.accent2 + ')', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer', ...BEBAS, fontSize: 18, letterSpacing: '0.06em' }}>
-            {saving ? 'SAVING…' : 'SAVE RECORD'}
+            {saving ? t('vault.manualAdd.saving') : t('vault.manualAdd.save')}
           </button>
         </div>
       </div>

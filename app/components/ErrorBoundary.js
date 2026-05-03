@@ -4,6 +4,7 @@
 'use client';
 import React from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
+import { t } from '@/lib/i18n';
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -34,15 +35,15 @@ export default class ErrorBoundary extends React.Component {
       }}>
         <div style={{ fontSize: 32, marginBottom: 8 }}>⚠️</div>
         <div style={{ ...BEBAS, fontSize: 18, color: '#f87171', letterSpacing: '0.04em', marginBottom: 6 }}>
-          {name} failed to render
+          {t('errorBoundary.title', { tab: name })}
         </div>
         <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 12 }}>
-          The rest of the app is fine — only this section had an error.
+          {t('errorBoundary.desc')}
         </div>
         <button onClick={() => this.setState({ hasError: false, error: null })}
           style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 8,
             color: C.text, padding: '8px 18px', cursor: 'pointer', ...MONO, fontSize: 11 }}>
-          Try again
+          {t('common.retry')}
         </button>
       </div>
     );

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import { toast } from '@/app/components/Toast';
+import { useT } from '@/lib/i18n';
 
 
 const VENUES = [
@@ -205,6 +206,7 @@ function SetlistViewer({ artist, year, city, onClose }) {
 }
 
 export default function ConcertsTab() {
+  const t = useT();
   const [concerts,setConcerts] = useState([]);
   const [venues,setVenues]     = useState(VENUES);
   const [tab,setTab]           = useState('list'); // list | ranking
@@ -453,7 +455,7 @@ export default function ConcertsTab() {
       <div style={{padding:'12px 16px 0'}}>
         {/* Subtabs */}
         <div style={{display:'flex',marginBottom:12,borderBottom:`1px solid ${C.border}`}}>
-          {[['list','📋 List'],['ranking','🏆 Ranking']].map(([k,l])=>(
+          {[['list','📋 ' + t('concerts.tab.list')],['ranking','🏆 ' + t('concerts.tab.ranking')]].map(([k,l])=>(
             <button key={k} onClick={()=>setTab(k)}
               style={{padding:'8px 16px',background:'none',border:'none',cursor:'pointer',
                 borderBottom:tab===k?`2px solid ${C.accent}`:'2px solid transparent',
@@ -471,7 +473,7 @@ export default function ConcertsTab() {
               border:showForm?`1px solid ${C.border}`:'none',
               borderRadius:10,color:showForm?C.muted:'#fff',cursor:'pointer',
               ...BEBAS,fontSize:17,letterSpacing:'0.1em'}}>
-            {showForm?(editId?'↑ CANCEL EDIT':'↑ CANCEL'):(editId?'✏ EDITING':'+ ADD CONCERT')}
+            {showForm?(editId?t('concerts.cancelEdit'):t('concerts.cancel')):(editId?t('concerts.editing'):t('concerts.add'))}
           </button>
           {concerts.length > 0 && (
             <button onClick={()=>{

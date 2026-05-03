@@ -11,29 +11,30 @@ import StatsTab from '@/app/stats/StatsTab';
 import SearchTab from '@/app/search/SearchTab';
 
 const LS_KEY = 'mv_vault_subtab';
-const SUB_TABS = [
-  { id: 'collection', iconName: 'pkg',      label: 'Vault' },
-  { id: 'watchlist',  iconName: 'heart',    label: 'Wantlist' },
-  { id: 'bands',      iconName: 'music',    label: 'Bands' },
-  { id: 'search',     iconName: 'search',   label: 'Find' },
-  { id: 'stats',      iconName: 'barChart', label: 'Stats' },
+const SUB_TAB_IDS = [
+  { id: 'collection', iconName: 'pkg',      i18n: 'vault.tab.collection' },
+  { id: 'watchlist',  iconName: 'heart',    i18n: 'vault.tab.watchlist'  },
+  { id: 'bands',      iconName: 'music',    i18n: 'vault.tab.bands'      },
+  { id: 'search',     iconName: 'search',   i18n: 'common.search'        },
+  { id: 'stats',      iconName: 'barChart', i18n: 'vault.tab.stats'      },
 ];
 
 export default function VaultTab(props) {
   const t = useT();
+  const SUB_TABS = SUB_TAB_IDS.map(s => ({ ...s, label: t(s.i18n) }));
   const [sub, setSub] = useState('collection');
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem(LS_KEY);
-      if (stored && SUB_TABS.some(s => s.id === stored)) setSub(stored);
+      if (stored && SUB_TAB_IDS.some(s => s.id === stored)) setSub(stored);
     } catch {}
   }, []);
 
   useEffect(() => {
     const handler = e => {
       const target = e.detail?.subtab;
-      if (target && SUB_TABS.some(s => s.id === target)) {
+      if (target && SUB_TAB_IDS.some(s => s.id === target)) {
         setSub(target);
         try { localStorage.setItem(LS_KEY, target); } catch {}
       }
