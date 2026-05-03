@@ -757,6 +757,109 @@ export default function ProfileTab({
         }}>
         Sign out
       </button>
+
+      {/* Danger zone — account deletion (GDPR/COPPA) */}
+      <DangerZone email={user?.email} onDeleted={onSignOut}/>
+    </div>
+  );
+}
+
+// ── DangerZone — irreversible account deletion ──────────────────
+// GDPR/COPPA compliance: users must be able to fully delete their data.
+// Two-step confirm: tap reveals an inline form requiring the user to
+// retype their email exactly. Calls /api/profile/delete which cancels
+// any Stripe sub, wipes storage photos, and removes the auth.users row
+// (cascading to every user-data table).
+function DangerZone({ email, onDeleted }) {
+  const [open, setOpen]         = useState(false);
+  const [typed, setTyped]       = useState('');
+  const [busy, setBusy]         = useState(false);
+
+  const submit = async () => {
+    if (busy) return;
+    if (typed.trim().toLowerCase() !== (email || '').toLowerCase()) {
+      toast.error('Email does not match');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch('/api/profile/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm_email: typed.trim() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.ok) {
+        toast.error(d.error || 'Could not delete account — try again later');
+        setBusy(false);
+        return;
+      }
+      toast.success('Account deleted');
+      // Clear local caches and redirect home; onDeleted (= onSignOut)
+      // takes care of supabase signout state at the parent level.
+      try { localStorage.clear(); } catch {}
+      try { sessionStorage.clear(); } catch {}
+      onDeleted?.();
+      if (typeof window !== 'undefined') window.location.href = '/login?deleted=1';
+    } catch (e) {
+      toast.error('Network error — try again');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 24, padding: 14, border: '1px solid #3a0a0a', borderRadius: 10, background: '#0a0000' }}>
+      <div style={{ ...MONO, fontSize: 9, color: '#7f1d1d', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8 }}>
+        Danger zone
+      </div>
+      {!open ? (
+        <button onClick={() => setOpen(true)}
+          style={{
+            width: '100%', padding: '10px', background: 'none',
+            border: '1px solid #7f1d1d', borderRadius: 8,
+            color: '#f87171', cursor: 'pointer', ...MONO, fontSize: 11,
+          }}>
+          Delete my account
+        </button>
+      ) : (
+        <div>
+          <div style={{ fontSize: 11, color: '#fca5a5', ...MONO, lineHeight: 1.6, marginBottom: 10 }}>
+            This permanently deletes your account, your collection, watchlist,
+            photos, and any active subscription. This cannot be undone.
+          </div>
+          <div style={{ fontSize: 10, color: '#fca5a5', ...MONO, marginBottom: 6 }}>
+            Type <strong>{email}</strong> to confirm:
+          </div>
+          <input
+            value={typed}
+            onChange={e => setTyped(e.target.value)}
+            placeholder={email || ''}
+            autoComplete="off"
+            style={{
+              width: '100%', padding: '10px 12px',
+              background: '#0a0000', border: '1px solid #7f1d1d',
+              borderRadius: 8, color: '#fee2e2', ...MONO, fontSize: 12,
+              outline: 'none', boxSizing: 'border-box', marginBottom: 10,
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => { setOpen(false); setTyped(''); }} disabled={busy}
+              style={{ flex: 1, padding: '10px', background: 'none',
+                border: '1px solid ' + C.border, borderRadius: 8,
+                color: C.dim, cursor: busy ? 'default' : 'pointer', ...MONO, fontSize: 11 }}>
+              Cancel
+            </button>
+            <button onClick={submit} disabled={busy || !typed.trim()}
+              style={{ flex: 2, padding: '10px',
+                background: busy || !typed.trim() ? '#3a0a0a' : '#7f1d1d',
+                border: 'none', borderRadius: 8, color: '#fff',
+                cursor: busy || !typed.trim() ? 'default' : 'pointer',
+                ...BEBAS, fontSize: 14, letterSpacing: '0.06em' }}>
+              {busy ? 'DELETING…' : 'PERMANENTLY DELETE'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

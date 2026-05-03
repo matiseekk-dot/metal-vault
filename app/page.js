@@ -14,6 +14,7 @@ import { initPayments, startPurchase, openSubscriptionManagement, restorePurchas
 import WhensOnTab from '@/app/whens-on/WhensOnTab';
 import Icon from '@/app/components/Icon';
 import UpgradeModal from '@/app/components/UpgradeModal';
+import WhatsNew from '@/app/components/WhatsNew';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm } from '@/app/components/Toast';
 import nextDynamic from 'next/dynamic';
@@ -637,6 +638,10 @@ export default function MetalVault() {
           onCheckout={async (plan) => { setShowUpgrade(false); await startCheckout(plan); }}
         />
       )}
+
+      {/* What's-new modal — fires once per app version, only after the
+          user is signed in to avoid greeting first-time visitors. */}
+      {user && <WhatsNew />}
 
       {showOnboarding && (
         <OnboardingScreen

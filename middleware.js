@@ -11,6 +11,7 @@ const rateLimitStore = new Map(); // ip:route → { count, resetAt }
 const RATE_LIMITS = {
   // Auth & write endpoints — tighter limits
   '/api/profile':          { max: 30,  windowMs: 60_000 },
+  '/api/profile/delete':   { max: 3,   windowMs: 60_000 },
   '/api/collection':       { max: 60,  windowMs: 60_000 },
   '/api/watchlist':        { max: 60,  windowMs: 60_000 },
   '/api/alerts':           { max: 30,  windowMs: 60_000 },

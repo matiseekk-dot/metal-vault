@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
 
 
@@ -13,12 +13,61 @@ const C = {
 const MONO  = { fontFamily: "var(--font-space-mono), monospace" };
 const BEBAS = { fontFamily: "var(--font-bebas-neue), sans-serif" };
 
+const RESEND_COOLDOWN_S = 30;
+
+// Map common Supabase / network errors to copy a non-technical user can act on.
+// Returns the original message for anything we don't recognize, so we don't
+// silently hide a meaningful error.
+function friendlyError(message) {
+  const m = String(message || '').toLowerCase();
+  if (m.includes('rate limit') || m.includes('too many') || m.includes('429')) {
+    return 'Too many attempts — try again in a few minutes.';
+  }
+  if (m.includes('invalid email') || m.includes('email_address_invalid')) {
+    return 'That doesn’t look like a valid email address.';
+  }
+  if (m.includes('signups not allowed') || m.includes('signup is disabled')) {
+    return 'New sign-ups are temporarily paused — try again soon.';
+  }
+  if (m.includes('failed to fetch') || m.includes('networkerror')) {
+    return 'No internet connection — check your network and retry.';
+  }
+  if (m.includes('email link is invalid') || m.includes('expired')) {
+    return 'That login link expired — request a new one below.';
+  }
+  return message || 'Something went wrong — please try again.';
+}
+
 export default function LoginPage() {
-  const [email,   setEmail]   = useState('');
-  const [loading, setLoading] = useState(false);
-  const [sent,    setSent]    = useState(false);
-  const [error,   setError]   = useState('');
+  const [email,    setEmail]    = useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [sent,     setSent]     = useState(false);
+  const [error,    setError]    = useState('');
+  const [info,     setInfo]     = useState('');
+  const [cooldown, setCooldown] = useState(0);
   const supabase = useRef(createClient()).current;
+
+  // Surface contextual banners coming from the redirect:
+  //   ?deleted=1     — we just nuked the account from /api/profile/delete
+  //   ?error=auth_failed — auth/callback returned without a session
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('deleted') === '1') {
+      setInfo('Your account has been deleted. You’re fully signed out.');
+    }
+    if (p.get('error') === 'auth_failed') {
+      setError('Sign-in failed. Please request a new link.');
+    }
+  }, []);
+
+  // Resend cooldown countdown — disables the button so we don't burn through
+  // Supabase's per-email rate limit (default 60s) and trigger generic 429s.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
 
   const signInWithGoogle = async () => {
     setLoading(true); setError('');
@@ -26,18 +75,30 @@ export default function LoginPage() {
       provider: 'google',
       options: { redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` },
     });
-    if (error) { setError(error.message); setLoading(false); }
+    if (error) {
+      setError(friendlyError(error.message));
+      setLoading(false);
+    }
   };
 
   const signInWithEmail = async () => {
     if (!email.trim()) { setError('Enter your email address'); return; }
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setInfo('');
     const { error } = await supabase.auth.signInWithOtp({
-      email,
+      email: email.trim(),
       options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` },
     });
-    if (error) { setError(error.message); setLoading(false); return; }
-    setSent(true); setLoading(false);
+    if (error) {
+      setError(friendlyError(error.message));
+      setLoading(false);
+      return;
+    }
+    setSent(true); setLoading(false); setCooldown(RESEND_COOLDOWN_S);
+  };
+
+  const resend = async () => {
+    if (cooldown > 0) return;
+    await signInWithEmail();
   };
 
   return (
@@ -47,7 +108,7 @@ export default function LoginPage() {
     }}>
       <div style={{ width: '100%', maxWidth: 360 }}>
         {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ ...BEBAS, fontSize: 42, letterSpacing: '0.1em', color: C.text, lineHeight: 1 }}>
             METAL VAULT
           </div>
@@ -55,6 +116,17 @@ export default function LoginPage() {
             VINYL COLLECTOR TOOL
           </div>
         </div>
+
+        {/* Contextual info banner (account deleted, etc.) */}
+        {info && (
+          <div style={{
+            background: '#001a05', border: '1px solid #14532d',
+            borderRadius: 10, padding: '10px 14px', marginBottom: 14,
+            fontSize: 12, color: '#86efac', ...MONO, lineHeight: 1.5,
+          }}>
+            {info}
+          </div>
+        )}
 
         {sent ? (
           /* Magic link sent */
@@ -70,10 +142,43 @@ export default function LoginPage() {
               We sent a login link to<br />
               <strong>{email}</strong>
             </div>
-            <button onClick={() => { setSent(false); setEmail(''); }}
-              style={{ marginTop: 20, background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 11, ...MONO }}>
-              Back
-            </button>
+            <div style={{ fontSize: 10, color: '#86efac', ...MONO, marginTop: 14, lineHeight: 1.6 }}>
+              Tip: the link can take up to 60 seconds to arrive. Check your
+              spam folder if it doesn&rsquo;t show up.
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+              <button
+                onClick={() => { setSent(false); setEmail(''); setError(''); setCooldown(0); }}
+                style={{
+                  flex: 1, background: 'none', border: '1px solid ' + C.border,
+                  borderRadius: 8, color: C.dim, padding: '10px',
+                  cursor: 'pointer', fontSize: 11, ...MONO,
+                }}>
+                Use different email
+              </button>
+              <button
+                onClick={resend}
+                disabled={cooldown > 0 || loading}
+                style={{
+                  flex: 1,
+                  background: cooldown > 0 ? C.bg3 : '#14532d',
+                  border: cooldown > 0 ? '1px solid ' + C.border : '1px solid #166534',
+                  borderRadius: 8,
+                  color: cooldown > 0 ? C.dim : '#86efac',
+                  padding: '10px',
+                  cursor: cooldown > 0 || loading ? 'default' : 'pointer',
+                  fontSize: 11, ...MONO,
+                }}>
+                {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend link'}
+              </button>
+            </div>
+
+            {error && (
+              <div style={{ fontSize: 11, color: '#fca5a5', ...MONO, marginTop: 12 }}>
+                ⚠ {error}
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -98,14 +203,18 @@ export default function LoginPage() {
             {/* Divider */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, height: 1, background: C.border }} />
-              <span style={{ fontSize: 10, color: C.dim, ...MONO }}>LUB</span>
+              <span style={{ fontSize: 10, color: C.dim, ...MONO }}>OR</span>
               <div style={{ flex: 1, height: 1, background: C.border }} />
             </div>
 
             {/* Email magic link */}
             <input
-              type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder="twoj@email.com"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
               onKeyDown={e => e.key === 'Enter' && signInWithEmail()}
               style={{
                 width: '100%', background: C.bg3, border: `1px solid ${C.border}`,
@@ -125,14 +234,19 @@ export default function LoginPage() {
             </button>
 
             {error && (
-              <div style={{ fontSize: 11, color: '#f87171', ...MONO, textAlign: 'center' }}>
+              <div style={{ fontSize: 11, color: '#f87171', ...MONO, textAlign: 'center', lineHeight: 1.5 }}>
                 ⚠ {error}
               </div>
             )}
 
             <div style={{ fontSize: 10, color: C.dim, ...MONO, textAlign: 'center', lineHeight: 1.6, marginTop: 8 }}>
               No password — just click the link in your email.<br />
-              By signing in you accept the terms of use.
+              By signing in you accept the{' '}
+              <a href="/legal/terms.html" target="_blank" rel="noopener noreferrer"
+                style={{ color: C.muted, textDecoration: 'underline' }}>terms</a>
+              {' '}and{' '}
+              <a href="/legal/privacy.html" target="_blank" rel="noopener noreferrer"
+                style={{ color: C.muted, textDecoration: 'underline' }}>privacy policy</a>.
             </div>
           </div>
         )}
