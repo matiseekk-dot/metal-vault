@@ -14,6 +14,8 @@ import { initPayments, startPurchase, openSubscriptionManagement, restorePurchas
 import WhensOnTab from '@/app/whens-on/WhensOnTab';
 import Icon from '@/app/components/Icon';
 import UpgradeModal from '@/app/components/UpgradeModal';
+import { useBackButton } from '@/lib/hooks/useBackButton';
+import { toast, confirm } from '@/app/components/Toast';
 import nextDynamic from 'next/dynamic';
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +78,12 @@ export default function MetalVault() {
 
   // Collection hook — all collection/watchlist/vinyl state & actions
   const col = useCollection(user);
+
+  // Hardware back button on Android: close the topmost overlay instead of
+  // exiting the app. VinylModal / UpgradeModal / OnboardingScreen handle
+  // this internally — these two stay inline so we wire the hook here.
+  useBackButton(showScanner,     () => setShowScanner(false));
+  useBackButton(showImportModal, () => setShowImportModal(false));
 
   // Auth listener
   useEffect(() => {
@@ -278,7 +286,11 @@ export default function MetalVault() {
       setSource(discogs.source || 'mixed');
       setFeedLoading(false);
     }).catch(e => { setFeedError(e.message); setFeedLoading(false); });
-  }, [feedRetryCount, col.followedArtists.length]); // re-fetch when user follows/unfollows
+    // Re-fetch only when the *count* of followed artists changes; the
+    // followedArtists array itself gets a new reference on every collection
+    // mutation, which would cause unnecessary feed reloads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedRetryCount, col.followedArtists.length]);
 
   const openAlbum = (album) => { setSelected(album); col.setVinylError(''); col.fetchVinyl(album); };
 
@@ -317,7 +329,7 @@ export default function MetalVault() {
   };
 
   const togglePush = async () => {
-    if (!user) { alert('Sign in first'); return; }
+    if (!user) { toast.error('Sign in first'); return; }
     setPushLoading(true);
     try {
       if (pushEnabled) {
@@ -328,22 +340,28 @@ export default function MetalVault() {
       } else {
         const reg = await navigator.serviceWorker.ready;
         const { publicKey } = await fetch('/api/push/subscribe').then(r => r.json());
-        if (!publicKey) { alert('Push not configured — add VAPID keys to Vercel'); setPushLoading(false); return; }
+        if (!publicKey) { toast.error('Notifications are temporarily unavailable. Please try again later.'); setPushLoading(false); return; }
         const perm = await Notification.requestPermission();
         if (perm !== 'granted') { setPushLoading(false); return; }
         const sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:publicKey });
         await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subscription:sub})});
         setPushEnabled(true);
       }
-    } catch(e) { console.error('Push error',e); }
+    } catch(e) {
+      if (typeof window !== 'undefined' && window.Sentry) window.Sentry.captureException(e);
+      toast.error('Could not update notification settings');
+    }
     setPushLoading(false);
   };
 
   const connectDiscogs = async () => {
     const r = await fetch('/api/discogs/oauth'); const d = await r.json();
     if (d.authorizeUrl) { window.location.href = d.authorizeUrl; }
-    else if (d.helpUrl) { if (window.confirm(d.error+'\n\nOpen Discogs developers page?')) window.open(d.helpUrl,'_blank'); }
-    else alert(d.error||'Failed to connect Discogs');
+    else if (d.helpUrl) {
+      const ok = await confirm((d.error || 'Discogs needs to be configured.') + '\n\nOpen Discogs developers page?');
+      if (ok) window.open(d.helpUrl, '_blank');
+    }
+    else toast.error(d.error || 'Failed to connect Discogs');
   };
 
   const getShareToken = async () => {
@@ -357,10 +375,11 @@ export default function MetalVault() {
     // Routes to RevenueCat (Play Store TWA) or Stripe (web) based on platform.
     const result = await startPurchase(plan);
     if (!result.success && result.error !== 'cancelled') {
-      alert(result.error || 'Checkout failed');
+      toast.error(result.error || 'Checkout failed');
     }
     // Success: webhook updates profile, refreshProfile() re-fetches premium state.
     if (result.success) {
+      toast.success('Welcome to Metal Vault Pro 🤘');
       await refreshProfile?.();
     }
   };
@@ -368,7 +387,7 @@ export default function MetalVault() {
   const openPortal = async () => {
     // Web: Stripe Customer Portal. Play Store: native Google Play subscriptions.
     const result = await openSubscriptionManagement();
-    if (!result.success) alert(result.error || 'Failed to open subscription settings');
+    if (!result.success) toast.error(result.error || 'Failed to open subscription settings');
   };
 
   const triggerUpgrade = (reason = '') => {
@@ -460,7 +479,7 @@ export default function MetalVault() {
 
       <div style={{ paddingBottom:100 }}>
         {tab==='feed' && (
-          <>
+          <ErrorBoundary name="Feed">
             {!feedLoading && releases.length>0 && <StatsBar releases={releases}/>}
             {/* Following / All tabs — only show Following if user is logged in */}
             <div style={{ display:'flex', borderBottom:'1px solid '+C.border }}>
@@ -545,7 +564,7 @@ export default function MetalVault() {
                 ))}
               </div>
             )}
-          </>
+          </ErrorBoundary>
         )}
 
         {tab==='vault' && (
@@ -584,10 +603,10 @@ export default function MetalVault() {
         )}
 
         {tab==='profile' && discogsError && (
-          <div style={{margin:'12px 16px',padding:'14px',background:'#2a0000',border:'1px solid #7f1d1d',borderRadius:10,color:'#f87171',fontSize:12,fontFamily:"'Space Mono',monospace",lineHeight:1.6}}>
+          <div style={{margin:'12px 16px',padding:'14px',background:'#2a0000',border:'1px solid #7f1d1d',borderRadius:10,color:'#f87171',fontSize:12,fontFamily:"var(--font-space-mono), monospace",lineHeight:1.6}}>
             <div style={{fontSize:10,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:8,color:'#fca5a5'}}>⚠ Discogs connection failed</div>
             <div style={{wordBreak:'break-word',color:'#fee2e2'}}>{discogsError}</div>
-            <button onClick={()=>setDiscogsError(null)} style={{marginTop:10,background:'none',border:'1px solid #7f1d1d',borderRadius:6,color:'#f87171',padding:'6px 12px',cursor:'pointer',fontSize:10,fontFamily:"'Space Mono',monospace"}}>Dismiss</button>
+            <button onClick={()=>setDiscogsError(null)} style={{marginTop:10,background:'none',border:'1px solid #7f1d1d',borderRadius:6,color:'#f87171',padding:'6px 12px',cursor:'pointer',fontSize:10,fontFamily:"var(--font-space-mono), monospace"}}>Dismiss</button>
           </div>
         )}
         {tab==='profile' && (

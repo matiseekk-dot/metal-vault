@@ -8,6 +8,8 @@
 // Free users: 1 photo per album. Pro: 6 photos per album.
 
 import { useState, useRef } from 'react';
+import { useBackButton } from '@/lib/hooks/useBackButton';
+import { confirm as mvConfirm } from '@/app/components/Toast';
 import { C, MONO } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 import { compressImage } from '@/lib/photo-compress';
@@ -105,7 +107,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
   }
 
   async function handleDelete(path) {
-    if (!confirm('Delete this photo?')) return;
+    if (!(await mvConfirm('Delete this photo?', { kind: 'danger', confirmLabel: 'Delete' }))) return;
     try {
       const r = await fetch('/api/photos/delete', {
         method: 'POST',
@@ -276,33 +278,40 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
       />
 
       {lightbox && (
-        <div
-          onClick={() => setLightbox(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 200,
-            background: 'rgba(0,0,0,0.92)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 20, cursor: 'pointer',
-          }}
-        >
-          <img src={lightbox} alt="Preview"
-            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}/>
-          <button
-            aria-label="Close"
-            style={{
-              position: 'absolute', top: 16, right: 16,
-              width: 36, height: 36, borderRadius: '50%',
-              background: 'rgba(0,0,0,0.6)', border: '1px solid #444',
-              color: '#fff', cursor: 'pointer',
-              fontSize: 18, lineHeight: 1, padding: 0,
-            }}
-          >×</button>
-        </div>
+        <PhotoLightbox src={lightbox} onClose={() => setLightbox(null)} />
       )}
 
       <style jsx>{`
         @keyframes mvspin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
+    </div>
+  );
+}
+
+function PhotoLightbox({ src, onClose }) {
+  useBackButton(true, onClose);
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 200,
+        background: 'rgba(0,0,0,0.92)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20, cursor: 'pointer',
+      }}
+    >
+      <img src={src} alt="Preview"
+        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}/>
+      <button
+        aria-label="Close"
+        style={{
+          position: 'absolute', top: 16, right: 16,
+          width: 36, height: 36, borderRadius: '50%',
+          background: 'rgba(0,0,0,0.6)', border: '1px solid #444',
+          color: '#fff', cursor: 'pointer',
+          fontSize: 18, lineHeight: 1, padding: 0,
+        }}
+      >×</button>
     </div>
   );
 }

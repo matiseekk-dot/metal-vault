@@ -475,7 +475,11 @@ function PersonaCard() {
       // Footer
       ctx.fillStyle = '#555'; ctx.font = '22px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('metal-vault-six.vercel.app', W/2, 1290);
+      // Strip the protocol from the brand URL so the watermark stays clean
+      // even after we move to a custom domain.
+      const brandHost = (process.env.NEXT_PUBLIC_APP_URL || window.location.origin)
+        .replace(/^https?:\/\//, '');
+      ctx.fillText(brandHost, W/2, 1290);
 
       // Convert to blob and share
       canvas.toBlob(async blob => {
@@ -500,7 +504,8 @@ function PersonaCard() {
         setSharing(false);
       }, 'image/png');
     } catch (e) {
-      console.error('Share error:', e);
+      const { logError } = await import('@/lib/log');
+      logError('Share error', e);
       setSharing(false);
     }
   };

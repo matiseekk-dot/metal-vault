@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
+import { toast } from '@/app/components/Toast';
 
 
 const VENUES = [
@@ -237,7 +238,7 @@ export default function ConcertsTab() {
 
   const submit = () => {
     if(!form.band.trim()){setError('Enter band name');return;}
-    const entry = {...form,band:form.band.trim(),id:editId||Date.now()};
+    const entry = {...form,band:form.band.trim(),id:editId||crypto.randomUUID()};
     const updated = editId ? concerts.map(c=>c.id===editId?entry:c) : [entry,...concerts];
     save(updated);resetForm();setShowForm(false);
   };
@@ -248,7 +249,7 @@ export default function ConcertsTab() {
 
   const addVenue = () => {
     if(!newVenue.trim())return;
-    const v={id:Date.now(),name:newVenue.trim(),city:'',cat:'Other'};
+    const v={id:crypto.randomUUID(),name:newVenue.trim(),city:'',cat:'Other'};
     const nv=[...venues,v]; setVenues(nv); saveLS(LS_VENUES,nv);
     setForm(f=>({...f,venueId:v.id})); setNewVenue(''); setShowVenueAdd(false);
   };
@@ -316,7 +317,7 @@ export default function ConcertsTab() {
             venueId = existing.id;
           } else {
             const newVenue = {
-              id: Date.now(),
+              id: crypto.randomUUID(),
               name: prompt.venue,
               city: prompt.city || '',
               cat: 'Other',
@@ -328,7 +329,7 @@ export default function ConcertsTab() {
 
         // Build concert record
         const concert = {
-          id: Date.now() + 1,
+          id: crypto.randomUUID(),
           band: prompt.artist,
           venueId,
           year: year || String(new Date().getFullYear()),
@@ -411,14 +412,14 @@ export default function ConcertsTab() {
                   const priceIdx = hdrs.indexOf('price');
                   const noteIdx  = hdrs.indexOf('note');
                   const venueIdx = hdrs.indexOf('venue');
-                  if (bandIdx === -1) { alert('CSV must have a "Band" column'); return; }
+                  if (bandIdx === -1) { toast.error('CSV must have a "Band" column'); return; }
                   const imported = [];
                   for (const line of lines.slice(1)) {
                     const cols = line.split(',').map(c=>c.replace(/^"|"$/g,'').trim());
                     const band = cols[bandIdx];
                     if (!band) continue;
                     imported.push({
-                      id: Date.now() + Math.random(),
+                      id: crypto.randomUUID(),
                       band,
                       year:   yearIdx  >= 0 ? cols[yearIdx]  || '' : '',
                       genre:  genreIdx >= 0 ? cols[genreIdx] || 'Metal' : 'Metal',
@@ -428,7 +429,7 @@ export default function ConcertsTab() {
                       venueId: null,
                     });
                   }
-                  if (!imported.length) { alert('No valid rows found'); return; }
+                  if (!imported.length) { toast.error('No valid rows found'); return; }
                   const merged = [...concerts];
                   const existing = new Set(concerts.map(c=>(c.band+c.year).toLowerCase()));
                   let added = 0;
@@ -438,8 +439,8 @@ export default function ConcertsTab() {
                     }
                   }
                   save(merged);
-                  alert(`Imported ${added} concerts (${imported.length - added} duplicates skipped)`);
-                } catch(err) { alert('Import failed: ' + err.message); }
+                  toast.success(`Imported ${added} concerts (${imported.length - added} duplicates skipped)`);
+                } catch(err) { toast.error('Import failed: ' + err.message); }
               };
               reader.readAsText(file);
               e.target.value = '';

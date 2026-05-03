@@ -11,6 +11,10 @@ import { useT } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
 import Sparkline from '@/app/components/Sparkline';
 import { rarityFromCount } from '@/lib/rarity';
+import { useBackButton } from '@/lib/hooks/useBackButton';
+import { toast, confirm as mvConfirm } from '@/app/components/Toast';
+import ManualAddForm from '@/app/collection/ManualAddForm';
+import PriceModal from '@/app/collection/PriceModal';
 import dynamic from 'next/dynamic';
 const BandsTab = dynamic(() => import('@/app/artists/BandsTab'), { ssr: false });
 
@@ -120,7 +124,7 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert(data.message || data.error || 'Could not save alert');
+      toast.error(data.message || data.error || 'Could not save alert');
       setAlertSaving(false);
       return;
     }
@@ -434,13 +438,13 @@ const PriceEditForm = memo(function PriceEditForm({ itemId, currentPrice, onSave
           autoCorrect="off"
           style={{ flex: 1, background: C.bg3, border: '2px solid ' + C.accent + '66',
             borderRadius: 8, color: C.text, padding: '12px 14px', fontSize: 18,
-            fontFamily: 'Space Mono, monospace', outline: 'none', minHeight: 44,
+            fontFamily: 'var(--font-space-mono), monospace', outline: 'none', minHeight: 44,
             WebkitAppearance: 'none', MozAppearance: 'textfield' }}
         />
         <button onClick={handleSave} disabled={saving}
           style={{ background: C.accent, border: 'none', borderRadius: 8,
             color: '#fff', padding: '12px 16px', cursor: 'pointer', minHeight: 44,
-            fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, letterSpacing: '0.06em',
+            fontFamily: "var(--font-bebas-neue), sans-serif", fontSize: 16, letterSpacing: '0.06em',
             opacity: saving ? 0.6 : 1 }}>
           {saving ? '…' : 'SAVE'}
         </button>
@@ -454,141 +458,6 @@ const PriceEditForm = memo(function PriceEditForm({ itemId, currentPrice, onSave
 }, (prev, next) => prev.itemId === next.itemId && prev.currentPrice === next.currentPrice);
 
 // ── ManualAddForm ─────────────────────────────────────────────
-function ManualAddForm({ onAdd, onClose }) {
-  const [form, setForm] = useState({ artist: '', album: '', format: 'Vinyl', label: '', year: '', purchase_price: '' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const handleSubmit = async () => {
-    if (!form.artist.trim() || !form.album.trim()) { setError('Artist and album are required'); return; }
-    setSaving(true);
-    await onAdd({
-      artist: form.artist.trim(), album: form.album.trim(),
-      format: form.format || 'Vinyl', label: form.label.trim() || null,
-      year:   form.year ? parseInt(form.year) : null,
-      purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null,
-      cover: null, discogs_id: null,
-    });
-    setSaving(false);
-  };
-
-  const lbl = { display: 'block', fontSize: 9, color: C.dim, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 4 };
-  const fld = { ...inputSt, padding: '9px 12px', marginBottom: 10 };
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000000cc', zIndex: 250, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: C.bg2, borderRadius: '16px 16px 0 0', padding: '16px', maxHeight: '90vh', overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom,24px)' }}>
-        <div style={{ width: 40, height: 4, background: C.border2, borderRadius: 2, margin: '0 auto 16px' }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.06em' }}>ADD RECORD MANUALLY</div>
-          {/* Quick switch to barcode scanner */}
-          <button onClick={() => {
-            onClose();
-            window.dispatchEvent(new CustomEvent('mv:open-scanner'));
-          }} style={{ background: '#1a0a0a', border: '1px solid #7f1d1d', borderRadius: 8,
-            color: '#f87171', padding: '6px 12px', cursor: 'pointer', ...MONO, fontSize: 10,
-            letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="scan" size={12} color="#f87171"/> SCAN BARCODE
-          </button>
-        </div>
-        <label style={lbl}>Artist *</label>
-        <input value={form.artist} onChange={e => set('artist', e.target.value)} placeholder="e.g. Metallica" style={fld} autoFocus />
-        <label style={lbl}>Album *</label>
-        <input value={form.album} onChange={e => set('album', e.target.value)} placeholder="e.g. Master of Puppets" style={fld} />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-          <div>
-            <label style={lbl}>Format</label>
-            <select value={form.format} onChange={e => set('format', e.target.value)} style={{ ...fld, cursor: 'pointer', marginBottom: 0 }}>
-              {['Vinyl','CD','Cassette','Box Set','Digital','Other'].map(f => <option key={f}>{f}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={lbl}>Year</label>
-            <input type="number" value={form.year} onChange={e => set('year', e.target.value)} placeholder="e.g. 1986" style={{ ...fld, marginBottom: 0 }} />
-          </div>
-        </div>
-        <label style={lbl}>Label</label>
-        <input value={form.label} onChange={e => set('label', e.target.value)} placeholder="e.g. Elektra Records" style={fld} />
-        <label style={lbl}>Purchase price ($)</label>
-        <input type="number" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)} placeholder="0.00" style={fld} />
-        {error && <div style={{ color: '#f87171', fontSize: 11, ...MONO, marginBottom: 8 }}>{error}</div>}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: '12px', background: 'none', border: '1px solid ' + C.border, borderRadius: 10, color: C.dim, cursor: 'pointer', ...MONO, fontSize: 12 }}>Cancel</button>
-          <button onClick={handleSubmit} disabled={saving}
-            style={{ flex: 2, padding: '12px', background: 'linear-gradient(135deg,' + C.accent + ',' + C.accent2 + ')', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer', ...BEBAS, fontSize: 18, letterSpacing: '0.06em' }}>
-            {saving ? 'SAVING…' : 'SAVE RECORD'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── PriceModal — fullscreen, isolated from 161-card re-render problem ──
-// Rendered at CollectionTab root level so card list re-renders don't affect it
-function PriceModal({ item, onClose, onSave }) {
-  const [val, setVal] = useState(item.purchase_price ? String(item.purchase_price) : '');
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    if (saving) return;
-    const n = parseFloat(String(val).trim().replace(',', '.'));
-    if (isNaN(n) || n < 0) return;
-    setSaving(true);
-    try { await onSave(n); } catch {}
-    setSaving(false);
-  };
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-      paddingTop: '20vh', padding: '20vh 20px 20px',
-    }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width: '100%', maxWidth: 400, background: C.bg2,
-        border: '2px solid ' + C.accent, borderRadius: 14, padding: 20,
-      }}>
-        <div style={{ ...BEBAS, fontSize: 18, color: C.text, marginBottom: 4, letterSpacing: '0.05em' }}>
-          PURCHASE PRICE
-        </div>
-        <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {item.artist} — {item.album}
-        </div>
-        <input
-          type="number"
-          value={val}
-          onChange={e => setVal(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-          placeholder="e.g. 25"
-          autoFocus
-          style={{ width: '100%', background: C.bg3, border: '1px solid ' + C.border,
-            borderRadius: 6, color: C.text, padding: '10px 12px', fontSize: 16,
-            ...MONO, outline: 'none', boxSizing: 'border-box', marginBottom: 14 }}
-        />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onClose}
-            style={{ flex: 1, background: 'none', border: '1px solid ' + C.border,
-              borderRadius: 8, color: C.dim, padding: '10px', cursor: 'pointer',
-              ...MONO, fontSize: 12 }}>
-            Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            style={{ flex: 2, background: C.accent, border: 'none', borderRadius: 8,
-              color: '#fff', padding: '10px', cursor: 'pointer',
-              ...BEBAS, fontSize: 16, letterSpacing: '0.06em', opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'SAVING…' : 'SAVE'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
 // Holding period — human-readable "2y 3mo" / "5mo" / "" (empty if < 30 days)
 function holdingPeriod(addedAt) {
   if (!addedAt) return '';
@@ -684,13 +553,14 @@ export function CollectionTab({
       if (!res.ok) throw new Error('PATCH failed: ' + res.status);
       // Success — local state already correct, skip refetch
     } catch (e) {
-      console.error('Grading save error — reverting:', e);
+      const { logError } = await import('@/lib/log');
+      logError('Grading save error — reverting', e);
       // Revert by refetching authoritative data
       try {
         const fresh = await fetch('/api/collection').then(r => r.json());
         if (fresh.items) onUpdate(fresh.items);
       } catch {}
-      alert('Failed to save grading. Your changes were reverted.');
+      toast.error('Failed to save grading. Your changes were reverted.');
     }
     setGradingSaving(false);
   };
@@ -874,7 +744,7 @@ export function CollectionTab({
           {collection.length > 0 && (
             <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
               <button onClick={async () => {
-                if (!window.confirm('Remove duplicate entries? (keeps newest)')) return;
+                if (!(await mvConfirm('Remove duplicate entries? (keeps newest)'))) return;
                 const seen = new Set(); const toDelete = [];
                 [...collection].sort((a, b) => new Date(b.added_at) - new Date(a.added_at)).forEach(i => {
                   const key = (i.discogs_id || '') + '::' + i.artist + '::' + i.album;
@@ -888,7 +758,7 @@ export function CollectionTab({
                 🗑 Remove duplicates
               </button>
               <button onClick={async () => {
-                if (!window.confirm('Delete ALL records from collection? This cannot be undone.')) return;
+                if (!(await mvConfirm('Delete ALL records from collection? This cannot be undone.', { kind: 'danger', confirmLabel: 'Delete all' }))) return;
                 const ids = collection.map(i => i.id);
                 await fetch('/api/collection/batch', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
                 onUpdate([]);

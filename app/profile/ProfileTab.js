@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
+import { useBackButton } from '@/lib/hooks/useBackButton';
+import { toast, confirm as mvConfirm } from '@/app/components/Toast';
 
 
 // ── ConcertLocationCard ──
@@ -110,7 +112,7 @@ function ConcertLocationCard({ userId }) {
   };
 
   const disable = async () => {
-    if (!confirm('Stop receiving nearby concert alerts?')) return;
+    if (!(await mvConfirm('Stop receiving nearby concert alerts?'))) return;
     setBusy(true);
     try {
       await fetch('/api/profile/location', { method: 'DELETE' });
@@ -222,10 +224,11 @@ export default function ProfileTab({
   const [ownerName, setOwnerName] = useState(profile?.display_name || profile?.username || '');
   const [ownerEmail, setOwnerEmail] = useState(profile?.email || user?.email || '');
   const [ownerAddress, setOwnerAddress] = useState('');
+  useBackButton(showInsuranceModal, () => setShowInsuranceModal(false));
 
   const handleGenerateInsurance = async () => {
     if (!collection || collection.length === 0) {
-      alert('Your collection is empty. Add records before generating a report.');
+      toast.error('Your collection is empty. Add records before generating a report.');
       return;
     }
     setInsuranceLoading(true);
@@ -238,8 +241,9 @@ export default function ProfileTab({
       });
       setShowInsuranceModal(false);
     } catch (e) {
-      console.error('Insurance report error:', e);
-      alert('Failed to generate report: ' + e.message);
+      const { logError } = await import('@/lib/log');
+      logError('Insurance report error', e);
+      toast.error('Failed to generate report: ' + e.message);
     }
     setInsuranceLoading(false);
   };
@@ -324,12 +328,12 @@ export default function ProfileTab({
           <button onClick={async () => {
             const result = await import('@/lib/payments').then(m => m.restorePurchases());
             if (result.success && result.hasPro) {
-              alert('Pro restored! Please refresh the app.');
+              toast.success('Pro restored! Please refresh the app.');
               window.location.reload();
             } else if (result.success) {
-              alert('No previous Pro subscription found on this account.');
+              toast('No previous Pro subscription found on this account.');
             } else {
-              alert(result.error || 'Restore failed');
+              toast.error(result.error || 'Restore failed');
             }
           }} style={{ background: 'transparent', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 14px', fontSize: 10, ...MONO, cursor: 'pointer' }}>
             ↻ Restore previous purchase
@@ -367,7 +371,7 @@ export default function ProfileTab({
           </div>
           <button onClick={async () => {
               if (!username?.trim()) {
-                alert('Set a username first in the profile settings below');
+                toast.error('Set a username first in the profile settings below');
                 return;
               }
               setIsPublic(true);
@@ -385,7 +389,7 @@ export default function ProfileTab({
             <div style={{ fontSize: 11, color: '#4ade80', ...MONO }}>✓ Public profile active</div>
             <button onClick={() => {
                 const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${profile?.username || username}`;
-                navigator.clipboard?.writeText(link).then(() => alert('Link copied!'));
+                navigator.clipboard?.writeText(link).then(() => toast.success('Link copied!'));
               }}
               style={{ background: '#0d2a0d', border: '1px solid #1a3d1a', borderRadius: 6, color: '#4ade80', padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10 }}>
               📋 Copy link
@@ -732,7 +736,7 @@ export default function ProfileTab({
             <div style={{ fontSize: 10, color: '#60a5fa', ...MONO, wordBreak: 'break-all', marginBottom: 8, lineHeight: 1.5 }}>
               {typeof window !== 'undefined' ? window.location.origin : ''}/share/{shareToken}
             </div>
-            <button onClick={() => navigator.clipboard?.writeText((typeof window !== 'undefined' ? window.location.origin : '') + '/share/' + shareToken).then(() => alert('Copied!'))}
+            <button onClick={() => navigator.clipboard?.writeText((typeof window !== 'undefined' ? window.location.origin : '') + '/share/' + shareToken).then(() => toast.success('Copied!'))}
               style={{ width: '100%', padding: '8px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, cursor: 'pointer', fontSize: 11, ...MONO }}>
               📋 Copy share link
             </button>

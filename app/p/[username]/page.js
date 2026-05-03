@@ -2,8 +2,8 @@ import { getAdminClient } from '@/lib/supabase-server';
 
 
 const C = { bg: '#0a0a0a', bg2: '#141414', bg3: '#1e1e1e', border: '#2a2a2a', accent: '#dc2626', text: '#f0f0f0', muted: '#888' };
-const BEBAS = { fontFamily: "'Bebas Neue', sans-serif" };
-const MONO  = { fontFamily: "'Space Mono', monospace" };
+const BEBAS = { fontFamily: "var(--font-bebas-neue), sans-serif" };
+const MONO  = { fontFamily: "var(--font-space-mono), monospace" };
 
 export async function generateMetadata({ params }) {
   const { username } = await params;
@@ -41,7 +41,7 @@ export default async function PublicProfile({ params }) {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, maxWidth: 600, margin: '0 auto', padding: '0 0 40px' }}>
-      <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono&display=swap" rel="stylesheet" />
+      {/* Fonts loaded via next/font in root layout */}
 
       {/* Header */}
       <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: '20px 16px' }}>

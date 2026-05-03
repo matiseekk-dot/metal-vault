@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
+import { confirm as mvConfirm } from '@/app/components/Toast';
 
 
 function norm(str) {
@@ -39,8 +40,14 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
   });
   const [vinylOnly, setVinylOnly] = useState(true);
 
-  const wantKey = (title) => (artistName + '::' + title).toLowerCase();
-  const isWanted = (title) => wanted[wantKey(title)] === true;
+  const wantKey = useCallback(
+    (title) => (artistName + '::' + title).toLowerCase(),
+    [artistName],
+  );
+  const isWanted = useCallback(
+    (title) => wanted[wantKey(title)] === true,
+    [wanted, wantKey],
+  );
   // Unified: ♥ click = toggle watchlist entry directly (no separate "wanted" concept).
   // Still keeps LS as optimistic cache for instant UI feedback while DB write is in flight.
   const toggleWanted = async (album) => {
@@ -81,7 +88,10 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
         // Notify parent so watchlist count updates everywhere
         window.dispatchEvent(new CustomEvent('mv-watchlist-changed'));
       }
-    } catch (e) { console.warn('Watchlist sync failed:', e); }
+    } catch (e) {
+      const { logWarn } = await import('@/lib/log');
+      logWarn('Watchlist sync failed', e);
+    }
   };
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
@@ -112,7 +122,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
     const have = targetList.filter(a => normCol.some(c => titleMatch(c, a.normTitle))).length;
     const done = have === targetList.length && targetList.length > 0;
     onComplete(artistName, done ? 100 : 0);
-  }, [data, wanted, collection]);
+  }, [data, wanted, collection, artistName, isWanted, onComplete]);
 
   if (loading) return (
     <div style={{ padding:'16px', textAlign:'center', color:C.dim, ...MONO, fontSize:11 }}>
@@ -479,7 +489,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
             {followedArtists.length > 1 && (
               <button
                 onClick={async () => {
-                  if (!confirm('Unfollow all artists?')) return;
+                  if (!(await mvConfirm('Unfollow all artists?', { kind: 'danger', confirmLabel: 'Unfollow all' }))) return;
                   for (const a of followedArtists) await onToggleFollow(a.artist_name);
                   setManageMode(false);
                 }}

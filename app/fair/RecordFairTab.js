@@ -201,7 +201,7 @@ export default function RecordFairTab({ collection, onAddToCollection }) {
 
   const addToList = (item, _type) => {
     const newItem = {
-      id: Date.now(),
+      id: crypto.randomUUID(),
       discogs_id: String(item.id),
       artist: item.artist,
       album: item.album,

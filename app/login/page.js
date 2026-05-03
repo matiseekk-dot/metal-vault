@@ -10,8 +10,8 @@ const C = {
   border: '#2a2a2a', accent: '#dc2626',
   text: '#f0f0f0', muted: '#888', dim: '#555',
 };
-const MONO  = { fontFamily: "'Space Mono', monospace" };
-const BEBAS = { fontFamily: "'Bebas Neue', sans-serif" };
+const MONO  = { fontFamily: "var(--font-space-mono), monospace" };
+const BEBAS = { fontFamily: "var(--font-bebas-neue), sans-serif" };
 
 export default function LoginPage() {
   const [email,   setEmail]   = useState('');

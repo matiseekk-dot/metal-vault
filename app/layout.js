@@ -1,4 +1,24 @@
 import './globals.css';
+import ToastProvider from '@/app/components/Toast';
+import { Bebas_Neue, Space_Mono } from 'next/font/google';
+
+// Self-hosted via next/font — fonts ship with the build, no third-party
+// preconnect, no FOUT. Inline `fontFamily: "var(--font-space-mono),..."`
+// references throughout the app pick up the family name from these
+// CSS variables, set on <html> below.
+const bebasNeue = Bebas_Neue({
+  subsets: ['latin'],
+  weight: '400',
+  display: 'swap',
+  variable: '--font-bebas-neue',
+});
+const spaceMono = Space_Mono({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  style: ['normal', 'italic'],
+  display: 'swap',
+  variable: '--font-space-mono',
+});
 
 export const metadata = {
   title: 'Metal Vault',
@@ -9,7 +29,6 @@ export const metadata = {
     statusBarStyle: 'black-translucent',
     title: 'Metal Vault',
   },
-  themeColor: '#0a0a0a',
   icons: {
     icon: '/icons/icon-192.png',
     apple: '/icons/icon-192.png',
@@ -19,18 +38,16 @@ export const metadata = {
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Pinch-zoom intentionally allowed — locking it out hurts accessibility
+  // and triggers a Lighthouse / WCAG warning that can flag Play Console
+  // accessibility review.
   themeColor: '#0a0a0a',
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${bebasNeue.variable} ${spaceMono.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/icons/icon-192.png" />
         <meta name="mobile-web-app-capable" content="yes" />
@@ -40,6 +57,7 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         {children}
+        <ToastProvider />
         <script dangerouslySetInnerHTML={{
           __html: `
             if ('serviceWorker' in navigator) {
