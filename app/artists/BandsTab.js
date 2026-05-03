@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { confirm as mvConfirm } from '@/app/components/Toast';
+import { useT } from '@/lib/i18n';
 
 
 function norm(str) {
@@ -34,6 +35,7 @@ function CompletionBar({ have, total, isComplete }) {
 
 // ── Single artist discography (expanded) ──────────────────────
 function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist, onComplete, isFollowed, onToggleFollow }) {
+  const t = useT();
   const LS_WANTED = 'mv_wanted_v1';
   const [wanted,    setWanted]    = useState(() => {
     try { return JSON.parse(localStorage.getItem(LS_WANTED) || '{}'); } catch { return {}; }
@@ -126,7 +128,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
 
   if (loading) return (
     <div style={{ padding:'16px', textAlign:'center', color:C.dim, ...MONO, fontSize:11 }}>
-      Loading discography…
+      {t('bands.loadingDiscography')}
     </div>
   );
 
@@ -145,11 +147,11 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
           <button onClick={load}
             style={{ background:'#1a1a00', border:'1px solid '+C.gold, borderRadius:6,
               color:C.gold, padding:'6px 12px', cursor:'pointer', fontSize:11, ...MONO }}>
-            ↺ Retry
+            ↺ {t('common.retry')}
           </button>
         </div>
       ) : (
-        <div style={{ color:C.dim, ...MONO, fontSize:11 }}>⚠️ {errMsg || 'No albums found'}</div>
+        <div style={{ color:C.dim, ...MONO, fontSize:11 }}>⚠️ {errMsg || t('bands.empty.title')}</div>
       )}
     </div>
   );
@@ -259,7 +261,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
                     style={{ background:'#1a1a00', border:'1px solid '+C.gold, borderRadius:6,
                       color:C.gold, padding:'3px 8px', fontSize:10, cursor:'pointer', ...MONO,
                       whiteSpace:'nowrap' }}>
-                    + Watch
+                    + {t('vinyl.addToWatchlist').replace(/^[☆★]\s*/, '')}
                   </button>
                 )}
                 {album.inWatchlist && !album.inCollection && (
@@ -286,6 +288,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
 const LS_KEY = 'mv_complete_artists';
 
 export default function BandsTab({ collection, watchlist, onAddToWatchlist, followedArtists = [], onToggleFollow, onBatchFollow }) {
+  const t = useT();
   const [followingAll, setFollowingAll] = useState(false);
   const [manageMode,   setManageMode]   = useState(false);
   const [expanded,   setExpanded]   = useState(null);
@@ -448,7 +451,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
       <div style={{ padding:'0 16px 10px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
           <div style={{ ...BEBAS, fontSize:20, color:C.text, letterSpacing:'0.06em' }}>
-            BAND DISCOGRAPHIES
+            {t('bands.title').toUpperCase()}
           </div>
           {onToggleFollow && (() => {
             const allNames     = Object.keys(artistMap);
@@ -481,7 +484,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
                       border:'1px solid '+(manageMode ? C.accent : C.border),
                       borderRadius:8, color: manageMode ? C.accent : C.dim,
                       padding:'6px 10px', cursor:'pointer', ...MONO, fontSize:10, whiteSpace:'nowrap' }}>
-                    {manageMode ? '✕ Done' : '✏ Manage'}
+                    {manageMode ? '✕ ' + t('common.close') : '✏ ' + t('common.edit')}
                   </button>
                 )}
               </div>
@@ -496,7 +499,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
             <span style={{ fontSize:10, color:C.gold, ...MONO,
               background:'#2a2000', borderRadius:6, padding:'2px 8px',
               border:'1px solid #3d3000' }}>
-              🏆 {completeCount} complete
+              🏆 {completeCount} {t('bands.complete').replace(/^✓\s*/, '').toLowerCase()}
             </span>
           )}
         </div>
@@ -513,7 +516,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
         return (
           <div style={{ margin:'0 16px 10px', background:C.bg2, border:'1px solid '+C.border, borderRadius:10, padding:'10px 12px' }}>
             <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.15em', textTransform:'uppercase', marginBottom:8 }}>
-              Following ({followedArtists.length}) — tap to unfollow
+              {t('bands.followedCount')} ({followedArtists.length})
             </div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
               {[...followedInCollection, ...followedOther].map(a => (
@@ -534,7 +537,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
             {followedArtists.length > 1 && (
               <button
                 onClick={async () => {
-                  if (!(await mvConfirm('Unfollow all artists?', { kind: 'danger', confirmLabel: 'Unfollow all' }))) return;
+                  if (!(await mvConfirm(t('bands.unfollowAllConfirm'), { kind: 'danger', confirmLabel: t('bands.unfollowAll') }))) return;
                   for (const a of followedArtists) await onToggleFollow(a.artist_name);
                   setManageMode(false);
                 }}
@@ -550,7 +553,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
 
       {/* Search */}
       <div style={{ padding:'0 16px 10px' }}>
-        <input type="text" placeholder="Search artist…" value={search}
+        <input type="text" placeholder={t('common.search') + '…'} value={search}
           onChange={e => setSearch(e.target.value)}
           style={{ width:'100%', boxSizing:'border-box',
             background:C.bg3, border:'1px solid '+C.border,

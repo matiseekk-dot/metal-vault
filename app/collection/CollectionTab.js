@@ -20,6 +20,7 @@ const BandsTab = dynamic(() => import('@/app/artists/BandsTab'), { ssr: false })
 
 // ── PortfolioChart ────────────────────────────────────────────────
 function PortfolioChart({ snapshots }) {
+  const t = useT();
   if (!snapshots || snapshots.length < 2) return (
     <div style={{ textAlign: 'center', padding: '30px 0', color: C.dim, ...MONO, fontSize: 11 }}>
       No historical data — add records to your collection
@@ -66,6 +67,7 @@ function PortfolioChart({ snapshots }) {
 
 // ── WatchlistTab ──────────────────────────────────────────────────
 export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCover }) {
+  const t = useT();
   const [sort, setSort]           = useState('added');
   const [alertItem, setAlertItem]     = useState(null);
   const [alertPrice, setAlertPrice]   = useState('');
@@ -124,7 +126,7 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast.error(data.message || data.error || 'Could not save alert');
+      toast.error(data.message || data.error || t('vault.alert.failed'));
       setAlertSaving(false);
       return;
     }
@@ -189,9 +191,8 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
     <div style={{ textAlign: 'center', padding: '80px 24px', color: C.dim, ...MONO }}>
       <div style={{ fontSize: 48, marginBottom: 16 }}>☆</div>
       <div style={{ fontSize: 14, lineHeight: 1.6 }}>
-        No watched albums yet.<br />
-        <span style={{ color: C.accent }}>Click ☆</span> on any album.
-        {!user && <><br /><span style={{ fontSize: 11, color: C.dim }}>Sign in to sync across devices.</span></>}
+        {t('empty.watchlist.title')}<br />
+        <span style={{ color: C.accent, fontSize: 11 }}>{t('empty.watchlist.desc')}</span>
       </div>
     </div>
   );
@@ -205,9 +206,9 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
         </div>
         <select value={sort} onChange={e => setSort(e.target.value)}
           style={{ background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.muted, padding: '5px 8px', fontSize: 11, ...MONO, cursor: 'pointer', outline: 'none' }}>
-          <option value="added">Added order</option>
-          <option value="artist">Artist A–Z</option>
-          <option value="year">Year</option>
+          <option value="added">{t('vault.sort.added')}</option>
+          <option value="artist">{t('vault.sort.artist')}</option>
+          <option value="year">{t('vault.sort.year')}</option>
         </select>
       </div>
 
@@ -327,6 +328,7 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
 // ── CollectionTab ─────────────────────────────────────────────────
 // ── VaultScore — gamified completeness indicator ─────────────
 function VaultScore({ collection }) {
+  const t = useT();
   if (!collection.length) return null;
 
   const total = collection.length;
@@ -398,7 +400,7 @@ function VaultScore({ collection }) {
       )}
       {score >= 95 && (
         <div style={{ fontSize: 10, color: '#4ade80', ...MONO }}>
-          🤘 Perfect vault! Every record is fully documented.
+          🤘 {t('vault.score.title')} ✓
         </div>
       )}
     </div>
@@ -593,7 +595,7 @@ export function CollectionTab({
   if (!user) return (
     <div style={{ textAlign: 'center', padding: '60px 24px', color: C.dim, ...MONO }}>
       <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
-      <div style={{ fontSize: 13, lineHeight: 1.7 }}>Sign in to manage your collection</div>
+      <div style={{ fontSize: 13, lineHeight: 1.7 }}>{t('home.signedOut.desc')}</div>
     </div>
   );
 
@@ -620,7 +622,7 @@ export function CollectionTab({
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border }}>
             <div style={{ background: 'linear-gradient(135deg,#1a0800,#2a0a00,#1a0800)', border: '1px solid ' + C.accent, borderRadius: 14, padding: '16px', marginBottom: 10, position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', right: -8, top: -8, fontSize: 70, ...BEBAS, opacity: 0.04, userSelect: 'none' }}>$</div>
-              <div style={{ fontSize: 9, color: C.accent, ...MONO, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 4 }}>💰 Collection Value</div>
+              <div style={{ fontSize: 9, color: C.accent, ...MONO, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 4 }}>💰 {t('vault.summary.value')}</div>
               <div style={{ ...BEBAS, fontSize: 44, color: C.text, lineHeight: 1, marginBottom: 6 }}>{totalVal > 0 ? '$' + totalVal.toFixed(0) : '—'}</div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 {paid > 0 && totalVal > 0 && (
@@ -633,11 +635,10 @@ export function CollectionTab({
               </div>
               <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 5 }}>
                 {priceTracked > 0
-                  ? ('Based on Discogs median · ' + priceTracked + '/' + collection.length + ' tracked'
-                      + (noMarketData > 0 ? ' · ' + noMarketData + ' without marketplace data' : ''))
+                  ? ('Discogs · ' + priceTracked + '/' + collection.length)
                   : refreshResult
                     ? '✓ ' + refreshResult
-                    : '⏳ No prices yet'}
+                    : '⏳ —'}
                 {priceTracked < collection.length && !refreshing && (
                   <button onClick={async () => {
                     setRefreshing(true); setRefreshResult(null);
@@ -652,7 +653,7 @@ export function CollectionTab({
                     cursor: 'pointer', ...MONO, fontSize: 11,
                     letterSpacing: '0.05em',
                   }}>
-                    ↺ Fetch prices now ({trulyPending > 0 ? trulyPending + ' pending' : 'refresh all'})
+                    {t('vault.refreshPrices')} ({trulyPending > 0 ? trulyPending + ' ' + t('vault.refreshPrices.pending') : t('vault.refreshPrices.refreshAll')})
                   </button>
                 )}
                 {refreshing && (
@@ -664,9 +665,9 @@ export function CollectionTab({
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
               {[
-                { l: 'Records', v: summary?.itemCount ?? collection.length, c: C.accent },
-                { l: 'Paid',    v: paid > 0 ? '$' + paid.toFixed(0) : '—',  c: C.muted },
-                { l: 'Gain',    v: gain !== 0 ? (gain > 0 ? '+$' : '-$') + Math.abs(gain).toFixed(0) : '—', c: gainColor },
+                { l: t('vault.summary.records'), v: summary?.itemCount ?? collection.length, c: C.accent },
+                { l: t('stats.cards.totalPaid') || 'Paid', v: paid > 0 ? '$' + paid.toFixed(0) : '—',  c: C.muted },
+                { l: t('vault.summary.gain'),    v: gain !== 0 ? (gain > 0 ? '+$' : '-$') + Math.abs(gain).toFixed(0) : '—', c: gainColor },
               ].map(s => (
                 <div key={s.l} style={{ background: C.bg2, borderRadius: 8, padding: '8px', textAlign: 'center', border: '1px solid ' + C.border }}>
                   <div style={{ ...BEBAS, fontSize: 17, color: s.c, lineHeight: 1 }}>{s.v}</div>
@@ -681,7 +682,7 @@ export function CollectionTab({
       {/* Portfolio chart */}
       {portfolio?.snapshots?.length >= 2 && (
         <div style={{ padding: '16px', borderBottom: '1px solid ' + C.border }}>
-          <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 10 }}>Collection value over time</div>
+          <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 10 }}>{t('stats.value.over.time')}</div>
           <PortfolioChart snapshots={portfolio.snapshots} />
         </div>
       )}
@@ -694,16 +695,24 @@ export function CollectionTab({
           {/* Search + Add */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <input value={vaultSearch} onChange={e => { setVaultSearch(e.target.value); setExpandedId(null); }}
-              placeholder="Search artist, album…"
+              placeholder={t('vault.search')}
               style={{ ...inputSt, flex: 1, padding: '9px 12px', fontSize: 14 }} />
             <button onClick={() => setShowAddManual(true)}
               style={{ background: C.accent, border: 'none', borderRadius: 8, color: '#fff', padding: '0 16px', cursor: 'pointer', ...BEBAS, fontSize: 16, flexShrink: 0 }}>
-              + ADD
+              {'+ ' + t('common.add').toUpperCase()}
             </button>
           </div>
           {/* Filter pills */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto' }}>
-            {[['all','⚡ All'],['vinyl','💿 Vinyl'],['cd','💽 CD'],['cassette','📼 Cassette'],['box_set','📦 Box Set'],['limited','💎 Limited'],['no_price','💳 No price']].map(([id, label]) => (
+            {[
+              ['all',       t('vault.filter.all')],
+              ['vinyl',     t('vault.filter.vinyl')],
+              ['cd',        t('vault.filter.cd')],
+              ['cassette',  t('vault.filter.cassette')],
+              ['box_set',   t('vault.filter.boxSet')],
+              ['limited',   t('vault.filter.limited')],
+              ['no_price',  t('vault.filter.noPrice')],
+            ].map(([id, label]) => (
               <button key={id} onClick={() => { setVaultFilter(id); setExpandedId(null); }}
                 style={{ padding: '5px 11px', borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer', fontSize: 10, ...MONO, flexShrink: 0,
                   background: vaultFilter === id ? C.accent + '22' : C.bg3,
@@ -722,7 +731,7 @@ export function CollectionTab({
             onAdd={async (item) => { if (onManualAdd) await onManualAdd(item); setShowAddManual(false); }}
             onClose={() => setShowAddManual(false)} />}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO }}>My records ({collection.length})</div>
+            <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO }}>{t('vault.summary.records')} ({collection.length})</div>
             <select onChange={e => {
               const s = e.target.value;
               const sorted = [...collection].sort((a, b) => {
@@ -734,17 +743,17 @@ export function CollectionTab({
               });
               onUpdate(sorted);
             }} style={{ background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.muted, padding: '5px 8px', fontSize: 11, ...MONO, cursor: 'pointer', outline: 'none' }}>
-              <option value="added">Added order</option>
-              <option value="artist">Artist A–Z</option>
-              <option value="price_desc">Price ↓</option>
-              <option value="price_asc">Price ↑</option>
+              <option value="added">{t('vault.sort.added')}</option>
+              <option value="artist">{t('vault.sort.artist')}</option>
+              <option value="price_desc">{t('vault.sort.priceDesc')}</option>
+              <option value="price_asc">{t('vault.sort.priceAsc')}</option>
             </select>
           </div>
 
           {collection.length > 0 && (
             <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
               <button onClick={async () => {
-                if (!(await mvConfirm('Remove duplicate entries? (keeps newest)'))) return;
+                if (!(await mvConfirm(t('vault.bulk.removeDuplicatesConfirm')))) return;
                 const seen = new Set(); const toDelete = [];
                 [...collection].sort((a, b) => new Date(b.added_at) - new Date(a.added_at)).forEach(i => {
                   const key = (i.discogs_id || '') + '::' + i.artist + '::' + i.album;
@@ -755,15 +764,15 @@ export function CollectionTab({
                 const fresh = await fetch('/api/collection').then(r => r.json());
                 if (fresh.items) onUpdate(fresh.items);
               }} style={{ flex: 1, padding: '7px', background: '#1a0a00', border: '1px solid #92400e', borderRadius: 7, color: '#f97316', cursor: 'pointer', fontSize: 10, ...MONO }}>
-                🗑 Remove duplicates
+                {t('vault.bulk.removeDuplicates')}
               </button>
               <button onClick={async () => {
-                if (!(await mvConfirm('Delete ALL records from collection? This cannot be undone.', { kind: 'danger', confirmLabel: 'Delete all' }))) return;
+                if (!(await mvConfirm(t('vault.bulk.deleteAllConfirm'), { kind: 'danger', confirmLabel: t('vault.bulk.deleteAll') }))) return;
                 const ids = collection.map(i => i.id);
                 await fetch('/api/collection/batch', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
                 onUpdate([]);
               }} style={{ flex: 1, padding: '7px', background: '#1a0000', border: '1px solid #7f1d1d', borderRadius: 7, color: '#f87171', cursor: 'pointer', fontSize: 10, ...MONO }}>
-                🗑 Clear all
+                🗑 {t('common.delete').replace(/[a-z]+/, m => m + ' all')}
               </button>
             </div>
           )}

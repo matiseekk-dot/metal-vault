@@ -15,6 +15,9 @@ import { C, MONO, BEBAS } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 
 export default function MarketComparison({ artist, album, format, discogsLowest }) {
+  // i18n hook intentionally not added — this component is dense with
+  // marketplace labels (Discogs/eBay/Allegro/Amazon/JPC) which stay
+  // English regardless of locale; mark as tech debt for later sweep.
   const [ebay,     setEbay]    = useState({ loading: true, listings: [] });
   const [concert,  setConcert] = useState({ loading: true, next: null });
   // Allegro is intentionally a manual deep-link search — we don't have API

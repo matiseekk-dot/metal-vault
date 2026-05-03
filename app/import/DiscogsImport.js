@@ -114,7 +114,7 @@ export default function DiscogsImport({ onImportCollection, onImportWatchlist, u
   if (!user) return (
     <div style={{textAlign:'center',padding:'60px 24px',color:C.dim,...MONO}}>
       <div style={{fontSize:40,marginBottom:12}}>🔒</div>
-      <div style={{fontSize:13,lineHeight:1.7}}>Sign in to import your Discogs collection</div>
+      <div style={{fontSize:13,lineHeight:1.7}}>{t('import.connectFirst')}</div>
     </div>
   );
 
@@ -123,10 +123,10 @@ export default function DiscogsImport({ onImportCollection, onImportWatchlist, u
       {/* Header */}
       <div style={{marginBottom:20}}>
         <div style={{...BEBAS,fontSize:26,color:C.text,letterSpacing:'0.06em',lineHeight:1}}>
-          IMPORT FROM DISCOGS
+          {t('import.title').toUpperCase()}
         </div>
         <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>
-          MIGRATE YOUR COLLECTION & WANTLIST
+          {t('vault.tab.collection').toUpperCase()} & {t('vault.tab.watchlist').toUpperCase()}
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useCallback } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
+import { useT } from '@/lib/i18n';
 
 
 
@@ -164,6 +165,7 @@ function ResultCard({ item, onWatch, onAddCollection, isWatched, inCollection })
 }
 
 export default function SearchTab({ onWatch, onAddCollection, watchlist, collection }) {
+  const t = useT();
   const [query,   setQuery]   = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -217,10 +219,10 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
       {/* Header */}
       <div style={{ padding:'16px 16px 12px' }}>
         <div style={{ ...BEBAS, fontSize:28, color:C.text, letterSpacing:'0.06em', lineHeight:1 }}>
-          SEARCH VINYL
+          {t('search.title').toUpperCase()}
         </div>
         <div style={{ fontSize:10, color:C.accent, ...MONO, letterSpacing:'0.2em', marginTop:2 }}>
-          SEARCH DISCOGS DATABASE
+          {t('search.placeholder').toUpperCase().replace('…', '')}
         </div>
       </div>
 
@@ -231,7 +233,7 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
             value={query}
             onChange={e => handleInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && search(query)}
-            placeholder="Artist or album name…"
+            placeholder={t('search.placeholder')}
             style={inputSt}
             autoComplete="off"
             autoCapitalize="off"
@@ -263,8 +265,8 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
         <div style={{ textAlign:'center', padding:'50px 24px', color:C.dim, ...MONO }}>
           <div style={{ fontSize:40, marginBottom:12 }}>🔍</div>
           <div style={{ fontSize:13, lineHeight:1.7 }}>
-            Search any artist or album<br/>
-            <span style={{ fontSize:11, color:'#333' }}>Powered by Discogs database</span>
+            {t('search.placeholder')}<br/>
+            <span style={{ fontSize:11, color:'#333' }}>Discogs</span>
           </div>
         </div>
       )}
@@ -273,7 +275,7 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
       {searched && !loading && results.length === 0 && !error && (
         <div style={{ textAlign:'center', padding:'40px 24px', color:C.dim, ...MONO }}>
           <div style={{ fontSize:32, marginBottom:10 }}>🤷</div>
-          <div style={{ fontSize:12 }}>No results for "{query}"</div>
+          <div style={{ fontSize:12 }}>{t('search.empty')} — "{query}"</div>
         </div>
       )}
 
@@ -282,7 +284,7 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
         <div style={{ padding:'0 16px' }}>
           <div style={{ fontSize:10, color:C.dim, ...MONO, letterSpacing:'0.1em',
             textTransform:'uppercase', marginBottom:10 }}>
-            {results.length} results
+            {results.length} {t('feed.count')}
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {results.map(item => (

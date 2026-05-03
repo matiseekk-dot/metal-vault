@@ -263,10 +263,10 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
       {/* Header */}
       <div style={{ padding: '16px 16px 0', marginBottom: 16 }}>
         <div style={{ ...BEBAS, fontSize: 28, color: C.text, letterSpacing: '0.06em', lineHeight: 1 }}>
-          BARCODE SCANNER
+          {t('scanner.title').toUpperCase()}
         </div>
         <div style={{ fontSize: 10, color: C.accent, ...MONO, letterSpacing: '0.2em', marginTop: 2 }}>
-          SCAN VINYL → GET DISCOGS PRICE
+          {t('scanner.scanning').toUpperCase().replace('…', '')}
         </div>
         {scanCount > 0 && (
           <div style={{ fontSize: 10, color: '#4ade80', ...MONO, marginTop: 4 }}>
@@ -325,10 +325,10 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
           }}>
             <div style={{ fontSize: 56 }}>📷</div>
             <div style={{ ...BEBAS, fontSize: 18, color: C.muted, letterSpacing: '0.06em' }}>
-              TAP TO SCAN
+              {t('scanner.title').toUpperCase()}
             </div>
             <div style={{ fontSize: 11, color: C.dim, ...MONO, textAlign: 'center', padding: '0 24px' }}>
-              Point at barcode on vinyl sleeve or CD
+              {t('scanner.permissionDesc').replace(/[.…]+$/, '')}
             </div>
           </div>
         )}
@@ -352,7 +352,7 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
               border: 'none', borderRadius: 10, color: '#fff',
               ...BEBAS, fontSize: 18, letterSpacing: '0.1em', cursor: 'pointer',
             }}>
-            📷 START CAMERA
+            📷 {t('scanner.permissionGrant').toUpperCase()}
           </button>
         ) : (
           <button onClick={stopCamera}
@@ -362,7 +362,7 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
               borderRadius: 10, color: C.muted,
               ...BEBAS, fontSize: 18, letterSpacing: '0.1em', cursor: 'pointer',
             }}>
-            ⏹ STOP CAMERA
+            ⏹ {t('common.close').toUpperCase()}
           </button>
         )}
       </div>
@@ -379,7 +379,7 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
       {/* Manual entry */}
       <div style={{ padding: '0 16px', marginBottom: 16 }}>
         <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 6 }}>
-          Or enter barcode manually
+          {t('scanner.notFoundDesc').split(/[.…]/)[0]}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <input

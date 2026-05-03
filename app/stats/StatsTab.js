@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { realGenre } from '@/lib/genre-helper';
 import Icon from '@/app/components/Icon';
+import { useT } from '@/lib/i18n';
 import PortfolioChangeCard from '@/app/components/PortfolioChangeCard';
 
 const GRADE_COLORS = {M:'#a78bfa',NM:'#4ade80','VG+':'#60a5fa',VG:'#f5c842','G+':'#f97316',G:'#f87171',F:'#888',P:'#555'};
@@ -612,6 +613,7 @@ function PersonaCard() {
 }
 
 export default function StatsTab({collection,watchlist,collectionSummary,premium,onUpgrade}){
+  const t = useT();
   const [portfolio,setPortfolio]=useState(null);
   const [loading,setLoading]=useState(true);
 
@@ -652,8 +654,8 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
       <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
 
       <div style={{padding:'16px 0 12px'}}>
-        <div style={{...BEBAS,fontSize:28,color:C.text,letterSpacing:'0.06em',lineHeight:1}}>STATISTICS</div>
-        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>YOUR METAL VAULT OVERVIEW</div>
+        <div style={{...BEBAS,fontSize:28,color:C.text,letterSpacing:'0.06em',lineHeight:1}}>{t('stats.title').toUpperCase()}</div>
+        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>{t('header.feed') === 'RELEASES' ? 'YOUR METAL VAULT OVERVIEW' : ''}</div>
 
       {/* Persona Card — algorithmic metal identity, shareable as PNG */}
       <PersonaCard/>
@@ -874,7 +876,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
       {collection.length===0&&(
         <div style={{textAlign:'center',padding:'40px 0',color:C.dim,...MONO}}>
           <div style={{marginBottom:12,display:'flex',justifyContent:'center'}}><Icon name="barChart" size={40} color={C.accent}/></div>
-          <div style={{fontSize:13,lineHeight:1.7}}>Add records to your collection<br/>to see statistics here</div>
+          <div style={{fontSize:13,lineHeight:1.7}}>{t('empty.vault.title')}<br/>{t('empty.vault.desc')}</div>
         </div>
       )}
     </div>

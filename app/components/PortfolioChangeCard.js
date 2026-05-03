@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
+import { useT } from '@/lib/i18n';
 
 function formatChange(amount) {
   const abs = Math.abs(amount);
@@ -21,6 +22,7 @@ function formatPct(pct) {
 }
 
 export default function PortfolioChangeCard({ premium, onUpgrade }) {
+  const t = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -108,7 +110,7 @@ export default function PortfolioChangeCard({ premium, onUpgrade }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
         <div style={{ fontSize: 10, color: C.accent, ...MONO,
           letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-          Portfolio Performance
+          {t('stats.value.over.time')}
         </div>
         {data.coverage < 100 && data.coverage > 0 && (
           <div style={{ fontSize: 9, color: C.dim, ...MONO }}>
@@ -127,13 +129,13 @@ export default function PortfolioChangeCard({ premium, onUpgrade }) {
         <>
           <div style={{ display: 'flex', gap: 12 }}>
             <ChangeBox
-              label="30 days"
+              label={'30 ' + t('common.loading').replace(/[A-Za-zŁ-żś-ź…]+/, '').trim() || '30d'}
               change={data.change30d}
               percent={data.percentChange30d}
               fromValue={data.value30dAgo}
             />
             <ChangeBox
-              label="90 days"
+              label={'90d'}
               change={data.change90d}
               percent={data.percentChange90d}
               fromValue={data.value90dAgo}

@@ -10,6 +10,7 @@
 import { useState, useRef } from 'react';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { confirm as mvConfirm } from '@/app/components/Toast';
+import { useT } from '@/lib/i18n';
 import { C, MONO } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 import { compressImage } from '@/lib/photo-compress';
@@ -30,6 +31,7 @@ function dataURLtoBlob(dataUrl) {
 }
 
 export default function PhotoUploader({ collectionId, photos: initialPhotos = [], premium, onUpgrade, onPhotosChange }) {
+  const t = useT();
   const [photos,    setPhotos]    = useState(initialPhotos);
   const [uploading, setUploading] = useState(false);
   const [error,     setError]     = useState(null);
@@ -149,7 +151,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
         >
           <Icon name="camera" size={28} color={C.accent}/>
           <div style={{ fontSize: 12, color: C.text, ...MONO, fontWeight: 600 }}>
-            Photograph your collection
+            {t('photos.add').replace(/^[＋+]\s*/, '')}
           </div>
           <div style={{ fontSize: 10, color: C.dim, ...MONO, lineHeight: 1.5, maxWidth: 240 }}>
             Document sleeve condition, capture numbered variants, embed in insurance reports.
@@ -238,7 +240,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
             ) : (
               <>
                 <Icon name="camera" size={20} color={C.accent}/>
-                <span>Add photo</span>
+                <span>{t('photos.add').replace(/^[＋+]\s*/, '')}</span>
               </>
             )}
           </button>
