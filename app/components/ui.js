@@ -40,14 +40,20 @@ export function Badge({type,small}){
 
 
 // ── AlbumCover ────────────────────────────────────────────────
+// `size` accepts either a number (px) — used when laid out inline next
+// to other content — or a CSS length string like '100%' for cases where
+// the cover should fill its absolutely-positioned parent (see
+// AlbumCard above). For string sizes we can't compute a proportional
+// fontSize for the fallback letter, so we pick a generous default.
 export function AlbumCover({src,artist='',size=64}){
   const [err,setErr]=useState(false);
   const bg=GENRE_COLOR(artist);
+  const fallbackFontSize = typeof size === 'number' ? Math.round(size*0.45) : 56;
   if(!src||err)return(
     <div style={{width:size,height:size,borderRadius:6,flexShrink:0,
       background:'linear-gradient(135deg,'+bg+',#0a0a0a)',
       display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid '+C.border}}>
-      <span style={{...BEBAS,fontSize:Math.round(size*0.45),color:'#ffffff55'}}>{(artist[0]||'?').toUpperCase()}</span>
+      <span style={{...BEBAS,fontSize:fallbackFontSize,color:'#ffffff55'}}>{(artist[0]||'?').toUpperCase()}</span>
     </div>
   );
   return(
