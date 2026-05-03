@@ -60,8 +60,8 @@ export async function POST(request) {
   }
 
   // 5) Find matching profile.
-  // RC's app_user_id should be set to Supabase user.id by the client SDK.
-  // (See SDK setup: Purchases.configure({ appUserID: supabaseUser.id }))
+  // RC's app_user_id is the Supabase user.id — we pass it as `app_user_id`
+  // when we POST receipts in /api/revenuecat/record-purchase.
   const { data: profile, error: findErr } = await admin
     .from('profiles')
     .select('id')
