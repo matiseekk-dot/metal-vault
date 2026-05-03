@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
 import { getStripe } from '@/lib/stripe';
+import { FREE_TRIAL_DAYS } from '@/lib/pricing';
 
 
 export const dynamic = 'force-dynamic';
@@ -65,7 +66,7 @@ export async function POST(request) {
       quantity: 1,
     }],
     subscription_data: {
-      trial_period_days: 7,  // 7-day free trial
+      trial_period_days: FREE_TRIAL_DAYS,  // single source of truth — see lib/pricing.js
       metadata: { supabase_user_id: user.id },
     },
     success_url: appUrl + '/?premium=success',

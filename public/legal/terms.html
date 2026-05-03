@@ -18,7 +18,7 @@ a { color: #dc2626; }
 <body>
 
 <h1>Terms of Service — Metal Vault</h1>
-<p class="last-updated"><strong>Last updated:</strong> April 30, 2026</p>
+<p class="last-updated"><strong>Last updated:</strong> May 3, 2026</p>
 
 <h2>1. Acceptance</h2>
 <p>By using Metal Vault ("the app"), you agree to these terms. If you don't agree, please don't use the app.</p>
@@ -36,10 +36,10 @@ a { color: #dc2626; }
 
 <h2>3. Account</h2>
 <ul>
-<li>You're responsible for keeping your password secure</li>
+<li>Sign-in is passwordless — we use email magic links and Google OAuth, so there is no password to remember or share</li>
 <li>You must be at least 13 years old to use the app</li>
 <li>One account per person — please don't share accounts</li>
-<li>You can delete your account anytime via Profile → Account Settings</li>
+<li><strong>Account deletion:</strong> open Profile → "Danger zone" → "Delete my account", retype your email to confirm. We immediately remove your collection, watchlist, photos, and any active subscription. Backups are purged within 30 days.</li>
 </ul>
 
 <h2>4. Acceptable Use</h2>
@@ -56,10 +56,12 @@ a { color: #dc2626; }
 <h2>5. Subscriptions</h2>
 <ul>
 <li>Metal Vault Pro is a paid subscription with monthly or yearly billing</li>
-<li>14-day free trial available for new users; cancel anytime during trial without charge</li>
-<li>Subscriptions auto-renew unless canceled at least 24 hours before period end</li>
+<li>14-day free trial available for new subscribers; cancel anytime during the trial without charge</li>
+<li>Subscriptions auto-renew unless canceled at least 24 hours before the period end</li>
 <li>Cancellations take effect at the end of the current billing period</li>
-<li>Refunds: managed by the payment provider (Google Play Store or Stripe). Their policies apply.</li>
+<li>Payment processing: Stripe (web) or Google Play Billing (Android app). Subscription state is tracked through RevenueCat as our subscription-management layer; you never deal with RevenueCat directly.</li>
+<li>Refunds are governed by the payment processor's policy — Stripe for web purchases, Google Play for in-app purchases.</li>
+<li>Deleting your account during an active subscription cancels billing immediately for Stripe subscribers; Play Billing subscriptions must additionally be canceled in your Google Play account if you no longer want to be charged.</li>
 </ul>
 
 <h2>6. Pricing Information & Insurance Reports</h2>

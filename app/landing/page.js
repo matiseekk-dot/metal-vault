@@ -47,7 +47,7 @@ export default function LandingPage() {
 
       {/* Stats */}
       <div style={{display:'flex',borderTop:'1px solid '+C.border,borderBottom:'1px solid '+C.border}}>
-        {[{v:'∞',l:'Records free'},{v:'0s',l:'Discogs setup'},{v:'7d',l:'Pro trial'}].map((s,i)=>(
+        {[{v:'∞',l:'Records free'},{v:'0s',l:'Discogs setup'},{v:FREE_TRIAL_DAYS+'d',l:'Pro trial'}].map((s,i)=>(
           <div key={i} style={{flex:1,padding:'18px 8px',textAlign:'center',borderRight:i<2?'1px solid '+C.border:'none'}}>
             <div style={{fontFamily:"var(--font-bebas-neue), sans-serif",fontSize:30,color:C.accent,lineHeight:1}}>{s.v}</div>
             <div style={{fontSize:9,color:C.muted,letterSpacing:'0.12em',textTransform:'uppercase',marginTop:3}}>{s.l}</div>
