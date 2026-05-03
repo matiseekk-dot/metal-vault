@@ -105,8 +105,11 @@ async function fetchAndDiff(artistName, sb) {
 }
 
 export async function GET(request) {
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'Server misconfigured: CRON_SECRET unset' }, { status: 500 });
+  }
   const auth = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && auth !== 'Bearer ' + process.env.CRON_SECRET) {
+  if (auth !== 'Bearer ' + process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

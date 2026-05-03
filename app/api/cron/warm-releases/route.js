@@ -15,8 +15,13 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
+  // Fail-closed: missing CRON_SECRET in env means the endpoint is misconfigured,
+  // not that anyone should be able to call it.
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'Server misconfigured: CRON_SECRET unset' }, { status: 500 });
+  }
   const auth = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && auth !== 'Bearer ' + process.env.CRON_SECRET) {
+  if (auth !== 'Bearer ' + process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

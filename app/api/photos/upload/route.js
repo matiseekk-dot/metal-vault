@@ -28,8 +28,12 @@ function extFromMime(mime) {
   return 'jpg';
 }
 
-// Random ID generator (no Node crypto dependency in edge runtimes)
+// Random ID — Web Crypto's randomUUID is available in Node 19+ and the
+// Edge runtime; we fall back only on the (theoretical) Node <19 case.
 function uuid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
   return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
     (c ^ (Math.random() * 16) >> c / 4).toString(16)
   );

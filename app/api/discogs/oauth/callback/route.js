@@ -19,10 +19,15 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const oauthToken    = searchParams.get('oauth_token');
   const oauthVerifier = searchParams.get('oauth_verifier');
-  const appUrl        = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+
+  // Generic redirect builder — never includes raw upstream payloads or
+  // signature fragments in the URL; details go to server logs/Sentry.
+  const errorRedirect = (code) =>
+    NextResponse.redirect(appUrl + '/?discogs_error=' + code);
 
   if (!oauthToken || !oauthVerifier) {
-    return NextResponse.redirect(appUrl + '/?discogs_error=missing_params');
+    return errorRedirect('missing_params');
   }
 
   const key    = process.env.DISCOGS_KEY;
@@ -39,23 +44,17 @@ export async function GET(request) {
       .single();
 
     if (dbError || !stored) {
-      const msg = dbError?.message || 'no_token_record';
-      console.error('[discogs-callback] DB lookup failed:', msg, 'oauth_token:', oauthToken);
-      return NextResponse.redirect(appUrl + '/?discogs_error=' + encodeURIComponent('DB lookup failed: ' + msg));
+      console.error('[discogs-callback] DB lookup failed:', dbError?.message || 'no_token_record');
+      return errorRedirect('db_lookup_failed');
     }
 
     const { user_id: userId } = stored;
     const requestTokenSecret = (stored.access_secret || '').trim();
 
     if (!requestTokenSecret) {
-      return NextResponse.redirect(appUrl + '/?discogs_error=empty_request_token_secret');
+      return errorRedirect('empty_request_token_secret');
     }
 
-    // Exchange request token for access token
-    // Build the access token request signature.
-    // computedSig is used only in error diagnostics below — it's not the
-    // actual signature sent (that's inside authHeader via OAuth1 flow).
-    const computedSig = secret + '&' + requestTokenSecret;
     const authHeader = accessTokenHeader(key, secret, oauthToken, requestTokenSecret, oauthVerifier);
 
     const r = await fetch('https://api.discogs.com/oauth/access_token', {
@@ -69,14 +68,11 @@ export async function GET(request) {
 
     const text = await r.text();
     if (!r.ok) {
-      console.error('[discogs-callback] access_token failed:', r.status, text);
-      // Include our computed sig so user can compare with Discogs "Expected" value
-      const diagMsg = text.slice(0, 300)
-        + ' | WE SENT SIG: ' + computedSig.slice(0, 36)
-        + '... (tokenSecretLen=' + requestTokenSecret.length + ')';
-      return NextResponse.redirect(
-        appUrl + '/?discogs_error=' + encodeURIComponent(diagMsg),
-      );
+      // Full upstream body goes to server logs only; redirect carries an
+      // opaque code so we don't expose Discogs internals or our computed
+      // signature material via the URL bar / Referer header.
+      console.error('[discogs-callback] access_token failed:', r.status, text.slice(0, 300));
+      return errorRedirect('access_token_failed');
     }
 
     const p            = new URLSearchParams(text);
@@ -84,7 +80,7 @@ export async function GET(request) {
     const accessSecret = p.get('oauth_token_secret');
 
     if (!accessToken) {
-      return NextResponse.redirect(appUrl + '/?discogs_error=no_access_token');
+      return errorRedirect('no_access_token');
     }
 
     // Fetch Discogs username
@@ -112,8 +108,6 @@ export async function GET(request) {
     );
   } catch (e) {
     console.error('[discogs-callback] exception:', e.message);
-    return NextResponse.redirect(
-      appUrl + '/?discogs_error=' + encodeURIComponent(e.message.slice(0, 200)),
-    );
+    return errorRedirect('exception');
   }
 }

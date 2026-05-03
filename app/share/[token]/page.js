@@ -7,16 +7,17 @@ export async function generateMetadata({ params }) {
 }
 
 const C = { bg:'#0a0a0a',bg2:'#141414',bg3:'#1e1e1e',border:'#2a2a2a',accent:'#dc2626',text:'#f0f0f0',muted:'#888' };
-const BEBAS = {fontFamily:"'Bebas Neue',sans-serif"};
-const MONO  = {fontFamily:"'Space Mono',monospace"};
+const BEBAS = {fontFamily:"var(--font-bebas-neue), sans-serif"};
+const MONO  = {fontFamily:"var(--font-space-mono), monospace"};
 const GRADE_COLOR = {'M':'#4ade80','NM':'#4ade80','VG+':'#f5c842','VG':'#f5c842','G+':'#f97316','G':'#f87171','F':'#f87171','P':'#888'};
 
 export default async function SharePage({ params }) {
   const { token } = await params;
 
-  const { data: share } = await getAdminClient().from('share_tokens').select('user_id,label').eq('token', token).single();
+  const sb = getAdminClient();
+  const { data: share } = await sb.from('share_tokens').select('user_id,label').eq('token', token).single();
   if (!share) return (
-    <div style={{minHeight:'100vh',background:C.bg,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Space Mono,monospace',color:'#555'}}>
+    <div style={{minHeight:'100vh',background:C.bg,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--font-space-mono), monospace',color:'#555'}}>
       <div style={{textAlign:'center'}}>
         <div style={{fontSize:40,marginBottom:12}}>🔒</div>
         <div>This share link is invalid or has been removed</div>
@@ -34,7 +35,7 @@ export default async function SharePage({ params }) {
 
   return (
     <div style={{minHeight:'100vh',background:C.bg,maxWidth:600,margin:'0 auto',paddingBottom:40}}>
-      <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono&display=swap" rel="stylesheet"/>
+      {/* Fonts loaded via next/font in root layout */}
 
       {/* Header */}
       <div style={{background:C.bg,borderBottom:'1px solid '+C.border,padding:'16px'}}>
@@ -100,7 +101,7 @@ export default async function SharePage({ params }) {
       </div>
 
       <div style={{textAlign:'center',padding:'20px',fontSize:10,color:'#333',...MONO}}>
-        Shared via Metal Vault · metal-vault-six.vercel.app
+        Shared via Metal Vault · {(process.env.NEXT_PUBLIC_APP_URL || '').replace(/^https?:\/\//, '') || 'metalvault.app'}
       </div>
     </div>
   );

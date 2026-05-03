@@ -50,10 +50,14 @@ async function sendEmail(to, subject, html) {
 }
 
 export async function GET(request) {
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'Server misconfigured: CRON_SECRET unset' }, { status: 500 });
+  }
   const auth = request.headers.get('authorization');
   if (auth !== 'Bearer '+process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
 
   const sb = getAdminClient();
   const discogsAuth = authHeader();
@@ -202,7 +206,7 @@ export async function GET(request) {
               'Price alert: ' + alert.artist + ' — ' + alert.album,
               '<h2>' + alert.artist + ' — ' + alert.album + '</h2>'
               + '<p>Now <strong>$' + lowest.toFixed(0) + '</strong> on Discogs (your target: $' + target + ')</p>'
-              + '<p><a href="https://metal-vault-six.vercel.app/?tab=vault">Open Metal Vault →</a></p>'
+              + '<p><a href="' + APP_URL + '/?tab=vault">Open Metal Vault →</a></p>'
             );
           }
           results.alertsTriggered++;

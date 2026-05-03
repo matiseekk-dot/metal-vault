@@ -31,6 +31,9 @@ async function sendEmail({ to, subject, html }) {
 const BUDGET_MS_RELEASES = 3 * 60 * 1000;
 
 export async function GET(request) {
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'Server misconfigured: CRON_SECRET unset' }, { status: 500 });
+  }
   const auth = request.headers.get('authorization');
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
