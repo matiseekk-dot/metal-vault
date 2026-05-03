@@ -1,0 +1,46 @@
+{
+  "_comment": "Template for @bubblewrap/cli. Run `bubblewrap init --manifest=https://metal-vault-six.vercel.app/manifest.json` to refresh from the live PWA, or run `bubblewrap update` after editing this file. Strip the leading underscore comments before committing or feeding to Bubblewrap if it complains.",
+
+  "packageId": "pl.skudev.metalvault",
+  "host": "metal-vault-six.vercel.app",
+  "name": "Metal Vault",
+  "launcherName": "Metal Vault",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#0a0a0a",
+  "navigationColor": "#0a0a0a",
+  "navigationColorDark": "#0a0a0a",
+  "navigationDividerColor": "#0a0a0a",
+  "navigationDividerColorDark": "#0a0a0a",
+  "backgroundColor": "#0a0a0a",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://metal-vault-six.vercel.app/icons/icon-512.png",
+  "maskableIconUrl": "https://metal-vault-six.vercel.app/icons/icon-512-maskable.png",
+  "appVersionName": "1.0.0",
+  "appVersion": 1,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "android"
+  },
+  "splashScreenFadeOutDuration": 300,
+  "shortcuts": [
+    { "name": "Feed",  "short_name": "Feed",  "url": "/?tab=feed",  "chosenIconUrl": "https://metal-vault-six.vercel.app/icons/icon-192.png" },
+    { "name": "Vault", "short_name": "Vault", "url": "/?tab=vault", "chosenIconUrl": "https://metal-vault-six.vercel.app/icons/icon-192.png" },
+    { "name": "Scan",  "short_name": "Scan",  "url": "/?tab=scan",  "chosenIconUrl": "https://metal-vault-six.vercel.app/icons/icon-192.png" }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": { "enabled": true },
+    "locationDelegation": { "enabled": true }
+  },
+  "alphaDependencies": { "enabled": false },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://metal-vault-six.vercel.app/",
+  "minSdkVersion": 23,
+  "additionalTrustedOrigins": [],
+  "retainedBundles": []
+}

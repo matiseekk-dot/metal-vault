@@ -5,6 +5,7 @@ import { C, MONO, BEBAS, BADGE_STYLES, GENRE_COLOR } from '@/lib/theme';
 import MarketComparison from '@/app/components/MarketComparison';
 import PhotoUploader from '@/app/components/PhotoUploader';
 import Icon from '@/app/components/Icon';
+import { useBackButton } from '@/lib/hooks/useBackButton';
 
 // ── formatDate helper ─────────────────────────────────────────
 function formatDate(dateStr) {
@@ -170,6 +171,7 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
 export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vinylData,loading,error,premium,collectionItem,onUpgrade,onPhotosChange}){
   const [history, setHistory] = useState(null);
   const [histLoading, setHistLoading] = useState(false);
+  useBackButton(true, onClose);
 
   const loadHistory = async (discogsId) => {
     if (!premium) return;

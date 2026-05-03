@@ -1,0 +1,14 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "pl.skudev.metalvault",
+      "sha256_cert_fingerprints": [
+        "REPLACE_ME_LOCAL_KEYSTORE_SHA256",
+        "REPLACE_ME_PLAY_APP_SIGNING_SHA256",
+        "REPLACE_ME_PLAY_UPLOAD_KEY_SHA256"
+      ]
+    }
+  }
+]

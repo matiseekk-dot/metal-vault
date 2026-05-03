@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "Metal Vault",
   "short_name": "Metal Vault",
   "description": "Metal vinyl collection tracker — sync Discogs, scan barcodes, track prices, get concert alerts.",
@@ -17,22 +18,66 @@
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/01-feed.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Browse new metal releases"
+    },
+    {
+      "src": "/screenshots/02-vault.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Your collection with price trends"
+    },
+    {
+      "src": "/screenshots/03-scan.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Scan barcodes to add records"
+    },
+    {
+      "src": "/screenshots/04-when-live.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Concerts near you"
+    },
+    {
+      "src": "/screenshots/05-vinyl-modal.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Variants and price comparison"
+    },
+    {
+      "src": "/screenshots/06-stats-persona.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Collector stats and persona"
     }
   ],
   "categories": ["music", "entertainment", "lifestyle"],

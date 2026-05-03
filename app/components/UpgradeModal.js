@@ -4,6 +4,7 @@ import { C, MONO, BEBAS } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
 import { TIERS } from '@/lib/stripe';
+import { useBackButton } from '@/lib/hooks/useBackButton';
 
 const FEATURES = [
   { iconName: 'pkg',             free: 'Unlimited',      pro: 'Unlimited'           },
@@ -32,6 +33,7 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
   const [tier,    setTier]    = useState('pro');           // 'pro' | 'collector'
   const [plan,    setPlan]    = useState('monthly');
   const [loading, setLoading] = useState(false);
+  useBackButton(true, onClose);
 
   const handleUpgrade = async () => {
     setLoading(true);

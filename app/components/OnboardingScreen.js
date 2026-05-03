@@ -3,11 +3,13 @@ import { useState } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
+import { useBackButton } from '@/lib/hooks/useBackButton';
 
 // Steps are built inside component so translations react to locale changes
 
 export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected, onTogglePush, pushEnabled, pushLoading }) {
   const t = useT();
+  useBackButton(true, onDone);
   const steps = [
     {
       iconName: 'fire',

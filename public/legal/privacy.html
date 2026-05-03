@@ -18,7 +18,7 @@ a { color: #dc2626; }
 <body>
 
 <h1>Privacy Policy — Metal Vault</h1>
-<p class="last-updated"><strong>Last updated:</strong> April 30, 2026</p>
+<p class="last-updated"><strong>Last updated:</strong> May 2, 2026</p>
 
 <p>Metal Vault ("we", "our", "the app") is operated by SkuDev, a Poland-based independent developer (Mateusz Skura). This policy explains what data we collect, why we collect it, and how we keep it safe.</p>
 
@@ -28,7 +28,7 @@ a { color: #dc2626; }
 <ul>
 <li><strong>Email address</strong> — for sign-in via email magic link or OAuth</li>
 <li><strong>Display name and avatar</strong> — optional, only if you set them</li>
-<li><strong>Discogs username</strong> — optional, if you connect your Discogs account</li>
+<li><strong>Discogs username and OAuth access token</strong> — only if you connect your Discogs account; the token is encrypted at rest and used only to read your own Discogs collection and wantlist</li>
 </ul>
 
 <h3>Collection data</h3>
@@ -42,8 +42,10 @@ a { color: #dc2626; }
 <h3>Usage data</h3>
 <ul>
 <li><strong>Page views and interactions</strong> — to improve the app</li>
-<li><strong>Device location</strong> — only if you grant permission, for "concerts near me" feature; coordinates only, never your address</li>
+<li><strong>Device location</strong> — only if you grant permission, for "concerts near me" feature; coordinates only, never your address. Reverse-geocoded via OpenStreetMap Nominatim</li>
 <li><strong>Device information</strong> — browser type, operating system, screen size</li>
+<li><strong>IP address</strong> — used only at request time for abuse-prevention rate limiting; not persisted to long-term storage</li>
+<li><strong>Push notification subscription endpoint</strong> — only if you enable push; this is a vendor-supplied URL (Apple/Google/Mozilla) used to deliver notifications you've opted into</li>
 </ul>
 
 <h3>Payment data</h3>
@@ -68,11 +70,16 @@ a { color: #dc2626; }
 <ul>
 <li><strong>Supabase</strong> — database and authentication (data stored in EU)</li>
 <li><strong>Discogs</strong> — to look up release info and prices (we send only the queries needed)</li>
-<li><strong>Bandsintown</strong> — for concert events lookup</li>
+<li><strong>Ticketmaster Discovery API</strong> — for upcoming concert events lookup</li>
 <li><strong>Setlist.fm</strong> — for past concert setlists</li>
-<li><strong>Stripe / Google Play Billing</strong> — payment processing</li>
+<li><strong>OpenStreetMap Nominatim</strong> — for reverse geocoding ("concerts near me")</li>
+<li><strong>Stripe</strong> — payment processing on the web</li>
+<li><strong>Google Play Billing</strong> — payment processing inside the Android app</li>
+<li><strong>RevenueCat</strong> — subscription state management on top of Play Billing / Stripe</li>
 <li><strong>Resend</strong> — email delivery (weekly digest, account emails)</li>
-<li><strong>Sentry</strong> — error reporting (no personal data, only crash logs)</li>
+<li><strong>Spotify API</strong> — optional, only used for share images and the persona widget</li>
+<li><strong>eBay Browse API</strong> — optional, used to show "available now" prices in the album view</li>
+<li><strong>Sentry</strong> — error reporting (request bodies and headers are stripped before transmission)</li>
 <li><strong>Vercel</strong> — hosting and content delivery</li>
 </ul>
 <p>Each of these providers has their own privacy policy and security practices. We choose providers that offer GDPR-compliant infrastructure.</p>
