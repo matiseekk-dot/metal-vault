@@ -293,24 +293,65 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
   // Map: artistName → completion pct (loaded from localStorage)
   const [completion, setCompletion] = useState({});
 
-  // Load saved completion from localStorage on mount
+  // Load saved completion from localStorage immediately (instant UI), then
+  // reconcile with the server in the background so toggles made on other
+  // devices show up. 401 = anonymous → stay LS-only. Any artists that exist
+  // only in LS get pushed up so a re-install doesn't lose them.
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-      setCompletion(saved);
-    } catch {}
+    let local = {};
+    try { local = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch {}
+    setCompletion(local);
+
+    (async () => {
+      let r;
+      try { r = await fetch('/api/artist-completion'); } catch { return; }
+      if (r.status === 401 || !r.ok) return;
+      let d;
+      try { d = await r.json(); } catch { return; }
+      const serverArtists = new Set(d.artists || []);
+      const localArtists  = Object.keys(local).filter(a => local[a] >= 100);
+      const localOnly     = localArtists.filter(a => !serverArtists.has(a));
+
+      if (localOnly.length) {
+        try {
+          await fetch('/api/artist-completion', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ artists: localOnly }),
+          });
+        } catch {}
+      }
+
+      // Merge: server artists ∪ localOnly (which we just pushed) → final state.
+      const merged = {};
+      for (const a of serverArtists) merged[a] = 100;
+      for (const a of localOnly)     merged[a] = 100;
+      setCompletion(merged);
+      try { localStorage.setItem(LS_KEY, JSON.stringify(merged)); } catch {}
+    })();
+  }, []);
+
+  // Fire-and-forget server sync for a single completion toggle.
+  const pushCompletion = useCallback((artistName, completed) => {
+    fetch('/api/artist-completion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artist: artistName, completed: !!completed }),
+    }).catch(() => {});
   }, []);
 
   // Called by ArtistDiscography with 100 (complete) or 0 (incomplete)
   const handleComplete = useCallback((artistName, pct = 100) => {
     setCompletion(prev => {
       const next = { ...prev };
+      const wasCompleted = next[artistName] === 100;
       if (pct >= 100) next[artistName] = 100;
       else delete next[artistName];
       try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
+      if ((pct >= 100) !== wasCompleted) pushCompletion(artistName, pct >= 100);
       return next;
     });
-  }, []);
+  }, [pushCompletion]);
 
   // Group collection by artist
   const artistMap = {};
@@ -363,6 +404,10 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
 
           if (!changed) return prev;
           try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
+          // Push every artist that flipped to complete in this pass.
+          for (const a of Object.keys(next)) {
+            if (next[a] === 100 && prev[a] !== 100) pushCompletion(a, true);
+          }
           return next;
         });
       } catch {}
@@ -372,7 +417,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
     check();
     window.addEventListener('mv-wanted-changed', check);
     return () => window.removeEventListener('mv-wanted-changed', check);
-  }, [collection]);
+  }, [collection, pushCompletion]);
 
   // Sort: complete artists first (as a special category), then by record count
   let artists = Object.entries(artistMap).sort((a, b) => {

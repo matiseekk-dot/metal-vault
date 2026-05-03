@@ -18,6 +18,9 @@ const RATE_LIMITS = {
   '/api/push/subscribe':   { max: 10,  windowMs: 60_000 },
   '/api/stripe/checkout':  { max: 5,   windowMs: 60_000 },
   '/api/revenuecat/record-purchase': { max: 10, windowMs: 60_000 },
+  '/api/user-concerts':    { max: 60,  windowMs: 60_000 },
+  '/api/user-venues':      { max: 30,  windowMs: 60_000 },
+  '/api/artist-completion':{ max: 60,  windowMs: 60_000 },
   // Expensive external API calls — very tight
   '/api/discogs':          { max: 30,  windowMs: 60_000 },
   '/api/releases':         { max: 30,  windowMs: 60_000 },

@@ -220,13 +220,106 @@ export default function ConcertsTab() {
   const [setlistOpen,setSetlistOpen] = useState({});  // concert.id → bool
   const inputRef = useRef();
 
-  useEffect(()=>{
-    setConcerts(loadLS(LS_KEY,[]));
-    const sv=loadLS(LS_VENUES,null);
-    if(sv)setVenues(sv);
-  },[]);
+  // Load + sync flow:
+  //   1. Hydrate from localStorage immediately (instant UI on every device)
+  //   2. In the background, GET /api/user-concerts (401 = anonymous; stay
+  //      local-only). On success, push any local-only items UP to the
+  //      server (one-shot migration of pre-sync localStorage data) and
+  //      then merge server data DOWN into state.
+  // Built-in venues (numeric ids) never travel — they live in code.
+  useEffect(() => {
+    const localConcerts = loadLS(LS_KEY, []);
+    setConcerts(localConcerts);
+    const sv = loadLS(LS_VENUES, null);
+    if (sv) setVenues(sv);
 
-  const save = (c,v=venues) => { setConcerts(c); saveLS(LS_KEY,c); if(v!==venues){setVenues(v);saveLS(LS_VENUES,v);} };
+    (async () => {
+      let r;
+      try { r = await fetch('/api/user-concerts'); } catch { return; }
+      if (r.status === 401 || !r.ok) return;          // anon or transient — keep local
+      let server;
+      try { server = await r.json(); } catch { return; }
+
+      const serverConcerts = server.concerts || [];
+      const serverVenues   = server.venues   || [];
+
+      const serverConcertIds = new Set(serverConcerts.map(c => c.id));
+      const localOnlyConcerts = localConcerts.filter(c => c.id && !serverConcertIds.has(c.id));
+
+      const localVenuesAll = sv || venues;
+      const userAddedLocal = localVenuesAll.filter(v => typeof v.id === 'string');
+      const serverVenueIds = new Set(serverVenues.map(v => v.id));
+      const localOnlyVenues = userAddedLocal.filter(v => !serverVenueIds.has(v.id));
+
+      if (localOnlyConcerts.length) {
+        try {
+          await fetch('/api/user-concerts', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ concerts: localOnlyConcerts }),
+          });
+        } catch {}
+      }
+      if (localOnlyVenues.length) {
+        try {
+          await fetch('/api/user-venues', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ venues: localOnlyVenues }),
+          });
+        } catch {}
+      }
+
+      // Merge: server is the source of truth + items we just pushed up.
+      const mergedConcerts = [...serverConcerts, ...localOnlyConcerts];
+      const mergedVenues   = [
+        ...VENUES,                               // built-ins (numeric ids)
+        ...serverVenues,
+        ...localOnlyVenues.filter(lv => !serverVenueIds.has(lv.id)),
+      ];
+
+      // Dedupe by id, keeping the first occurrence (server wins over local-only).
+      const seenC = new Set();
+      const finalConcerts = mergedConcerts.filter(c => seenC.has(c.id) ? false : (seenC.add(c.id), true));
+      const seenV = new Set();
+      const finalVenues   = mergedVenues.filter(v => seenV.has(v.id) ? false : (seenV.add(v.id), true));
+
+      setConcerts(finalConcerts);
+      setVenues(finalVenues);
+      saveLS(LS_KEY,    finalConcerts);
+      saveLS(LS_VENUES, finalVenues);
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Local-only writer used as the optimistic step before server sync.
+  const save = (c, v = venues) => {
+    setConcerts(c); saveLS(LS_KEY, c);
+    if (v !== venues) { setVenues(v); saveLS(LS_VENUES, v); }
+  };
+
+  // Fire-and-forget server-side persistence. Failures don't roll back —
+  // user keeps the local change; a toast lets them know to retry.
+  const syncConcert = (item) => {
+    fetch('/api/user-concerts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    }).then(async r => {
+      if (r.status === 401 || r.ok) return;
+      const d = await r.json().catch(() => ({}));
+      toast.error('Saved locally — sync failed (' + (d.error || r.status) + ')');
+    }).catch(() => {});
+  };
+  const syncDeleteConcert = (id) => {
+    fetch('/api/user-concerts?id=' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+  };
+  const syncVenue = (v) => {
+    fetch('/api/user-venues', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(v),
+    }).catch(() => {});
+  };
 
   const resetForm = () => { setForm({band:'',venueId:null,year:String(new Date().getFullYear()),genre:'Metal',rating:0,price:'',note:''});setEditId(null);setSugg([]);setError(''); };
 
@@ -240,10 +333,12 @@ export default function ConcertsTab() {
     if(!form.band.trim()){setError('Enter band name');return;}
     const entry = {...form,band:form.band.trim(),id:editId||crypto.randomUUID()};
     const updated = editId ? concerts.map(c=>c.id===editId?entry:c) : [entry,...concerts];
-    save(updated);resetForm();setShowForm(false);
+    save(updated);
+    syncConcert(entry);
+    resetForm();setShowForm(false);
   };
 
-  const del    = id => save(concerts.filter(c=>c.id!==id));
+  const del    = id => { save(concerts.filter(c=>c.id!==id)); syncDeleteConcert(id); };
   const edit   = c  => { setForm({band:c.band,venueId:c.venueId||null,year:c.year||'',genre:c.genre||'Metal',rating:c.rating||0,price:c.price||'',note:c.note||''});setEditId(c.id);setShowForm(true);setSugg([]);setTimeout(()=>inputRef.current?.focus(),80); };
   const copy   = c  => { setForm({band:'',venueId:c.venueId,year:c.year||'',genre:c.genre,rating:0,price:c.price||'',note:''});setShowForm(true);setSugg([]);setTimeout(()=>inputRef.current?.focus(),80); };
 
@@ -252,6 +347,7 @@ export default function ConcertsTab() {
     const v={id:crypto.randomUUID(),name:newVenue.trim(),city:'',cat:'Other'};
     const nv=[...venues,v]; setVenues(nv); saveLS(LS_VENUES,nv);
     setForm(f=>({...f,venueId:v.id})); setNewVenue(''); setShowVenueAdd(false);
+    syncVenue(v);
   };
 
   // Stats
