@@ -2,22 +2,24 @@
 //
 // GET /api/search?q=<query>&type=auto|albums|artists|members
 //
-// Aggregates three sources:
+// Aggregates two sources at search time:
 //   • Discogs (authenticated) — albums with covers, year, format
-//   • MusicBrainz — artists, plus member-of-band relations
-//   • Last.fm (optional) — bio/similar/tags when `type=artists`
+//   • MusicBrainz — artists, plus people whose name matches
 //
-// Why a single endpoint instead of three? UI shows mixed results in one
-// scrollable list, and clients shouldn't fan out to three providers
-// themselves (CORS, rate limits, auth).
+// Heavy follow-ups (member-of-band relations, Last.fm bio, Cover Art
+// Archive cover fallback) are intentionally NOT done here — they multiply
+// latency by 3-5×. The frontend resolves them lazily per-card:
+//   • Member card expand → /api/artists/related (gets full bands list)
+//   • Album row missing cover → /api/cover-fallback (CAA lookup)
+// This keeps the search response under ~1.5s typical (Discogs is ~200ms,
+// one MB throttled call is ~1s).
 //
 // Caching: 1h Vercel edge cache for hot queries (Cache-Control header).
 // Per-user rate-limited to 30 req/min via lib/rate-limit.
 
 import { NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/rate-limit';
-import { searchArtist as mbSearchArtist, getArtistRelations } from '@/lib/musicbrainz';
-import { findCoverByArtistAlbum } from '@/lib/coverart';
+import { searchArtist as mbSearchArtist } from '@/lib/musicbrainz';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,93 +71,63 @@ async function searchAlbumsDiscogs(query) {
   }
 }
 
-// ── MusicBrainz artist search ─────────────────────────────────
-// Returns artists. For each artist with a non-trivial result (score > 70),
-// we leave member resolution for the dedicated `/related` endpoint —
-// fetching relations for every search result would explode the MB request
-// budget (1 req/sec hard limit).
-async function searchArtistsMb(query) {
-  const artists = await mbSearchArtist(query, 6);
-  return artists
-    .filter(a => a.score >= 50)            // skip junk matches
-    .map(a => ({
+// ── MusicBrainz artist + member search (single call) ──────────
+// Both "artist" results (bands) and "member" results (persons) come from
+// the same MB endpoint — we just split by `type`. Doing this in ONE MB
+// call instead of two halves the worst-case search latency. Threshold
+// lowered to 30 (was 50/60) so partial / misspelled queries still match.
+async function searchArtistsAndMembers(query) {
+  const all = mbFuzzyHelper(query);
+  const artists = await mbSearchArtist(all, 12);
+
+  const groups  = artists.filter(a => a.type !== 'Person' && a.score >= 30);
+  const persons = artists.filter(a => a.type === 'Person' && a.score >= 30);
+
+  return {
+    artists: groups.slice(0, 6).map(a => ({
       kind:           'artist',
       mbid:           a.mbid,
       name:           a.name,
-      type:           a.type || 'Group',   // 'Group' or 'Person'
+      type:           a.type || 'Group',
       country:        a.country,
       disambiguation: a.disambiguation,
       tags:           a.tags.slice(0, 5),
       lifeSpan:       a.lifeSpan,
       score:          a.score,
       source:         'musicbrainz',
-    }));
-}
-
-// ── Member search ─────────────────────────────────────────────
-// User typed "Mikael Åkerfeldt" → find them as a Person, then pull bands.
-// For the search list view we only need the Person + a count of bands;
-// the full list comes from /api/artists/[name]/related.
-async function searchMembers(query) {
-  const artists = await mbSearchArtist(query, 4);
-  // Only keep `Person` type results — for member search we don't care about
-  // bands matching by name, just people whose name matches.
-  const persons = artists.filter(a => a.type === 'Person' && a.score >= 60);
-  if (persons.length === 0) return [];
-
-  // For the top match, eagerly resolve their bands (single MB call).
-  // Subsequent matches show without bands until clicked.
-  const top = persons[0];
-  const rels = await getArtistRelations(top.mbid);
-  const bandsList = rels?.bands || [];
-
-  return [
-    {
-      kind:           'member',
-      mbid:           top.mbid,
-      name:           top.name,
-      disambiguation: top.disambiguation,
-      country:        top.country,
-      bandCount:      bandsList.length,
-      // First 4 bands inline; rest via /related endpoint when expanded
-      previewBands:   bandsList.slice(0, 4).map(b => ({
-        mbid:    b.mbid,
-        name:    b.name,
-        roles:   b.roles,
-        active:  b.active,
-        begin:   b.begin,
-        end:     b.end,
-      })),
-      source: 'musicbrainz',
-    },
-    // Keep up to 2 alternate persons (e.g. same name, different person)
-    ...persons.slice(1, 3).map(p => ({
+    })),
+    // Members: just metadata. The full band list is fetched lazily by
+    // MemberCard when the user expands it. This cuts ~1s off the first
+    // search response since we no longer eagerly fetch relations.
+    members: persons.slice(0, 4).map(p => ({
       kind:           'member',
       mbid:           p.mbid,
       name:           p.name,
       disambiguation: p.disambiguation,
       country:        p.country,
-      bandCount:      null,                 // unknown without follow-up call
+      bandCount:      null,                       // resolved on expand
       previewBands:   [],
+      score:          p.score,
       source:         'musicbrainz',
     })),
-  ];
+  };
 }
 
-// ── Cover Art Archive fallback for albums without covers ──────
-// Runs in parallel for up to 3 albums missing covers. We cap to limit MB
-// request budget — anything more than 3 makes search slow.
-async function fillMissingCovers(albums) {
-  const missing = albums.filter(a => !a.cover).slice(0, 3);
-  if (missing.length === 0) return albums;
-  const fills = await Promise.all(
-    missing.map(async a => {
-      const url = await findCoverByArtistAlbum(a.artist, a.album, 250);
-      return [a.id, url];
-    })
-  );
-  const fillMap = new Map(fills);
-  return albums.map(a => fillMap.has(a.id) ? { ...a, cover: fillMap.get(a.id) || a.cover, coverFallback: 'caa' } : a);
+// ── Build a fuzzy-ish MB query ────────────────────────────────
+// MB uses Lucene query syntax. Bare names are case-sensitive token
+// matches — bad UX. Wrapping each token with `~` enables fuzzy matching
+// (~1 edit distance per token), which gracefully handles diacritics,
+// transliterations, and typos ("akerfeldt" → "Åkerfeldt").
+function mbFuzzyHelper(q) {
+  const trimmed = q.trim();
+  if (!trimmed) return trimmed;
+  // For very short queries (<= 2 chars) skip fuzzy — the noise floor is
+  // too high and MB returns junk.
+  if (trimmed.length <= 2) return trimmed;
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  // Don't fuzz quoted phrases or already-Lucene-style queries.
+  if (trimmed.includes('"') || /[:~^*]/.test(trimmed)) return trimmed;
+  return tokens.map(t => t.length >= 4 ? t + '~' : t).join(' ');
 }
 
 // ── Main handler ──────────────────────────────────────────────
@@ -175,21 +147,26 @@ export async function GET(req) {
     return NextResponse.json({ q, albums: [], artists: [], members: [] });
   }
 
-  // Run providers in parallel where possible.
-  const tasks = [];
-  if (type === 'auto' || type === 'albums')  tasks.push(searchAlbumsDiscogs(q).then(r => ({ albums: r.items, albumsError: r.error })));
-  if (type === 'auto' || type === 'artists') tasks.push(searchArtistsMb(q).then(items => ({ artists: items })));
-  if (type === 'auto' || type === 'members') tasks.push(searchMembers(q).then(items => ({ members: items })));
+  // Run Discogs + MB in parallel. The MB call returns both artists
+  // (bands) and members (persons) from a single request, halving MB
+  // request budget vs. the old two-call approach.
+  const wantAlbums    = (type === 'auto' || type === 'albums');
+  const wantArtistsMb = (type === 'auto' || type === 'artists' || type === 'members');
 
-  const results = await Promise.all(tasks);
-  const merged = Object.assign({ albums: [], artists: [], members: [] }, ...results);
+  const [albumsRes, mbRes] = await Promise.all([
+    wantAlbums    ? searchAlbumsDiscogs(q)         : Promise.resolve({ items: [] }),
+    wantArtistsMb ? searchArtistsAndMembers(q)     : Promise.resolve({ artists: [], members: [] }),
+  ]);
 
-  // Cover Art Archive fallback only when albums asked AND we have at least
-  // one album without a cover. Keeps response fast for queries with full
-  // Discogs coverage.
-  if ((type === 'auto' || type === 'albums') && merged.albums.length > 0) {
-    merged.albums = await fillMissingCovers(merged.albums);
-  }
+  const merged = {
+    albums:  albumsRes.items || [],
+    artists: type === 'members' ? [] : (mbRes.artists || []),
+    members: type === 'artists' ? [] : (mbRes.members || []),
+  };
+
+  // CAA cover fallback removed from this endpoint — used to add up to 3s
+  // of latency. Frontend now lazy-loads CAA per-card via /api/cover-fallback
+  // when the Discogs cover errors / is missing.
 
   return NextResponse.json(
     { q, ...merged },

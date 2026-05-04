@@ -14,6 +14,7 @@ import { initPayments, startPurchase, openSubscriptionManagement, restorePurchas
 import WhensOnTab from '@/app/whens-on/WhensOnTab';
 import Icon from '@/app/components/Icon';
 import UpgradeModal from '@/app/components/UpgradeModal';
+import ArtistInfoModal from '@/app/components/ArtistInfoModal';
 import WhatsNew from '@/app/components/WhatsNew';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm } from '@/app/components/Toast';
@@ -647,6 +648,12 @@ export default function MetalVault() {
       {/* What's-new modal — fires once per app version, only after the
           user is signed in to avoid greeting first-time visitors. */}
       {user && <WhatsNew />}
+
+      {/* Global artist info sheet — listens for mv:open-artist from
+          anywhere (Search, Bands, related-artist clicks). Mounted always
+          so events fire regardless of active tab. */}
+      <ArtistInfoModal />
+
 
       {showOnboarding && (
         <OnboardingScreen

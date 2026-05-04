@@ -14,13 +14,38 @@
 // the parent page.js doesn't need a "selected artist" state.
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
-import { useT, useLocale } from '@/lib/i18n';
-import { useBackButton } from '@/lib/hooks/useBackButton';
+import { useT } from '@/lib/i18n';
+import { ArtistPhoto } from '@/app/components/ArtistInfoModal';
 
-// ── AlbumCover — placeholder + img with onError fallback ──────
-function AlbumCover({ src, artist, size = 56 }) {
-  const [err, setErr] = useState(false);
-  if (!src || err) return (
+// ── AlbumCover — placeholder + img with onError + CAA fallback ─
+// Strategy:
+//   1. Try the primary src (usually Discogs cover_image)
+//   2. On error or null, ask /api/cover-fallback for the CAA URL
+//   3. If CAA also has no match, render the letter placeholder
+// We never render the placeholder until BOTH sources have failed —
+// avoids the flash where Discogs lookup is in flight.
+function AlbumCover({ src, artist, album, size = 56 }) {
+  const [primaryErr, setPrimaryErr] = useState(false);
+  const [fallback, setFallback]     = useState(null);
+  const [fallbackTried, setTried]   = useState(false);
+
+  // When primary fails (or was null from the start) AND we haven't tried
+  // CAA yet, fire the lazy lookup. Lookup itself is rate-limited and
+  // cached at the edge, so refreshes are cheap.
+  useEffect(() => {
+    if (fallbackTried) return;
+    if (src && !primaryErr) return;       // primary still has a chance
+    if (!album || !artist) { setTried(true); return; }
+    setTried(true);
+    fetch(`/api/cover-fallback?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`)
+      .then(r => r.json())
+      .then(d => { if (d.cover) setFallback(d.cover); })
+      .catch(() => {});
+  }, [src, primaryErr, fallbackTried, artist, album]);
+
+  const finalSrc = (!primaryErr && src) ? src : fallback;
+
+  if (!finalSrc) return (
     <div style={{ width:size, height:size, borderRadius:6, flexShrink:0,
       background:'linear-gradient(135deg,#1a0000,#0a0a0a)',
       display:'flex', alignItems:'center', justifyContent:'center',
@@ -33,7 +58,7 @@ function AlbumCover({ src, artist, size = 56 }) {
   return (
     <div style={{ width:size, height:size, borderRadius:6, flexShrink:0,
       overflow:'hidden', border:`1px solid ${C.border}` }}>
-      <img src={src} alt={artist} loading="lazy" onError={()=>setErr(true)}
+      <img src={finalSrc} alt={artist} loading="lazy" onError={()=>setPrimaryErr(true)}
         style={{ width:'100%', height:'100%', objectFit:'cover' }} />
     </div>
   );
@@ -63,7 +88,7 @@ function ResultCard({ item, onWatch, onAddCollection, isWatched, inCollection })
     <div style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
       {/* Main row */}
       <div style={{ display:'flex', gap:12, padding:'12px 14px', alignItems:'flex-start' }}>
-        <AlbumCover src={item.cover} artist={item.artist} size={56} />
+        <AlbumCover src={item.cover} artist={item.artist} album={item.album} size={56} />
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ ...BEBAS, fontSize:18, color:C.text, lineHeight:1,
             overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -81,13 +106,6 @@ function ResultCard({ item, onWatch, onAddCollection, isWatched, inCollection })
               <span style={{ fontSize:9, padding:'1px 6px', borderRadius:10,
                 background:'#1a1a2e', color:'#60a5fa', border:'1px solid #1e3a8a', ...MONO }}>
                 Discogs
-              </span>
-            )}
-            {item.coverFallback === 'caa' && (
-              <span style={{ fontSize:9, padding:'1px 6px', borderRadius:10,
-                background:'#0d1f1a', color:'#00b896', border:'1px solid #1a3d3a', ...MONO }}
-                title="Cover sourced from Cover Art Archive">
-                CAA
               </span>
             )}
           </div>
@@ -185,7 +203,7 @@ function ResultCard({ item, onWatch, onAddCollection, isWatched, inCollection })
 // ── ArtistCard — links to BandsTab via mv:open-artist event ──
 // We don't navigate directly — the parent listens for this event and opens
 // the artist page within the SPA shell. Avoids hard refreshes.
-function ArtistCard({ item }) {
+function ArtistCard({ item, photo }) {
   const t = useT();
   const open = () => {
     if (typeof window !== 'undefined') {
@@ -198,14 +216,7 @@ function ArtistCard({ item }) {
     <div onClick={open}
       style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:12,
         padding:'12px 14px', cursor:'pointer', display:'flex', gap:12, alignItems:'center' }}>
-      <div style={{ width:44, height:44, borderRadius:'50%', flexShrink:0,
-        background:'linear-gradient(135deg,#1a0a0a,#0a0a0a)',
-        border:`1px solid ${C.border}`,
-        display:'flex', alignItems:'center', justifyContent:'center' }}>
-        <span style={{ ...BEBAS, fontSize:20, color:C.accent }}>
-          {item.name[0]?.toUpperCase()}
-        </span>
-      </div>
+      <ArtistPhoto src={photo} name={item.name} size={44} accent={C.accent}/>
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ ...BEBAS, fontSize:16, color:C.text, lineHeight:1.1,
           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -242,12 +253,34 @@ function ArtistCard({ item }) {
   );
 }
 
-// ── MemberCard — person + their bands (eagerly inline, lazy on expand) ──
-function MemberCard({ item }) {
+// ── MemberCard — person + their bands (lazy on expand) ──
+// We removed the eager preview-bands fetch from search to make the
+// initial response fast. The card now opens with no bands shown — the
+// chevron triggers /api/artists/related which returns the full list.
+function MemberCard({ item, photo }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
   const [allBands, setAllBands] = useState(null);
   const [loading, setLoading]   = useState(false);
+  const [bandPhotos, setBandPhotos] = useState({});
+
+  // After bands load, batch-fetch their photos. Same pattern as
+  // ArtistSection — fire-and-forget so the list paints before images.
+  useEffect(() => {
+    if (!allBands || allBands.length === 0) return;
+    const names = allBands.map(b => b.name).filter(Boolean);
+    if (names.length === 0) return;
+    let cancelled = false;
+    fetch('/api/artists/image', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ names }),
+    })
+      .then(r => r.json())
+      .then(d => { if (!cancelled && d?.images) setBandPhotos(d.images); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [allBands]);
 
   const loadAllBands = async () => {
     if (allBands || loading) { setExpanded(e => !e); return; }
@@ -274,13 +307,7 @@ function MemberCard({ item }) {
   return (
     <div style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
       <div style={{ display:'flex', gap:12, padding:'12px 14px', alignItems:'flex-start' }}>
-        <div style={{ width:44, height:44, borderRadius:'50%', flexShrink:0,
-          background:'#1a0a0a', border:`1px solid ${C.accent}44`,
-          display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <span style={{ ...BEBAS, fontSize:20, color:C.gold }}>
-            {item.name[0]?.toUpperCase()}
-          </span>
-        </div>
+        <ArtistPhoto src={photo} name={item.name} size={44} accent={C.gold}/>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ ...BEBAS, fontSize:16, color:C.text, lineHeight:1.1,
             overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -325,9 +352,10 @@ function MemberCard({ item }) {
             {bandsToShow.map(band => (
               <div key={band.mbid || band.name}
                 onClick={() => openArtist(band)}
-                style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 8px',
+                style={{ display:'flex', alignItems:'center', gap:9, padding:'7px 8px',
                   background:C.bg2, border:`1px solid ${C.border}`, borderRadius:7,
                   cursor:'pointer' }}>
+                <ArtistPhoto src={bandPhotos[band.name]} name={band.name} size={28} accent={C.muted}/>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:12, color:C.text, ...MONO, fontWeight:600,
                     overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -363,237 +391,6 @@ function MemberCard({ item }) {
   );
 }
 
-// ── ArtistModal — bio + members + sideProjects + similar ─────
-// Loaded lazily when user opens an artist card. Calls /api/artists/related
-// which aggregates MusicBrainz + Last.fm. Section visibility is data-driven —
-// e.g. a Person has no `members`, a band has no `sideProjects`.
-function ArtistModal({ artist, onClose }) {
-  const t = useT();
-  const locale = useLocale();
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [showFullBio, setShowFullBio] = useState(false);
-  useBackButton(true, onClose);
-
-  useEffect(() => {
-    if (!artist) return;
-    setLoading(true); setData(null);
-    const params = new URLSearchParams({
-      name: artist.name,
-      lang: locale,
-      ...(artist.mbid ? { mbid: artist.mbid } : {}),
-    });
-    fetch(`/api/artists/related?${params}`)
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [artist, locale]);
-
-  if (!artist) return null;
-
-  const openOther = (other) => {
-    // Replace current modal with a new artist — push, not stack.
-    window.dispatchEvent(new CustomEvent('mv:open-artist', {
-      detail: { name: other.name, mbid: other.mbid },
-    }));
-  };
-
-  return (
-    <div onClick={onClose}
-      style={{ position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.85)',
-        display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
-      <div onClick={e => e.stopPropagation()}
-        style={{ background:C.bg, width:'100%', maxWidth:480, maxHeight:'92vh',
-          borderRadius:'16px 16px 0 0', overflowY:'auto', overflowX:'hidden',
-          border:`1px solid ${C.border}`, paddingBottom:24 }}>
-
-        {/* Sticky header */}
-        <div style={{ position:'sticky', top:0, zIndex:1, background:C.bg,
-          borderBottom:`1px solid ${C.border}`, padding:'14px 16px',
-          display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div style={{ minWidth:0, flex:1 }}>
-            <div style={{ ...BEBAS, fontSize:22, color:C.text, letterSpacing:'0.04em',
-              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-              {data?.artist || artist.name}
-            </div>
-            <div style={{ display:'flex', gap:6, marginTop:2, flexWrap:'wrap' }}>
-              {data?.type && <span style={{ fontSize:10, color:C.dim, ...MONO }}>{data.type}</span>}
-              {data?.country && <span style={{ fontSize:10, color:C.dim, ...MONO }}>· {data.country}</span>}
-              {data?.lifeSpan?.begin && (
-                <span style={{ fontSize:10, color:C.dim, ...MONO }}>
-                  · {data.lifeSpan.begin.split('-')[0]}{data.lifeSpan.ended && data.lifeSpan.end ? '–' + data.lifeSpan.end.split('-')[0] : '–'}
-                </span>
-              )}
-            </div>
-          </div>
-          <button onClick={onClose}
-            style={{ width:32, height:32, borderRadius:'50%', border:`1px solid ${C.border}`,
-              background:'rgba(0,0,0,0.4)', color:'#fff', cursor:'pointer',
-              fontSize:18, lineHeight:1, padding:0, flexShrink:0 }}>
-            ×
-          </button>
-        </div>
-
-        {loading && (
-          <div style={{ textAlign:'center', padding:'40px 16px', color:C.dim, ...MONO, fontSize:11 }}>
-            ⟳ {t('common.loading')}
-          </div>
-        )}
-
-        {!loading && data && (
-          <>
-            {/* Tags */}
-            {data.tags?.length > 0 && (
-              <div style={{ padding:'10px 16px', display:'flex', flexWrap:'wrap', gap:5 }}>
-                {data.tags.map(tag => (
-                  <span key={tag} style={{ fontSize:10, padding:'2px 8px', borderRadius:11,
-                    background:C.bg2, color:C.muted, border:`1px solid ${C.border}`,
-                    ...MONO }}>{tag}</span>
-                ))}
-              </div>
-            )}
-
-            {/* Bio */}
-            {data.bio?.summary && (
-              <div style={{ padding:'4px 16px 12px' }}>
-                <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.18em',
-                  textTransform:'uppercase', marginBottom:6 }}>
-                  {t('artist.bio')}
-                </div>
-                <div style={{ fontSize:12, color:C.text, lineHeight:1.6, ...MONO }}
-                  // Server already sanitized — strip is in lastfm.js
-                  >
-                  {showFullBio ? data.bio.full : data.bio.summary}
-                </div>
-                {data.bio.full && data.bio.full !== data.bio.summary && (
-                  <button onClick={() => setShowFullBio(b => !b)}
-                    style={{ marginTop:6, background:'none', border:'none', color:C.accent,
-                      cursor:'pointer', fontSize:10, ...MONO, padding:0 }}>
-                    {showFullBio ? t('artist.bioLess') : t('artist.bioMore')}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Stats */}
-            {data.stats?.listeners > 0 && (
-              <div style={{ padding:'0 16px 12px', display:'flex', gap:14 }}>
-                <div>
-                  <div style={{ fontSize:9, color:C.dim, ...MONO, letterSpacing:'0.1em',
-                    textTransform:'uppercase' }}>
-                    {t('artist.listeners')}
-                  </div>
-                  <div style={{ ...BEBAS, fontSize:18, color:C.text }}>
-                    {data.stats.listeners.toLocaleString()}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize:9, color:C.dim, ...MONO, letterSpacing:'0.1em',
-                    textTransform:'uppercase' }}>
-                    {t('artist.scrobbles')}
-                  </div>
-                  <div style={{ ...BEBAS, fontSize:18, color:C.text }}>
-                    {(data.stats.playcount / 1000000).toFixed(1)}M
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Members (if Group) */}
-            {data.members?.length > 0 && (
-              <ArtistSection title={t('artist.members')} items={data.members} onPick={openOther}/>
-            )}
-            {data.exMembers?.length > 0 && (
-              <ArtistSection title={t('artist.exMembers')} items={data.exMembers} onPick={openOther}/>
-            )}
-
-            {/* Side projects (if Person) */}
-            {data.sideProjects?.length > 0 && (
-              <ArtistSection title={t('artist.bandsPlayedIn')} items={data.sideProjects} onPick={openOther}/>
-            )}
-
-            {/* Similar */}
-            {data.similar?.length > 0 && (
-              <ArtistSection title={t('artist.similar')} items={data.similar.map(s => ({
-                ...s, type: null, mbid: s.mbid, similarMatch: s.match,
-              }))} onPick={openOther}/>
-            )}
-
-            {/* External links */}
-            {data.urls && Object.keys(data.urls).length > 0 && (
-              <div style={{ padding:'10px 16px' }}>
-                <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.18em',
-                  textTransform:'uppercase', marginBottom:6 }}>
-                  {t('artist.links')}
-                </div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                  {Object.entries(data.urls).slice(0, 6).map(([type, url]) => (
-                    <a key={type} href={url} target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize:10, padding:'5px 10px', borderRadius:7,
-                        background:C.bg2, border:`1px solid ${C.border}`,
-                        color:C.muted, textDecoration:'none', ...MONO,
-                        textTransform:'capitalize' }}>
-                      {type.replace(/_/g, ' ')} ↗
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Attribution */}
-            <div style={{ textAlign:'center', padding:'16px 16px 0',
-              fontSize:8, color:C.dim, ...MONO, opacity:0.5 }}>
-              {data.lastfmConfigured ? t('artist.poweredBy') : t('artist.poweredByMbOnly')}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── ArtistSection — labeled list of related artists ───────────
-function ArtistSection({ title, items, onPick }) {
-  return (
-    <div style={{ padding:'10px 16px 4px' }}>
-      <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.18em',
-        textTransform:'uppercase', marginBottom:6 }}>
-        {title}
-      </div>
-      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-        {items.slice(0, 12).map(item => (
-          <div key={item.mbid || item.name}
-            onClick={() => onPick(item)}
-            style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 9px',
-              background:C.bg2, border:`1px solid ${C.border}`, borderRadius:7,
-              cursor:'pointer' }}>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:12, color:C.text, ...MONO, fontWeight:600,
-                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                {item.name}
-              </div>
-              <div style={{ fontSize:9, color:C.dim, ...MONO, marginTop:1,
-                display:'flex', gap:6, flexWrap:'wrap' }}>
-                {item.roles?.length > 0 && (
-                  <span style={{ color: item.active ? C.green : C.muted }}>
-                    {item.roles.join(', ')}
-                  </span>
-                )}
-                {item.begin && (
-                  <span>{item.roles?.length > 0 ? '· ' : ''}{item.begin.split('-')[0]}{item.end ? '–' + item.end.split('-')[0] : ''}</span>
-                )}
-                {item.similarMatch != null && item.similarMatch > 0 && (
-                  <span style={{ color:C.accent }}>match {Math.round(item.similarMatch * 100)}%</span>
-                )}
-              </div>
-            </div>
-            <span style={{ fontSize:14, color:C.accent }}>›</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ── SectionHeader — small uppercase divider above each section ──
 function SectionHeader({ label, count }) {
@@ -618,21 +415,10 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
   const [searched, setSearched] = useState(false);
-  const [openArtist, setOpenArtist] = useState(null);   // ArtistModal target
+  const [photoMap,   setPhotoMap]   = useState({});      // name → Spotify thumb URL
   const timer = useRef(null);
-
-  // Global event so any tab can open the artist modal — we listen here since
-  // SearchTab owns the modal. Other tabs (BandsTab, MemberCard) just
-  // dispatch the event with { name, mbid }.
-  useEffect(() => {
-    const handler = (e) => {
-      const d = e.detail;
-      if (!d?.name) return;
-      setOpenArtist({ name: d.name, mbid: d.mbid || null });
-    };
-    window.addEventListener('mv:open-artist', handler);
-    return () => window.removeEventListener('mv:open-artist', handler);
-  }, []);
+  // ArtistInfoModal is mounted globally in app/page.js — components here
+  // dispatch mv:open-artist events; the global modal handles the rest.
 
   const search = useCallback(async (q) => {
     if (!q.trim()) {
@@ -648,6 +434,25 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
       setAlbums(d.albums || []);
       setArtists(d.artists || []);
       setMembers(d.members || []);
+
+      // Fire-and-forget batch image lookup. Doesn't block the render —
+      // photos pop in once Spotify responds (~200ms typical).
+      const names = [
+        ...(d.artists || []).map(a => a.name),
+        ...(d.members || []).map(m => m.name),
+      ];
+      if (names.length > 0) {
+        fetch('/api/artists/image', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ names }),
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data?.images) setPhotoMap(prev => ({ ...prev, ...data.images }));
+          })
+          .catch(() => {});
+      }
     } catch (e) {
       setError(e.message);
     }
@@ -743,7 +548,7 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
         <>
           <SectionHeader label={t('search.peopleHeader')} count={members.length}/>
           <div style={{ padding:'0 16px', display:'flex', flexDirection:'column', gap:8 }}>
-            {members.map(m => <MemberCard key={m.mbid} item={m}/>)}
+            {members.map(m => <MemberCard key={m.mbid} item={m} photo={photoMap[m.name]}/>)}
           </div>
         </>
       )}
@@ -753,7 +558,7 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
         <>
           <SectionHeader label={t('search.artistsHeader')} count={artists.length}/>
           <div style={{ padding:'0 16px', display:'flex', flexDirection:'column', gap:8 }}>
-            {artists.map(a => <ArtistCard key={a.mbid} item={a}/>)}
+            {artists.map(a => <ArtistCard key={a.mbid} item={a} photo={photoMap[a.name]}/>)}
           </div>
         </>
       )}
@@ -785,10 +590,6 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
         </div>
       )}
 
-      {/* Artist info modal — bio + members + similar */}
-      {openArtist && (
-        <ArtistModal artist={openArtist} onClose={() => setOpenArtist(null)}/>
-      )}
     </div>
   );
 }

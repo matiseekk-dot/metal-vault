@@ -20,6 +20,7 @@ import { NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/rate-limit';
 import { searchArtist as mbSearchArtist, getArtistRelations } from '@/lib/musicbrainz';
 import { getArtistInfo, getSimilarArtists, isLastfmConfigured } from '@/lib/lastfm';
+import { findArtistImage } from '@/lib/spotify';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,11 +47,14 @@ export async function GET(req) {
     mbid = matches[0]?.mbid || null;
   }
 
-  // Run MB + Last.fm in parallel — independent providers.
-  const [rels, lfmInfo, lfmSimilar] = await Promise.all([
+  // Run MB + Last.fm + Spotify image in parallel — independent providers.
+  // Spotify is the only public source that still serves artist photos
+  // (Last.fm dropped them in 2019); it adds ~200ms typical.
+  const [rels, lfmInfo, lfmSimilar, spotifyMeta] = await Promise.all([
     mbid ? getArtistRelations(mbid) : Promise.resolve(null),
     getArtistInfo(name, lang),
     getSimilarArtists(name, 12),
+    findArtistImage(name),
   ]);
 
   // Split MB members into current vs ex- for cleaner UI sections.
@@ -93,6 +97,13 @@ export async function GET(req) {
       country:      rels?.country || null,
       lifeSpan:     rels?.lifeSpan || null,
       tags:         tags.slice(0, 10),
+      // Image + Spotify metadata for the artist hero. Genres from Spotify
+      // overlap with MB/Last.fm tags but are often more curated.
+      image:        spotifyMeta?.image || null,
+      thumb:        spotifyMeta?.thumb || null,
+      spotifyId:    spotifyMeta?.spotifyId || null,
+      spotifyUrl:   spotifyMeta?.spotifyUrl || null,
+      popularity:   spotifyMeta?.popularity ?? null,
       bio: {
         summary:  lfmInfo?.bioSummary || '',
         full:     lfmInfo?.bioFull || '',

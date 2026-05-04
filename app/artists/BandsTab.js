@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { confirm as mvConfirm } from '@/app/components/Toast';
-import { useT } from '@/lib/i18n';
+import { useT, useLocale } from '@/lib/i18n';
 
 
 function norm(str) {
@@ -16,6 +16,211 @@ function norm(str) {
 function titleMatch(a, b) {
   const na = norm(a), nb = norm(b);
   return na === nb || na.includes(nb) || nb.includes(na);
+}
+
+// ── ArtistPhoto — shared circular avatar with letter fallback ──
+// Used by both ArtistAbout (this file) and inline lists. Kept local
+// rather than imported from SearchTab to avoid coupling Vault → Search.
+function ArtistPhoto({ src, name, size = 48, accent = C.accent }) {
+  const [err, setErr] = useState(false);
+  if (!src || err) {
+    return (
+      <div style={{ width:size, height:size, borderRadius:'50%', flexShrink:0,
+        background:'linear-gradient(135deg,#1a0a0a,#0a0a0a)',
+        border:`1px solid ${accent}33`,
+        display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <span style={{ ...BEBAS, fontSize:Math.round(size*0.42), color:accent }}>
+          {(name||'?')[0].toUpperCase()}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ width:size, height:size, borderRadius:'50%', flexShrink:0,
+      overflow:'hidden', border:`1px solid ${accent}33` }}>
+      <img src={src} alt={name} loading="lazy" onError={() => setErr(true)}
+        style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+    </div>
+  );
+}
+
+// ── ArtistAbout — bio + members + similar, collapsible ────────
+// Lazily fetches /api/artists/related on mount. Renders nothing while
+// loading; pops in once data arrives. Keeps the discography flow
+// uninterrupted — bio is decorative, not blocking.
+function ArtistAbout({ artistName, locale }) {
+  const t = useT();
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [memberPhotos, setMemberPhotos] = useState({});
+  const [similarPhotos, setSimilarPhotos] = useState({});
+  const [bioFull, setBioFull] = useState(false);
+
+  useEffect(() => {
+    if (!artistName) return;
+    let cancelled = false;
+    fetch(`/api/artists/related?name=${encodeURIComponent(artistName)}&lang=${encodeURIComponent(locale || 'en')}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setData(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [artistName, locale]);
+
+  // Batch-fetch photos for member + similar lists once data arrives.
+  useEffect(() => {
+    if (!data) return;
+    const memberNames = [...(data.members||[]), ...(data.exMembers||[]), ...(data.sideProjects||[])]
+      .map(m => m.name).filter(Boolean);
+    if (memberNames.length > 0) {
+      fetch('/api/artists/image', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ names: memberNames }),
+      }).then(r => r.json()).then(d => d?.images && setMemberPhotos(d.images)).catch(() => {});
+    }
+    const similarNames = (data.similar || []).map(s => s.name).filter(Boolean);
+    if (similarNames.length > 0) {
+      fetch('/api/artists/image', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ names: similarNames }),
+      }).then(r => r.json()).then(d => d?.images && setSimilarPhotos(d.images)).catch(() => {});
+    }
+  }, [data]);
+
+  if (!data) return null;
+  const hasContent = data.image || data.bio?.summary || data.members?.length > 0
+    || data.exMembers?.length > 0 || data.sideProjects?.length > 0
+    || data.similar?.length > 0 || data.tags?.length > 0;
+  if (!hasContent) return null;
+
+  const openOther = (name, mbid) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mv:open-artist', { detail: { name, mbid } }));
+    }
+  };
+
+  return (
+    <div style={{
+      background: data.image
+        ? `linear-gradient(180deg, rgba(10,10,10,0.6) 0%, ${C.bg2} 80%), url("${data.image}") center/cover`
+        : C.bg2,
+      border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px',
+      marginBottom: 14, position:'relative', overflow:'hidden',
+    }}>
+      {/* Header strip — photo + meta */}
+      <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:10 }}>
+        <ArtistPhoto src={data.image || data.thumb} name={data.artist || artistName} size={56} accent={C.accent}/>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ ...BEBAS, fontSize:18, color:C.text, letterSpacing:'0.04em',
+            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+            textShadow: data.image ? '0 1px 2px rgba(0,0,0,0.7)' : 'none' }}>
+            {data.artist || artistName}
+          </div>
+          <div style={{ display:'flex', gap:6, marginTop:2, flexWrap:'wrap' }}>
+            {data.type && <span style={{ fontSize:9, color:C.dim, ...MONO }}>{data.type}</span>}
+            {data.country && <span style={{ fontSize:9, color:C.dim, ...MONO }}>· {data.country}</span>}
+            {data.lifeSpan?.begin && (
+              <span style={{ fontSize:9, color:C.dim, ...MONO }}>
+                · {data.lifeSpan.begin.split('-')[0]}{data.lifeSpan.ended && data.lifeSpan.end ? '–' + data.lifeSpan.end.split('-')[0] : '–'}
+              </span>
+            )}
+            {data.popularity != null && (
+              <span style={{ fontSize:9, color:C.dim, ...MONO }}>· {data.popularity}/100</span>
+            )}
+          </div>
+        </div>
+        <button onClick={() => setOpen(o => !o)}
+          style={{ background:'rgba(0,0,0,0.4)', border:`1px solid ${C.border}`, borderRadius:6,
+            color:C.accent, cursor:'pointer', padding:'5px 9px', fontSize:11, ...MONO,
+            flexShrink:0 }}>
+          {open ? '▴' : '▾'}
+        </button>
+      </div>
+
+      {open && (
+        <>
+          {/* Tags */}
+          {data.tags?.length > 0 && (
+            <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:10 }}>
+              {data.tags.map(tag => (
+                <span key={tag} style={{ fontSize:9, padding:'2px 7px', borderRadius:10,
+                  background:C.bg3, color:C.muted, border:`1px solid ${C.border}`, ...MONO }}>{tag}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Bio */}
+          {data.bio?.summary && (
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.18em',
+                textTransform:'uppercase', marginBottom:5 }}>{t('artist.bio')}</div>
+              <div style={{ fontSize:11, color:C.text, lineHeight:1.6, ...MONO }}>
+                {bioFull ? data.bio.full : data.bio.summary}
+              </div>
+              {data.bio.full && data.bio.full !== data.bio.summary && (
+                <button onClick={() => setBioFull(b => !b)}
+                  style={{ marginTop:5, background:'none', border:'none', color:C.accent,
+                    cursor:'pointer', fontSize:10, ...MONO, padding:0 }}>
+                  {bioFull ? t('artist.bioLess') : t('artist.bioMore')}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Members */}
+          {data.members?.length > 0 && (
+            <ArtistList title={t('artist.members')} items={data.members} photos={memberPhotos} onPick={openOther}/>
+          )}
+          {data.exMembers?.length > 0 && (
+            <ArtistList title={t('artist.exMembers')} items={data.exMembers} photos={memberPhotos} onPick={openOther}/>
+          )}
+          {data.sideProjects?.length > 0 && (
+            <ArtistList title={t('artist.bandsPlayedIn')} items={data.sideProjects} photos={memberPhotos} onPick={openOther}/>
+          )}
+          {data.similar?.length > 0 && (
+            <ArtistList title={t('artist.similar')} items={data.similar.map(s => ({ ...s, similarMatch: s.match }))}
+              photos={similarPhotos} onPick={openOther}/>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── ArtistList — compact list for ArtistAbout sections ────────
+function ArtistList({ title, items, photos, onPick }) {
+  return (
+    <div style={{ marginBottom:10 }}>
+      <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.18em',
+        textTransform:'uppercase', marginBottom:5 }}>{title}</div>
+      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+        {items.slice(0, 10).map(item => (
+          <div key={item.mbid || item.name}
+            onClick={() => onPick(item.name, item.mbid)}
+            style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 8px',
+              background:C.bg3, border:`1px solid ${C.border}`, borderRadius:6,
+              cursor:'pointer' }}>
+            <ArtistPhoto src={photos[item.name]} name={item.name} size={26} accent={C.muted}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:11, color:C.text, ...MONO, fontWeight:600,
+                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {item.name}
+              </div>
+              <div style={{ fontSize:9, color:C.dim, ...MONO, display:'flex', gap:5, flexWrap:'wrap' }}>
+                {item.roles?.length > 0 && (
+                  <span style={{ color: item.active ? C.green : C.muted }}>{item.roles.join(', ')}</span>
+                )}
+                {item.begin && <span>{item.roles?.length ? '· ' : ''}{item.begin.split('-')[0]}{item.end ? '–' + item.end.split('-')[0] : ''}</span>}
+                {item.similarMatch != null && item.similarMatch > 0 && (
+                  <span style={{ color:C.accent }}>match {Math.round(item.similarMatch * 100)}%</span>
+                )}
+              </div>
+            </div>
+            <span style={{ fontSize:14, color:C.accent }}>›</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Completion bar ─────────────────────────────────────────────
@@ -36,6 +241,7 @@ function CompletionBar({ have, total, isComplete }) {
 // ── Single artist discography (expanded) ──────────────────────
 function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist, onComplete, isFollowed, onToggleFollow }) {
   const t = useT();
+  const locale = useLocale();
   const LS_WANTED = 'mv_wanted_v1';
   const [wanted,    setWanted]    = useState(() => {
     try { return JSON.parse(localStorage.getItem(LS_WANTED) || '{}'); } catch { return {}; }
@@ -180,6 +386,9 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
 
   return (
     <div style={{ padding:'12px 16px 16px' }}>
+      {/* About — bio + members + similar (collapsible). Decorative — fails open */}
+      <ArtistAbout artistName={artistName} locale={locale}/>
+
       {/* Summary row */}
       <div style={{ marginBottom:14 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
