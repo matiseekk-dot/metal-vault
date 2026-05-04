@@ -13,6 +13,7 @@ import Sparkline from '@/app/components/Sparkline';
 import { rarityFromCount } from '@/lib/rarity';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm as mvConfirm } from '@/app/components/Toast';
+import ListenButton from '@/app/components/ListenButton';
 import ManualAddForm from '@/app/collection/ManualAddForm';
 import PriceModal from '@/app/collection/PriceModal';
 import dynamic from 'next/dynamic';
@@ -924,7 +925,21 @@ export function CollectionTab({
                           )}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                        onClick={e => e.stopPropagation()}>
+                        {/* Listen logger — 1-tap on this play, long-press for full modal.
+                            Click swallowed via wrapper above so we don't expand the card. */}
+                        <ListenButton
+                          item={item}
+                          compact
+                          premium={premium}
+                          onUpgrade={onUpgrade}
+                          onLogged={(updated) => {
+                            // Patch one item in-place. Parent state holds the array.
+                            const next = collection.map(c => c.id === updated.id ? { ...c, ...updated } : c);
+                            onUpdate(next);
+                          }}
+                        />
                         {onToggleFollow && (
                           <button
                             onClick={e => { e.stopPropagation(); onToggleFollow(item.artist); }}

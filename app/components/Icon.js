@@ -17,6 +17,7 @@ import {
   Wallet, Coins, Gem, Crown,
   // Media
   Music2, Music, Headphones, Radio, Camera, Image as ImageIcon,
+  Play, Volume2,
   // Auth / user
   User, UserPlus, LogIn, LogOut, Mail, Globe, Shield, Lock,
   // Navigation
@@ -86,6 +87,8 @@ export const I = {
   radio:       Radio,
   camera:      Camera,
   image:       ImageIcon,
+  play:        Play,             // listen log button
+  volume:      Volume2,           // listening / playback hint
 
   // Auth
   user:        User,

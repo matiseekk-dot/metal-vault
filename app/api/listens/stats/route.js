@@ -1,0 +1,158 @@
+// ── Listen stats aggregation ─────────────────────────────────
+//
+// GET /api/listens/stats
+//
+// Returns a single payload with everything the Stats UI needs:
+//   {
+//     total: { allTime, last30d, last90d, last365d },
+//     topPlayed: [{ id, artist, album, play_count, cover, last_played_at }, ...],
+//     dust:      [{ id, artist, album, days_since, cover }, ...],
+//     streak:    { current_days, longest_days, last_played_at },
+//     heatmap:   { '2026-04-30': 3, '2026-05-01': 1, ... }   // last 12 mo
+//   }
+//
+// Why one route instead of four? The Stats tab renders all sections
+// together — one round-trip is faster and cheaper than four.
+//
+// Auth: standard. Anonymous → 401.
+
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase-server';
+
+export const dynamic = 'force-dynamic';
+
+const DAY_MS  = 24 * 60 * 60 * 1000;
+const NOW     = () => Date.now();
+
+// ── Compute current + longest streak from a list of unique play days
+function computeStreak(playDays /* sorted asc */) {
+  if (playDays.length === 0) return { current_days: 0, longest_days: 0 };
+
+  const today    = new Date(); today.setHours(0,0,0,0);
+  const todayMs  = today.getTime();
+  const dayKey   = (ms) => { const d = new Date(ms); d.setHours(0,0,0,0); return d.getTime(); };
+  const days     = [...new Set(playDays.map(dayKey))].sort((a, b) => a - b);
+
+  // Longest streak — walk forward grouping consecutive days
+  let longest = 1, run = 1;
+  for (let i = 1; i < days.length; i++) {
+    if (days[i] - days[i - 1] === DAY_MS) { run++; longest = Math.max(longest, run); }
+    else                                  { run = 1; }
+  }
+
+  // Current streak — count back from today (or yesterday if no play today)
+  let current = 0;
+  let cursor  = todayMs;
+  if (!days.includes(cursor)) cursor -= DAY_MS;   // grace: yesterday counts
+  while (days.includes(cursor)) {
+    current++;
+    cursor -= DAY_MS;
+  }
+
+  return { current_days: current, longest_days: longest };
+}
+
+export async function GET(req) {
+  const sb = await createClient();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const now      = NOW();
+  const cut30    = new Date(now - 30  * DAY_MS).toISOString();
+  const cut90    = new Date(now - 90  * DAY_MS).toISOString();
+  const cut365   = new Date(now - 365 * DAY_MS).toISOString();
+
+  // Single fetch of the last year of play timestamps + item_ids — drives
+  // total counts, heatmap, and streak. For total counts we filter in JS;
+  // for top-played we use the denormalized `play_count` on collection.
+  const { data: recentLogs, error: logsErr } = await sb
+    .from('listen_logs')
+    .select('id, collection_item_id, played_at')
+    .eq('user_id', user.id)
+    .gte('played_at', cut365)
+    .order('played_at', { ascending: true });
+  if (logsErr) return NextResponse.json({ error: logsErr.message }, { status: 500 });
+
+  const logs    = recentLogs || [];
+  const ms30    = now - 30  * DAY_MS;
+  const ms90    = now - 90  * DAY_MS;
+
+  let count30 = 0, count90 = 0;
+  for (const l of logs) {
+    const t = new Date(l.played_at).getTime();
+    if (t >= ms30) count30++;
+    if (t >= ms90) count90++;
+  }
+
+  // All-time count from the cheap `play_count` column
+  const { data: allCount } = await sb
+    .from('collection')
+    .select('play_count.sum()')
+    .eq('user_id', user.id)
+    .single();
+  const totalAllTime = allCount?.sum || logs.length;   // fallback for older PostgREST
+
+  // ── Top-played records (denormalized counter — fast) ────────
+  const { data: topPlayed } = await sb
+    .from('collection')
+    .select('id, artist, album, cover, play_count, last_played_at')
+    .eq('user_id', user.id)
+    .gt('play_count', 0)
+    .order('play_count', { ascending: false })
+    .order('last_played_at', { ascending: false })
+    .limit(10);
+
+  // ── Dust collection: 0 plays OR not played in 90+ days ──────
+  // Only show records actually in the collection (some users have huge
+  // wantlists but no plays — that's expected, not "dust").
+  const dustCutoff = new Date(now - 90 * DAY_MS).toISOString();
+  const { data: dustItems } = await sb
+    .from('collection')
+    .select('id, artist, album, cover, last_played_at, play_count, added_at')
+    .eq('user_id', user.id)
+    .or(`last_played_at.is.null,last_played_at.lt.${dustCutoff}`)
+    .order('last_played_at', { ascending: true, nullsFirst: true })
+    .limit(8);
+
+  const dust = (dustItems || []).map(i => {
+    const ref = i.last_played_at || i.added_at;
+    const days = ref ? Math.floor((now - new Date(ref).getTime()) / DAY_MS) : null;
+    return {
+      id:         i.id,
+      artist:     i.artist,
+      album:      i.album,
+      cover:      i.cover,
+      play_count: i.play_count,
+      days_since: days,
+      // never_played helps the UI render different copy ("never played"
+      // vs "haven't played in N days")
+      never_played: i.play_count === 0,
+    };
+  });
+
+  // ── Streak (current + longest) ──────────────────────────────
+  const playMs = logs.map(l => new Date(l.played_at).getTime());
+  const streak = computeStreak(playMs);
+  const lastPlayedAt = logs.length > 0 ? logs[logs.length - 1].played_at : null;
+
+  // ── Heatmap (last 12 mo, count per day) ─────────────────────
+  // Date keys in YYYY-MM-DD. Skip days with zero — UI shows blanks.
+  const heatmap = {};
+  for (const l of logs) {
+    const key = l.played_at.slice(0, 10);   // ISO is YYYY-MM-DDT...
+    heatmap[key] = (heatmap[key] || 0) + 1;
+  }
+
+  return NextResponse.json({
+    total: {
+      allTime:   totalAllTime,
+      last30d:   count30,
+      last90d:   count90,
+      last365d:  logs.length,
+    },
+    topPlayed: topPlayed || [],
+    dust,
+    streak: { ...streak, last_played_at: lastPlayedAt },
+    heatmap,
+  });
+}
