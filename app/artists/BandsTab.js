@@ -247,7 +247,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
                 {/* ♥ Want toggle — marks album as personally wanted */}
                 {!album.inCollection && (
                   <button onClick={() => toggleWanted(album)}
-                    title={album.wanted ? 'Remove from wanted' : 'Mark as wanted'}
+                    title={album.wanted ? t('bands.removeFromWanted') : t('bands.markAsWanted')}
                     style={{ background:'none', border:'none', cursor:'pointer',
                       fontSize:17, padding:'4px 6px', lineHeight:1,
                       color: album.wanted ? '#f87171' : '#333' }}>

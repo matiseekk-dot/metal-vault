@@ -332,7 +332,7 @@ export default function MetalVault() {
   };
 
   const togglePush = async () => {
-    if (!user) { toast.error('Sign in first'); return; }
+    if (!user) { toast.error(t('auth.signInFirst')); return; }
     setPushLoading(true);
     try {
       if (pushEnabled) {
@@ -390,7 +390,7 @@ export default function MetalVault() {
   const openPortal = async () => {
     // Web: Stripe Customer Portal. Play Store: native Google Play subscriptions.
     const result = await openSubscriptionManagement();
-    if (!result.success) toast.error(result.error || 'Failed to open subscription settings');
+    if (!result.success) toast.error(result.error || t('payments.openSubFail'));
   };
 
   const triggerUpgrade = (reason = '') => {

@@ -27,6 +27,7 @@ function AlbumCover({ src, artist, size = 56 }) {
 }
 
 function ResultCard({ item, onWatch, onAddCollection, isWatched, inCollection }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const [vinylData, setVinylData] = useState(null);
   const [vinylLoading, setVinylLoading] = useState(false);
@@ -79,7 +80,7 @@ function ResultCard({ item, onWatch, onAddCollection, isWatched, inCollection })
           <button onClick={() => onWatch(item)}
             style={{ background:'none', border:'none', cursor:'pointer', fontSize:20,
               color:isWatched?'#f5c842':'#444', padding:'2px' }}
-            title={isWatched?'In watchlist':'Add to Watchlist'}>
+            title={isWatched?t('search.inWatchlist'):t('search.addToWatch')}>
             {isWatched ? '★' : '☆'}
           </button>
           <button onClick={loadVinyl}
@@ -181,7 +182,7 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
       const res = await fetch(
         `https://api.discogs.com/database/search?q=${encodeURIComponent(q)}&type=release&format=vinyl&per_page=15`
       );
-      if (!res.ok) throw new Error('Search failed');
+      if (!res.ok) throw new Error(t('search.failed'));
       const d = await res.json();
       const items = (d.results || []).map(r => {
         const parts = (r.title || '').split(' - ');
@@ -199,7 +200,7 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
       setError(e.message);
     }
     setLoading(false);
-  }, []);
+  }, [t]);
 
   const handleInput = (v) => {
     setQuery(v);

@@ -938,7 +938,7 @@ export function CollectionTab({
                         {/* Delete — always visible so long titles don't hide it */}
                         <button
                           onClick={e => { e.stopPropagation(); if (expandedId === item.id) setExpandedId(null); onRemove(item.id); }}
-                          title="Remove from collection"
+                          title={t('collection.removeItem')}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15,
                             color: '#555', padding: '8px 8px', lineHeight: 1, minWidth: 36, textAlign: 'center' }}>
                           ×
