@@ -15,7 +15,7 @@
 
 import { NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/rate-limit';
-import { findArtistImage, findArtistImages, isSpotifyConfigured } from '@/lib/spotify';
+import { findArtistImage, findArtistImages, isAnyImageProviderConfigured } from '@/lib/artist-image';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,18 +34,11 @@ export async function GET(req) {
   const name = (new URL(req.url).searchParams.get('name') || '').trim();
   if (!name) return NextResponse.json({ error: 'Provide name' }, { status: 400 });
 
-  // If Spotify isn't configured we skip the lookup entirely AND skip the
-  // cache, so the next request after the operator adds env vars hits a
-  // fresh response instead of a stale "no image" one.
-  if (!isSpotifyConfigured()) {
-    return NextResponse.json(
-      { name, image: null, configured: false },
-      { headers: cacheHeaders(false) }
-    );
-  }
-
+  // Unified lookup: Spotify first if configured, Deezer fallback.
+  // Deezer is always available (no key required) so this never short-
+  // circuits — we always at least try one provider.
   const meta = await findArtistImage(name);
-  const payload = { name, ...(meta || { image: null }), configured: true };
+  const payload = { name, ...(meta || { image: null }), configured: isAnyImageProviderConfigured() };
   return NextResponse.json(payload, { headers: cacheHeaders(!!meta?.image) });
 }
 
@@ -59,13 +52,6 @@ export async function POST(req) {
   const names = Array.isArray(body.names) ? body.names.slice(0, 12) : [];
   if (names.length === 0) {
     return NextResponse.json({ images: {} }, { headers: cacheHeaders(false) });
-  }
-
-  if (!isSpotifyConfigured()) {
-    return NextResponse.json(
-      { images: {}, configured: false },
-      { headers: cacheHeaders(false) }
-    );
   }
 
   const images = await findArtistImages(names, 12);

@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server';
 import { isSpotifyConfigured } from '@/lib/spotify';
 import { isLastfmConfigured } from '@/lib/lastfm';
+import { findArtistImage as findFromDeezer } from '@/lib/deezer';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,12 +92,40 @@ export async function GET(req) {
     const text = await r.text();
     if (!r.ok) {
       out.search_error_body = text.slice(0, 400);
-      out.diagnosis = (
-        r.status === 401 ? 'Search rejected with 401 — token expired or scope issue. Should not happen on a fresh token.'
-      : r.status === 403 ? 'Search rejected with 403 — Spotify blocked the call. Most common cause: app is in development mode AND your Spotify account is restricted, or your app is region-locked. In developer.spotify.com → your app → Settings, check "App Status" — if it says Development Mode and you only added users to a quota list, /search SHOULD still work for public artist data, but try toggling to Extended Quota Mode to confirm.'
-      : r.status === 429 ? 'Rate-limited. Wait 30s and retry. If consistent, your app might be flagged for high-volume queries.'
-      : 'Search returned ' + r.status + '. See search_error_body.'
-      );
+      // Detect Spotify's late-2024 "Premium required for app owner" policy.
+      // Body looks like: {"error":{"status":403,"message":"Active premium
+      // subscription required for the owner of the app..."}}
+      const isPremiumRequired = r.status === 403 && /premium subscription required/i.test(text);
+      if (isPremiumRequired) {
+        out.spotify_premium_required = true;
+        out.diagnosis = 'Spotify changed their policy in late 2024 — the OWNER of the developer app (i.e. the Spotify account that created it at developer.spotify.com) must hold an active Premium subscription, even for client_credentials server-to-server flow. Without it, all /search calls return 403 with this body. NOT YOUR FAULT — this is Spotify\'s gatekeeping. Workaround: the app now falls back to Deezer (free, no auth) — it should still serve artist photos. Test below.';
+      } else {
+        out.diagnosis = (
+          r.status === 401 ? 'Search rejected with 401 — token expired or scope issue.'
+        : r.status === 403 ? 'Search rejected with 403 (not premium-required). Try Extended Quota Mode in developer.spotify.com.'
+        : r.status === 429 ? 'Rate-limited. Wait 30s and retry.'
+        : 'Search returned ' + r.status + '. See search_error_body.'
+        );
+      }
+
+      // ── Always try Deezer as fallback so the operator can confirm
+      //    the user-facing experience will work
+      try {
+        const dz = await findFromDeezer(name);
+        out.deezer = {
+          tried:        true,
+          image_found:  !!dz?.image,
+          image_url:    dz?.image || null,
+          deezer_url:   dz?.deezerUrl || null,
+        };
+        if (dz?.image) {
+          out.diagnosis += ' ✅ Deezer fallback successfully returned an image — the live UI will use this.';
+        } else {
+          out.diagnosis += ' ❌ Deezer also returned nothing for this artist — try /api/artists/image/debug?name=Metallica to see if Deezer works at all.';
+        }
+      } catch (e) {
+        out.deezer = { tried: true, error: e.message };
+      }
       return NextResponse.json(out, { headers: NO_CACHE });
     }
     let json; try { json = JSON.parse(text); } catch { json = {}; }

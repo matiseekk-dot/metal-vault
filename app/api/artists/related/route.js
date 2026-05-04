@@ -20,7 +20,7 @@ import { NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/rate-limit';
 import { searchArtist as mbSearchArtist, getArtistRelations } from '@/lib/musicbrainz';
 import { getArtistInfo, getSimilarArtists, isLastfmConfigured } from '@/lib/lastfm';
-import { findArtistImage } from '@/lib/spotify';
+import { findArtistImage } from '@/lib/artist-image';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,10 +47,11 @@ export async function GET(req) {
     mbid = matches[0]?.mbid || null;
   }
 
-  // Run MB + Last.fm + Spotify image in parallel — independent providers.
-  // Spotify is the only public source that still serves artist photos
-  // (Last.fm dropped them in 2019); it adds ~200ms typical.
-  const [rels, lfmInfo, lfmSimilar, spotifyMeta] = await Promise.all([
+  // Run MB + Last.fm + image lookup in parallel — independent providers.
+  // findArtistImage tries Spotify first, falls back to Deezer (which
+  // works without auth — covers cases where Spotify rejects with 403
+  // due to their late-2024 Premium-required policy on app owners).
+  const [rels, lfmInfo, lfmSimilar, imageMeta] = await Promise.all([
     mbid ? getArtistRelations(mbid) : Promise.resolve(null),
     getArtistInfo(name, lang),
     getSimilarArtists(name, 12),
@@ -97,13 +98,17 @@ export async function GET(req) {
       country:      rels?.country || null,
       lifeSpan:     rels?.lifeSpan || null,
       tags:         tags.slice(0, 10),
-      // Image + Spotify metadata for the artist hero. Genres from Spotify
-      // overlap with MB/Last.fm tags but are often more curated.
-      image:        spotifyMeta?.image || null,
-      thumb:        spotifyMeta?.thumb || null,
-      spotifyId:    spotifyMeta?.spotifyId || null,
-      spotifyUrl:   spotifyMeta?.spotifyUrl || null,
-      popularity:   spotifyMeta?.popularity ?? null,
+      // Image + provider metadata for the artist hero. `imageSource`
+      // tells the UI whether the photo came from Spotify or Deezer
+      // (used for attribution and "Open on Spotify/Deezer" link).
+      image:        imageMeta?.image || null,
+      thumb:        imageMeta?.thumb || null,
+      imageSource:  imageMeta?.source || null,
+      spotifyId:    imageMeta?.spotifyId || null,
+      spotifyUrl:   imageMeta?.spotifyUrl || null,
+      deezerId:     imageMeta?.deezerId  || null,
+      deezerUrl:    imageMeta?.deezerUrl || null,
+      popularity:   imageMeta?.popularity ?? null,
       bio: {
         summary:  lfmInfo?.bioSummary || '',
         full:     lfmInfo?.bioFull || '',
@@ -129,7 +134,7 @@ export async function GET(req) {
       // the operator adds keys the user keeps seeing blank artist pages.
       // For the rich case (image OR bio present) cache for a day.
       headers: {
-        'Cache-Control': (spotifyMeta?.image || lfmInfo?.bioSummary)
+        'Cache-Control': (imageMeta?.image || lfmInfo?.bioSummary)
           ? 'public, s-maxage=86400, stale-while-revalidate=604800'
           : 'no-store',
       },
