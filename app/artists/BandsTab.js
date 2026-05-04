@@ -51,7 +51,9 @@ function ArtistPhoto({ src, name, size = 48, accent = C.accent }) {
 function ArtistAbout({ artistName, locale }) {
   const t = useT();
   const [data, setData] = useState(null);
-  const [open, setOpen] = useState(false);
+  // Default OPEN — bio + members + similar are the whole point of the
+  // section. Users wanted them visible without an extra tap.
+  const [open, setOpen] = useState(true);
   const [memberPhotos, setMemberPhotos] = useState({});
   const [similarPhotos, setSimilarPhotos] = useState({});
   const [bioFull, setBioFull] = useState(false);
@@ -137,6 +139,19 @@ function ArtistAbout({ artistName, locale }) {
         </button>
       </div>
 
+      {/* Similar artists — ALWAYS visible (not collapsible). User
+          asked for these to be more prominent. Horizontal scrollable
+          strip with photo + name; ideal entry point to discover
+          related bands without expanding the whole bio section. */}
+      {data.similar?.length > 0 && (
+        <SimilarStrip
+          items={data.similar}
+          photos={similarPhotos}
+          onPick={openOther}
+          title={t('artist.similar')}
+        />
+      )}
+
       {open && (
         <>
           {/* Tags */}
@@ -177,12 +192,66 @@ function ArtistAbout({ artistName, locale }) {
           {data.sideProjects?.length > 0 && (
             <ArtistList title={t('artist.bandsPlayedIn')} items={data.sideProjects} photos={memberPhotos} onPick={openOther}/>
           )}
-          {data.similar?.length > 0 && (
-            <ArtistList title={t('artist.similar')} items={data.similar.map(s => ({ ...s, similarMatch: s.match }))}
-              photos={similarPhotos} onPick={openOther}/>
-          )}
         </>
       )}
+    </div>
+  );
+}
+
+// ── SimilarStrip — horizontal scrollable carousel of similar artists ─
+// Always-visible row with photo cards. More prominent than ArtistList
+// (which is a vertical compact list inside the collapsed bio section).
+function SimilarStrip({ items, photos, onPick, title }) {
+  return (
+    <div style={{ marginTop:6, marginBottom:12 }}>
+      <div style={{ fontSize:9, color:C.accent, ...MONO, letterSpacing:'0.18em',
+        textTransform:'uppercase', marginBottom:8 }}>
+        {title} →
+      </div>
+      <div style={{ display:'flex', gap:8, overflowX:'auto', paddingBottom:4,
+        // Hide horizontal scrollbar but keep scroll snap for nicer touch UX
+        scrollSnapType:'x mandatory', WebkitOverflowScrolling:'touch' }}>
+        {items.slice(0, 12).map(item => {
+          const photo = photos[item.name];
+          return (
+            <div key={item.mbid || item.name}
+              onClick={() => onPick(item.name, item.mbid)}
+              style={{
+                flexShrink:0, width:78, cursor:'pointer',
+                scrollSnapAlign:'start',
+                display:'flex', flexDirection:'column', alignItems:'center', gap:5,
+              }}>
+              <div style={{
+                width:64, height:64, borderRadius:'50%', overflow:'hidden',
+                border:`1.5px solid ${C.border}`,
+                background: photo ? 'transparent' : 'linear-gradient(135deg,#1a0a0a,#0a0a0a)',
+                display:'flex', alignItems:'center', justifyContent:'center',
+              }}>
+                {photo ? (
+                  <img src={photo} alt={item.name} loading="lazy"
+                    style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                ) : (
+                  <span style={{ ...BEBAS, fontSize:24, color:C.muted }}>
+                    {item.name[0]?.toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div style={{
+                fontSize:10, color:C.text, ...MONO, textAlign:'center',
+                width:'100%', overflow:'hidden', textOverflow:'ellipsis',
+                whiteSpace:'nowrap', lineHeight:1.2,
+              }}>
+                {item.name}
+              </div>
+              {item.match != null && item.match > 0 && (
+                <div style={{ fontSize:8, color:C.accent, ...MONO }}>
+                  {Math.round(item.match * 100)}%
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -505,6 +574,38 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
   const [search,     setSearch]     = useState('');
   // Map: artistName → completion pct (loaded from localStorage)
   const [completion, setCompletion] = useState({});
+  // Map: artistName → Spotify/Deezer thumb URL (lazy batch lookup)
+  const [photos, setPhotos] = useState({});
+
+  // Batch-fetch artist photos for everyone in the collection. Runs once
+  // on mount + whenever the collection changes. Server-side route hits
+  // Spotify first, falls back to Deezer — both are cached at the edge
+  // so subsequent batches share entries.
+  useEffect(() => {
+    const allNames = [...new Set(collection.map(c => c.artist).filter(Boolean))];
+    if (allNames.length === 0) return;
+    let cancelled = false;
+    // Chunk into batches of 12 (POST endpoint cap). Run sequentially so we
+    // don't burst Spotify/Deezer; each batch is ~200ms typical.
+    (async () => {
+      for (let i = 0; i < allNames.length; i += 12) {
+        if (cancelled) return;
+        const chunk = allNames.slice(i, i + 12);
+        try {
+          const r = await fetch('/api/artists/image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ names: chunk }),
+          });
+          const d = await r.json();
+          if (!cancelled && d?.images) {
+            setPhotos(prev => ({ ...prev, ...d.images }));
+          }
+        } catch {}
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [collection]);
 
   // Load saved completion from localStorage immediately (instant UI), then
   // reconcile with the server in the background so toggles made on other
@@ -574,8 +675,20 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
     artistMap[key].push(item);
   });
 
-  // Auto-mark artists as complete when all ♥ wanted albums are in collection.
-  // Uses collection + wanted from localStorage. Event-driven - no race condition.
+  // Auto-mark artists as complete when the user has acquired everything
+  // they expressed interest in for that artist. "Expressed interest" =
+  // local ♥ wants OR persistent watchlist entries.
+  //
+  // Why both? Wants live in localStorage and only exist for items the
+  // user explicitly hearted. Watchlist lives in the database and is the
+  // canonical "I want to buy this" list — when a user moves an item
+  // from watchlist to collection, the wanted entry might be cleared but
+  // the watchlist row reflects the same intent. Looking at both means
+  // we mark complete in either flow.
+  //
+  // Only ADD to 100 here — never revoke. ArtistDiscography (when
+  // expanded) is authoritative for REMOVING completion based on the
+  // full Discogs discography.
   useEffect(() => {
     const check = () => {
       try {
@@ -590,25 +703,39 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
           localArtistMap[key].push(item);
         });
 
+        // Build watchlist artist → titles index. Watchlist entries that
+        // are already in collection still count toward "interest set"
+        // — we want completion to fire when the user has acquired
+        // everything they once wanted, regardless of whether they
+        // remembered to delete the watchlist row afterwards.
+        const watchByArtist = {};
+        (watchlist || []).forEach(w => {
+          const a = w.artist || w.band || '';
+          const t = w.album || w.title || '';
+          if (!a || !t) return;
+          if (!watchByArtist[a]) watchByArtist[a] = [];
+          watchByArtist[a].push(t);
+        });
+
         setCompletion(prev => {
           const next = { ...prev };
           let changed = false;
 
           for (const artistName of Object.keys(localArtistMap)) {
+            // Gather targets from both sources (deduped on normalized title)
             const keyPrefix = artistName.toLowerCase() + '::';
-            const artistWanted = wantedKeys.filter(k => k.startsWith(keyPrefix));
-            if (artistWanted.length === 0) continue;
+            const wantedTitles = wantedKeys
+              .filter(k => k.startsWith(keyPrefix))
+              .map(k => norm(k.replace(keyPrefix, '')));
+            const watchTitles = (watchByArtist[artistName] || []).map(norm);
+            const interestSet = new Set([...wantedTitles, ...watchTitles].filter(Boolean));
+            if (interestSet.size === 0) continue;
 
-            const wantedTitles = artistWanted.map(k => norm(k.replace(keyPrefix, '')));
             const ownedTitles = localArtistMap[artistName].map(i => norm(i.album || ''));
-            const hasAll = wantedTitles.every(wt =>
+            const hasAll = [...interestSet].every(wt =>
               ownedTitles.some(ot => titleMatch(ot, wt))
             );
 
-            // Only ADD to 100 — never revoke. ArtistDiscography (when expanded)
-            // is authoritative for REMOVING completion. This prevents race where
-            // BandsTab's title matching differs from ArtistDiscography's and wrongly
-            // removes a complete badge.
             if (hasAll && next[artistName] !== 100) {
               next[artistName] = 100;
               changed = true;
@@ -617,7 +744,6 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
 
           if (!changed) return prev;
           try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch {}
-          // Push every artist that flipped to complete in this pass.
           for (const a of Object.keys(next)) {
             if (next[a] === 100 && prev[a] !== 100) pushCompletion(a, true);
           }
@@ -626,11 +752,15 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
       } catch {}
     };
 
-    // Run once on mount + when collection changes + on ♥ toggle
+    // Run once on mount + when collection/watchlist change + on ♥ toggle
     check();
     window.addEventListener('mv-wanted-changed', check);
-    return () => window.removeEventListener('mv-wanted-changed', check);
-  }, [collection, pushCompletion]);
+    window.addEventListener('mv-watchlist-changed', check);
+    return () => {
+      window.removeEventListener('mv-wanted-changed', check);
+      window.removeEventListener('mv-watchlist-changed', check);
+    };
+  }, [collection, watchlist, pushCompletion]);
 
   // Sort: complete artists first (as a special category), then by record count
   let artists = Object.entries(artistMap).sort((a, b) => {
@@ -789,19 +919,43 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
                 style={{ width:'100%', background:'none', border:'none', cursor:'pointer',
                   padding:'11px 16px', display:'flex', alignItems:'center', gap:12, textAlign:'left' }}>
 
-                {/* Avatar */}
+                {/* Avatar — Spotify/Deezer photo if available, with the
+                    🏆 trophy overlaid in the corner when complete. Falls
+                    back to letter circle while photos load or for artists
+                    not found by either provider. */}
                 <div style={{
+                  position:'relative',
                   width:38, height:38, borderRadius:8, flexShrink:0,
+                  overflow:'hidden',
                   background: isComplete
                     ? 'linear-gradient(135deg,#3d300088,#1a120088)'
                     : 'linear-gradient(135deg,'+C.accent+'33,'+C.bg3+')',
                   border:'1px solid ' + (isComplete ? C.gold : (isOpen ? C.accent : C.border)),
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  ...BEBAS, fontSize:18,
-                  color: isComplete ? C.gold : (isOpen ? C.accent : C.muted),
                   boxShadow: isComplete ? '0 0 12px #f5c84222' : 'none',
                 }}>
-                  {isComplete ? '🏆' : displayName[0]?.toUpperCase() || '?'}
+                  {photos[artistName] ? (
+                    <img src={photos[artistName]} alt={displayName} loading="lazy"
+                      style={{ width:'100%', height:'100%', objectFit:'cover',
+                        opacity: isComplete ? 0.7 : 1 }}/>
+                  ) : (
+                    <div style={{
+                      width:'100%', height:'100%',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      ...BEBAS, fontSize:18,
+                      color: isComplete ? C.gold : (isOpen ? C.accent : C.muted),
+                    }}>
+                      {displayName[0]?.toUpperCase() || '?'}
+                    </div>
+                  )}
+                  {isComplete && (
+                    <div style={{
+                      position:'absolute', bottom:-2, right:-2,
+                      width:18, height:18, borderRadius:'50%',
+                      background:'#1a1200', border:'1.5px solid '+C.gold,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize:10,
+                    }}>🏆</div>
+                  )}
                 </div>
 
                 {/* Name + info */}
