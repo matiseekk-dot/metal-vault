@@ -44,9 +44,10 @@ function BarChart({data,colorFn}){
 }
 
 function PortfolioChart({snapshots}){
+  const t = useT();
   if(!snapshots||snapshots.length<2)return(
     <div style={{textAlign:'center',padding:'24px 0',color:C.dim,...MONO,fontSize:11}}>
-      Tracking market prices — chart appears after first sync
+      {t('stats.portfolioChartEmpty')}
     </div>
   );
   const vals=snapshots.map(s=>Number(s.total_value)||0);
@@ -62,7 +63,7 @@ function PortfolioChart({snapshots}){
   return(
     <div>
       <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
-        <span style={{fontSize:10,color:C.dim,...MONO}}>90 day trend</span>
+        <span style={{fontSize:10,color:C.dim,...MONO}}>{t('stats.trend90d')}</span>
         <span style={{fontSize:12,color:gainColor,...MONO}}>{gain>=0?'+$':'-$'}{Math.abs(gain).toFixed(0)}</span>
       </div>
       <svg viewBox={'0 0 '+W+' '+H} style={{width:'100%',height:'auto'}}>
@@ -86,6 +87,7 @@ function PortfolioChart({snapshots}){
 
 // ── Badges ────────────────────────────────────────────────────
 function BadgesSection({ collection, watchlist }) {
+  const t = useT();
   const count = collection.length;
   const hasLimited = collection.some(i => i.grade === 'M' || (i.format||'').toLowerCase().includes('limited'));
   const hasVariant = collection.some(i => i.format && i.format.split(',').length > 2);
@@ -94,16 +96,16 @@ function BadgesSection({ collection, watchlist }) {
   const maxArtist = Object.values(artistMap).reduce((m,v)=>Math.max(m,v),0);
 
   const all = [
-    { id:'first',   iconName:'record',   label:'First Vinyl',     desc:'Added your first record',            earned: count>=1 },
-    { id:'ten',     iconName:'pkg',      label:'10 Records',      desc:'Collection of 10',                   earned: count>=10 },
-    { id:'fifty',   iconName:'fire',     label:'50 Records',      desc:'Serious collector',                  earned: count>=50 },
-    { id:'hundred', iconName:'award',    label:'100 Records',     desc:'Century club',                       earned: count>=100 },
-    { id:'double',  iconName:'crown',    label:'200 Records',     desc:'Elite collection',                   earned: count>=200 },
-    { id:'limited', iconName:'gem',      label:'Limited Edition', desc:'First limited pressing',             earned: hasLimited },
-    { id:'variant', iconName:'layers',   label:'Variant Hunter',  desc:'Multi-format release owned',         earned: hasVariant },
-    { id:'fan',     iconName:'star',     label:'Super Fan',       desc:'5+ albums of one artist',            earned: maxArtist>=5 },
-    { id:'watch',   iconName:'heart',    label:'Wantlist 10',     desc:'10 items on watchlist',              earned: watchlist.length>=10 },
-    { id:'watcher', iconName:'sparkles', label:'Wantlist 50',     desc:'50 items on watchlist',              earned: watchlist.length>=50 },
+    { id:'first',   iconName:'record',   label:t('stats.badge.first.label'),   desc:t('stats.badge.first.desc'),   earned: count>=1 },
+    { id:'ten',     iconName:'pkg',      label:t('stats.badge.ten.label'),     desc:t('stats.badge.ten.desc'),     earned: count>=10 },
+    { id:'fifty',   iconName:'fire',     label:t('stats.badge.fifty.label'),   desc:t('stats.badge.fifty.desc'),   earned: count>=50 },
+    { id:'hundred', iconName:'award',    label:t('stats.badge.hundred.label'), desc:t('stats.badge.hundred.desc'), earned: count>=100 },
+    { id:'double',  iconName:'crown',    label:t('stats.badge.double.label'),  desc:t('stats.badge.double.desc'),  earned: count>=200 },
+    { id:'limited', iconName:'gem',      label:t('stats.badge.limited.label'), desc:t('stats.badge.limited.desc'), earned: hasLimited },
+    { id:'variant', iconName:'layers',   label:t('stats.badge.variant.label'), desc:t('stats.badge.variant.desc'), earned: hasVariant },
+    { id:'fan',     iconName:'star',     label:t('stats.badge.fan.label'),     desc:t('stats.badge.fan.desc'),     earned: maxArtist>=5 },
+    { id:'watch',   iconName:'heart',    label:t('stats.badge.watch.label'),   desc:t('stats.badge.watch.desc'),   earned: watchlist.length>=10 },
+    { id:'watcher', iconName:'sparkles', label:t('stats.badge.watcher.label'), desc:t('stats.badge.watcher.desc'), earned: watchlist.length>=50 },
   ];
 
   const earned = all.filter(b=>b.earned);
@@ -114,7 +116,7 @@ function BadgesSection({ collection, watchlist }) {
     <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',display:'flex',alignItems:'center',gap:6}}>
-          <Icon name="award" size={12} color={C.accent}/> Badges
+          <Icon name="award" size={12} color={C.accent}/> {t('stats.badges')}
         </div>
         <div style={{fontSize:10,color:C.dim,...MONO}}>{earned.length}/{all.length} · {pct}%</div>
       </div>
@@ -146,7 +148,7 @@ function BadgesSection({ collection, watchlist }) {
               <span style={{fontSize:10,color:C.dim,...MONO}}>{b.label}</span>
             </div>
           ))}
-          {locked.length>4&&<div style={{fontSize:10,color:C.dim,...MONO,padding:'6px 4px'}}>+{locked.length-4} more</div>}
+          {locked.length>4&&<div style={{fontSize:10,color:C.dim,...MONO,padding:'6px 4px'}}>{t('stats.badge.more', { n: locked.length-4 })}</div>}
         </div>
       )}
     </div>
@@ -155,6 +157,7 @@ function BadgesSection({ collection, watchlist }) {
 
 // ── Sell suggestions ──────────────────────────────────────────
 function SellSuggestions({ collection }) {
+  const t = useT();
   const candidates = collection
     .filter(i => {
       const paid = Number(i.purchase_price);
@@ -177,7 +180,7 @@ function SellSuggestions({ collection }) {
 
   return (
     <div style={{background:C.bg2,border:'1px solid #1a3d1a',borderRadius:12,padding:'16px',marginBottom:16}}>
-      <div style={{fontSize:10,color:C.green,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="coins" size={12} color="inherit"/> Consider Selling</span>
+      <div style={{fontSize:10,color:C.green,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="coins" size={12} color="inherit"/> {t('stats.considerSelling')}</span>
       </div>
       {candidates.map((item,i) => (
         <div key={item.id} style={{
@@ -188,7 +191,7 @@ function SellSuggestions({ collection }) {
             <div style={{fontSize:12,color:C.text,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.artist}</div>
             <div style={{fontSize:10,color:C.dim,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.album}</div>
             <div style={{fontSize:10,color:C.dim,...MONO,marginTop:1}}>
-              paid ${Number(item.purchase_price).toFixed(0)} → now ${Number(item.median_price||item.current_price).toFixed(0)}
+              {t('stats.paidNow', { paid: Number(item.purchase_price).toFixed(0), now: Number(item.median_price||item.current_price).toFixed(0) })}
             </div>
           </div>
           <div style={{textAlign:'right',flexShrink:0}}>
@@ -198,7 +201,7 @@ function SellSuggestions({ collection }) {
         </div>
       ))}
       <div style={{fontSize:9,color:C.dim,...MONO,marginTop:8,lineHeight:1.5}}>
-        Based on Discogs median prices. Sell on Discogs Marketplace.
+        {t('stats.sellHint')}
       </div>
     </div>
   );
@@ -206,6 +209,7 @@ function SellSuggestions({ collection }) {
 
 // ── Grade distribution ────────────────────────────────────────
 function FormatBreakdown({ collection }) {
+  const t = useT();
   // Group by canonical format. Discogs returns multi-token formats like "Vinyl, LP, Album"
   // — we normalize to first matching primary format keyword.
   const buckets = {
@@ -237,7 +241,7 @@ function FormatBreakdown({ collection }) {
   return (
     <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
       <div style={{ fontSize: 10, color: C.accent, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Icon name="layers" size={12} color={C.accent}/> Format breakdown
+        <Icon name="layers" size={12} color={C.accent}/> {t('stats.formatBreakdown')}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {nonEmpty.map(([name, b]) => {
@@ -262,6 +266,7 @@ function FormatBreakdown({ collection }) {
 }
 
 function GradeChart({ collection }) {
+  const t = useT();
   const gradeMap = {};
   collection.forEach(i => {
     const g = i.grade || 'NM'; // default NM if unset
@@ -278,9 +283,9 @@ function GradeChart({ collection }) {
     <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase'}}>
-          Condition Breakdown
+          {t('stats.conditionBreakdown')}
         </div>
-        <div style={{fontSize:9,color:C.dim,...MONO}}>{graded}/{collection.length} graded</div>
+        <div style={{fontSize:9,color:C.dim,...MONO}}>{t('stats.graded', { n: graded, total: collection.length })}</div>
       </div>
       {/* Stacked bar */}
       <div style={{display:'flex',height:12,borderRadius:6,overflow:'hidden',marginBottom:12}}>
@@ -305,6 +310,7 @@ function GradeChart({ collection }) {
 
 // ── Label tracking (from followed labels in collection) ───────
 function TopLabels({ collection }) {
+  const t = useT();
   const labelMap = {};
   collection.forEach(i => {
     const l = i.label;
@@ -317,7 +323,7 @@ function TopLabels({ collection }) {
 
   return (
     <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-      <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="tag" size={12} color="inherit"/> Top Labels</span>
+      <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="tag" size={12} color="inherit"/> {t('stats.topLabels')}</span>
       </div>
       <BarChart data={data} colorFn={()=>'#a78bfa'}/>
     </div>
@@ -331,6 +337,7 @@ function TopLabels({ collection }) {
 // archetype line ("Festival Hunter — 3 festivals feature your bands…").
 // Returns null if no data — never blocks PersonaCard render.
 function ConcertProximityCard() {
+  const t = useT();
   const [data, setData] = useState(null);
   useEffect(() => {
     fetch('/api/concerts/proximity-score')
@@ -354,7 +361,7 @@ function ConcertProximityCard() {
       borderRadius: 8, padding: 10, marginBottom: 12 }}>
       <div style={{ fontSize: 9, color, letterSpacing: '0.2em', ...MONO,
         display: 'flex', alignItems: 'center', gap: 5 }}>
-        <Icon name="music" size={11} color={color}/> TOUR PERSONA
+        <Icon name="music" size={11} color={color}/> {t('stats.tourPersona')}
       </div>
       <div style={{ fontSize: 13, color: '#f0f0f0', ...BEBAS,
         letterSpacing: '0.03em', marginTop: 3 }}>
@@ -366,15 +373,15 @@ function ConcertProximityCard() {
       {data.stats && data.stats.bands > 0 && (
         <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
           <div style={{ fontSize: 10, color: '#888', ...MONO }}>
-            <span style={{ color: '#f0f0f0', ...BEBAS, fontSize: 14 }}>{data.stats.bands}</span> bands
+            <span style={{ color: '#f0f0f0', ...BEBAS, fontSize: 14 }}>{data.stats.bands}</span> {t('stats.bands')}
           </div>
           {data.stats.festivals > 0 && (
             <div style={{ fontSize: 10, color: '#888', ...MONO }}>
-              <span style={{ color: color, ...BEBAS, fontSize: 14 }}>{data.stats.festivals}</span> festivals
+              <span style={{ color: color, ...BEBAS, fontSize: 14 }}>{data.stats.festivals}</span> {t('stats.festivals')}
             </div>
           )}
           <div style={{ fontSize: 10, color: '#888', ...MONO }}>
-            <span style={{ color: '#f0f0f0', ...BEBAS, fontSize: 14 }}>{data.stats.total}</span> shows
+            <span style={{ color: '#f0f0f0', ...BEBAS, fontSize: 14 }}>{data.stats.total}</span> {t('stats.shows')}
           </div>
         </div>
       )}
@@ -384,6 +391,7 @@ function ConcertProximityCard() {
 
 // ── PersonaCard — shareable metal identity card ──
 function PersonaCard() {
+  const t = useT();
   const [persona, setPersona] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sharing, setSharing] = useState(false);
@@ -531,7 +539,7 @@ function PersonaCard() {
       <div style={{ position:'absolute', top:0, right:-30, width:80, height:8, background:'#dc2626', transform:'rotate(-3deg)', opacity:0.4 }}/>
 
       <div style={{ fontSize: 9, color: '#dc2626', letterSpacing: '0.25em', ...MONO, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Icon name="music" size={11} color="#dc2626"/> YOUR METAL PERSONA
+        <Icon name="music" size={11} color="#dc2626"/> {t('stats.yourMetalPersona')}
       </div>
       <div style={{ ...BEBAS, fontSize: 32, color: '#f0f0f0', letterSpacing: '0.03em', lineHeight: 1.1, marginBottom: 12 }}>
         {persona.title}
@@ -540,20 +548,20 @@ function PersonaCard() {
       {/* Stats row */}
       <div style={{ display: 'flex', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 10, color: '#888', ...MONO }}>Records</div>
+          <div style={{ fontSize: 10, color: '#888', ...MONO }}>{t('stats.recordsLabel')}</div>
           <div style={{ ...BEBAS, fontSize: 20, color: '#f0f0f0' }}>{persona.stats.recordCount}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: '#888', ...MONO }}>Value</div>
+          <div style={{ fontSize: 10, color: '#888', ...MONO }}>{t('stats.persona.value')}</div>
           <div style={{ ...BEBAS, fontSize: 20, color: '#f5c842' }}>${persona.stats.totalValue}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: '#888', ...MONO }}>Era</div>
+          <div style={{ fontSize: 10, color: '#888', ...MONO }}>{t('stats.persona.era')}</div>
           <div style={{ ...BEBAS, fontSize: 20, color: '#f0f0f0' }}>{persona.topEra}</div>
         </div>
         {persona.topLabel && (
           <div style={{ flex: 1, minWidth: 100 }}>
-            <div style={{ fontSize: 10, color: '#888', ...MONO }}>Top label</div>
+            <div style={{ fontSize: 10, color: '#888', ...MONO }}>{t('stats.persona.topLabel')}</div>
             <div style={{ fontSize: 13, color: '#f0f0f0', ...MONO, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
               {persona.topLabel.name}
             </div>
@@ -583,7 +591,7 @@ function PersonaCard() {
       {persona.crownJewel && (
         <div style={{ background: '#0a0a0a', border: '1px solid #3a2a00', borderRadius: 8, padding: 10, marginBottom: 12 }}>
           <div style={{ fontSize: 9, color: '#f5c842', letterSpacing: '0.2em', ...MONO, display: 'flex', alignItems: 'center', gap: 5 }}>
-            <Icon name="crown" size={11} color="#f5c842"/> CROWN JEWEL
+            <Icon name="crown" size={11} color="#f5c842"/> {t('stats.persona.crownJewel')}
           </div>
           <div style={{ fontSize: 13, color: '#f0f0f0', ...BEBAS, letterSpacing: '0.03em', marginTop: 3 }}>
             {persona.crownJewel.artist}
@@ -602,9 +610,9 @@ function PersonaCard() {
         style={{ width: '100%', background: '#dc2626', border: 'none', borderRadius: 8,
           color: '#fff', padding: '12px', cursor: 'pointer', ...BEBAS, fontSize: 15,
           letterSpacing: '0.1em', opacity: sharing ? 0.6 : 1 }}>
-        {sharing ? 'GENERATING…' : (
+        {sharing ? t('stats.persona.generating') : (
           <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
-            <Icon name="share" size={15} color="#fff"/> SHARE PERSONA
+            <Icon name="share" size={15} color="#fff"/> {t('stats.persona.shareBtn')}
           </span>
         )}
       </button>
@@ -655,7 +663,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
 
       <div style={{padding:'16px 0 12px'}}>
         <div style={{...BEBAS,fontSize:28,color:C.text,letterSpacing:'0.06em',lineHeight:1}}>{t('stats.title').toUpperCase()}</div>
-        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>{t('header.feed') === 'RELEASES' ? 'YOUR METAL VAULT OVERVIEW' : ''}</div>
+        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>{t('stats.subtitle')}</div>
 
       {/* Persona Card — algorithmic metal identity, shareable as PNG */}
       <PersonaCard/>
@@ -666,7 +674,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
         border:'1px solid '+C.accent,borderRadius:16,padding:'20px',marginBottom:16,
         position:'relative',overflow:'hidden'}}>
         <div style={{position:'absolute',right:-10,top:-10,fontSize:80,opacity:0.04,...BEBAS,userSelect:'none'}}>$</div>
-        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',textTransform:'uppercase',marginBottom:8}}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="wallet" size={12} color="inherit"/> Collection Value</span>
+        <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',textTransform:'uppercase',marginBottom:8}}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="wallet" size={12} color="inherit"/> {t('stats.collectionValue')}</span>
         </div>
         {loading?<Skeleton h={52} r={6}/>:(
           <div style={{...BEBAS,fontSize:54,color:C.text,lineHeight:1,marginBottom:6}}>
@@ -680,19 +688,19 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
               <span style={{fontSize:11,marginLeft:4,opacity:0.8}}>({gain>=0?'+':''}{gainPct.toFixed(1)}%)</span>
             </span>
           )}
-          {totalPaid>0&&!loading&&<span style={{fontSize:10,color:C.dim,...MONO}}>vs ${totalPaid.toFixed(0)} paid</span>}
+          {totalPaid>0&&!loading&&<span style={{fontSize:10,color:C.dim,...MONO}}>{t('stats.vsPaid', { n: totalPaid.toFixed(0) })}</span>}
         </div>
         <div style={{fontSize:9,color:priceCount>0?C.dim:'#f5c84299',...MONO,marginTop:6}}>
-          {priceCount>0?'Based on Discogs median · '+priceCount+'/'+collection.length+' tracked':'Tracking market prices…'}
+          {priceCount>0 ? t('stats.basedOnDiscogs', { n: priceCount, total: collection.length }) : t('stats.tracking')}
         </div>
       </div>
 
       {/* Secondary stats */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
-        <StatCard iconName="pkg" value={collection.length} label="Records" color={C.accent}/>
-        <StatCard iconName="star" value={watchlist.length} label="Watching" color={C.gold}/>
-        <StatCard iconName="wallet" value={totalPaid>0?'$'+totalPaid.toFixed(0):'—'} label="Total paid" color={C.muted} loading={loading}/>
-        <StatCard iconName="barChart" value={collection.length>0?'$'+(totalPaid/collection.length).toFixed(0):'—'} label="Avg record" color={C.blue}/>
+        <StatCard iconName="pkg" value={collection.length} label={t('stats.recordsLabel')} color={C.accent}/>
+        <StatCard iconName="star" value={watchlist.length} label={t('stats.watching')} color={C.gold}/>
+        <StatCard iconName="wallet" value={totalPaid>0?'$'+totalPaid.toFixed(0):'—'} label={t('stats.totalPaid')} color={C.muted} loading={loading}/>
+        <StatCard iconName="barChart" value={collection.length>0?'$'+(totalPaid/collection.length).toFixed(0):'—'} label={t('stats.avgRecord')} color={C.blue}/>
       </div>
 
       {/* Badges */}
@@ -704,11 +712,11 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
       {/* Market movers */}
       {(topGainer||topLoser)&&(
         <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12, display:'flex', alignItems:'center', gap:6}}><Icon name="up" size={12} color={C.accent}/> Market movers</div>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12, display:'flex', alignItems:'center', gap:6}}><Icon name="up" size={12} color={C.accent}/> {t('stats.marketMovers')}</div>
           {topGainer&&(
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:topLoser&&topLoser.gainPct<0?10:0}}>
               <div>
-                <div style={{fontSize:9,color:C.green,...MONO,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>▲ Top gainer</div>
+                <div style={{fontSize:9,color:C.green,...MONO,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>▲ {t('stats.topGainer')}</div>
                 <div style={{fontSize:12,color:C.text,...MONO,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{topGainer.artist}</div>
                 <div style={{fontSize:10,color:C.dim,...MONO}}>{topGainer.album}</div>
               </div>
@@ -721,7 +729,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
           {topLoser&&topLoser.gainPct<0&&(
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid '+C.border,paddingTop:10}}>
               <div>
-                <div style={{fontSize:9,color:C.red,...MONO,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>▼ Biggest drop</div>
+                <div style={{fontSize:9,color:C.red,...MONO,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>▼ {t('stats.biggestDrop')}</div>
                 <div style={{fontSize:12,color:C.text,...MONO,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{topLoser.artist}</div>
                 <div style={{fontSize:10,color:C.dim,...MONO}}>{topLoser.album}</div>
               </div>
@@ -737,15 +745,15 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
       {/* No price data notice */}
       {collection.length>0&&!priceCount&&(
         <div style={{background:'#1a1a00',border:'1px solid #55550044',borderRadius:8,padding:'12px 14px',marginBottom:16}}>
-          <div style={{fontSize:12,color:C.gold,...MONO,marginBottom:4}}><span style={{display:'inline-flex',alignItems:'center',gap:4}}><Icon name="refresh" size={11} color="inherit"/> First price update</span> in progress</div>
-          <div style={{fontSize:10,color:C.dim,...MONO,lineHeight:1.6}}>Market values load automatically. Add records from the album modal to start tracking.</div>
+          <div style={{fontSize:12,color:C.gold,...MONO,marginBottom:4}}><span style={{display:'inline-flex',alignItems:'center',gap:4}}><Icon name="refresh" size={11} color="inherit"/> {t('stats.firstUpdateTitle')}</span> {t('stats.firstUpdateInProgress')}</div>
+          <div style={{fontSize:10,color:C.dim,...MONO,lineHeight:1.6}}>{t('stats.firstUpdateHint')}</div>
         </div>
       )}
 
       {/* Portfolio chart */}
       {portfolio?.snapshots?.length>=2&&(
         <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>Collection value over time</div>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>{t('stats.valueOverTimeTitle')}</div>
           <PortfolioChart snapshots={portfolio.snapshots}/>
         </div>
       )}
@@ -759,7 +767,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
       {/* Top by value */}
       {topByValue.length>0&&(
         <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12, display:'flex', alignItems:'center', gap:6}}><Icon name="gem" size={12} color={C.accent}/> Top by market value</div>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12, display:'flex', alignItems:'center', gap:6}}><Icon name="gem" size={12} color={C.accent}/> {t('stats.topByValue')}</div>
           {topByValue.map((item,i)=>{
             const paid=Number(item.purchase_price)||0,now=Number(item.median_price||item.current_price)||0;
             const g=paid>0?now-paid:null,gPct=g!==null?((g/paid)*100).toFixed(0):null;
@@ -768,7 +776,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
                 <div style={{flex:1,minWidth:0,marginRight:12}}>
                   <div style={{fontSize:12,color:C.text,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.artist}</div>
                   <div style={{fontSize:10,color:C.dim,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.album}</div>
-                  {paid>0&&<div style={{fontSize:9,color:C.dim,...MONO}}>paid ${paid.toFixed(0)}</div>}
+                  {paid>0&&<div style={{fontSize:9,color:C.dim,...MONO}}>{t('stats.paid', { n: paid.toFixed(0) })}</div>}
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
                   <div style={{...BEBAS,fontSize:20,color:C.gold,lineHeight:1}}>${now.toFixed(0)}</div>
@@ -783,20 +791,20 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
       {/* Insights */}
       {(topArtist||mostValuable||recentlyAdded)&&(
         <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>Insights</div>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>{t('stats.insights')}</div>
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
             {topArtist&&(
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:11,color:C.dim,...MONO,display:'inline-flex',alignItems:'center',gap:4}}><Icon name="fire" size={11} color={C.dim}/> Top artist</span>
+                <span style={{fontSize:11,color:C.dim,...MONO,display:'inline-flex',alignItems:'center',gap:4}}><Icon name="fire" size={11} color={C.dim}/> {t('stats.topArtist')}</span>
                 <div style={{textAlign:'right'}}>
                   <div style={{fontSize:13,color:C.text,...MONO}}>{topArtist[0]}</div>
-                  <div style={{fontSize:10,color:C.dim,...MONO}}>{topArtist[1]} records</div>
+                  <div style={{fontSize:10,color:C.dim,...MONO}}>{t('stats.recordsCount', { n: topArtist[1] })}</div>
                 </div>
               </div>
             )}
             {recentlyAdded&&(
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid '+C.border,paddingTop:10}}>
-                <span style={{fontSize:11,color:C.dim,...MONO}}><span style={{display:'inline-flex',alignItems:'center',gap:4}}><Icon name="sparkles" size={10} color="inherit"/> Recently added</span></span>
+                <span style={{fontSize:11,color:C.dim,...MONO}}><span style={{display:'inline-flex',alignItems:'center',gap:4}}><Icon name="sparkles" size={10} color="inherit"/> {t('stats.recentlyAdded')}</span></span>
                 <div style={{textAlign:'right'}}>
                   <div style={{fontSize:12,color:C.text,...MONO,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{recentlyAdded.artist}</div>
                   <div style={{fontSize:10,color:C.dim,...MONO}}>{(recentlyAdded.added_at||'').split('T')[0]}</div>
@@ -813,7 +821,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
       {/* Genre */}
       {genreData.length>0&&(
         <div style={{background:C.bg2,border:'1px solid '+C.border,borderRadius:12,padding:'16px',marginBottom:16}}>
-          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>Collection by genre</div>
+          <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:12}}>{t('stats.byGenreTitle')}</div>
           <BarChart data={genreData} colorFn={i=>COLORS[i%COLORS.length]}/>
         </div>
       )}
@@ -842,14 +850,14 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
         const maxSpent = Math.max(...years.map(([, v]) => v.spent), 1);
         return (
           <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
-            <div style={{ fontSize: 10, color: C.accent, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14 }}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="calendar" size={12} color="inherit"/> Spending by year</span>
+            <div style={{ fontSize: 10, color: C.accent, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 14 }}><span style={{display:'inline-flex',alignItems:'center',gap:6}}><Icon name="calendar" size={12} color="inherit"/> {t('stats.spendingByYear')}</span>
             </div>
             {years.map(([year, data]) => (
               <div key={year} style={{ marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ fontSize: 12, color: C.text, ...MONO }}>{year}</span>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, color: C.dim, ...MONO }}>{data.count} record{data.count !== 1 ? 's' : ''}</span>
+                    <span style={{ fontSize: 10, color: C.dim, ...MONO }}>{t(data.count === 1 ? 'stats.recordsOne' : 'stats.recordsN', { n: data.count })}</span>
                     <span style={{ fontSize: 13, color: C.gold, ...MONO, fontWeight: 'bold' }}>
                       {data.spent > 0 ? '$' + data.spent.toFixed(0) : '—'}
                     </span>
@@ -866,7 +874,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
               </div>
             ))}
             <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 4, textAlign: 'right' }}>
-              Total all time: ${collection.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0).toFixed(0)}
+              {t('stats.totalAllTime', { n: collection.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0).toFixed(0) })}
             </div>
           </div>
         );
