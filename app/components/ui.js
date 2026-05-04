@@ -177,6 +177,7 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
 
 // ── VinylModal ────────────────────────────────────────────────
 export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vinylData,loading,error,premium,collectionItem,onUpgrade,onPhotosChange}){
+  const t = useT();
   const [history, setHistory] = useState(null);
   const [histLoading, setHistLoading] = useState(false);
   useBackButton(true, onClose);
@@ -214,15 +215,15 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
         <div style={{padding:'10px 16px 0',display:'flex',gap:14,flexWrap:'wrap'}}>
           {album.spotifyUrl&&(
             <a href={album.spotifyUrl} target="_blank" rel="noopener noreferrer"
-              style={{fontSize:11,color:'#1db954',...MONO,textDecoration:'none'}}>▶ Listen on Spotify</a>
+              style={{fontSize:11,color:'#1db954',...MONO,textDecoration:'none'}}>{t('vinyl.listenSpotify')}</a>
           )}
           {/* Bandcamp search — indie/underground metal usually on Bandcamp even when no Discogs listing */}
           <a href={'https://bandcamp.com/search?q=' + encodeURIComponent((album.artist||'') + ' ' + (album.album||''))}
             target="_blank" rel="noopener noreferrer"
-            style={{fontSize:11,color:'#629aa9',...MONO,textDecoration:'none'}}>🎵 Buy on Bandcamp</a>
+            style={{fontSize:11,color:'#629aa9',...MONO,textDecoration:'none'}}>{t('vinyl.buyBandcamp')}</a>
           {album.discogs_url&&(
             <a href={album.discogs_url} target="_blank" rel="noopener noreferrer"
-              style={{fontSize:11,color:C.dim,...MONO,textDecoration:'none'}}>⬡ Discogs</a>
+              style={{fontSize:11,color:C.dim,...MONO,textDecoration:'none'}}>{t('vinyl.discogs')}</a>
           )}
         </div>
         <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
@@ -252,14 +253,14 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
         <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
         <div style={{padding:'14px 16px 16px'}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:12}}>
-            Vinyl releases · Discogs
+            {t('vinyl.releases.title')}
           </div>
-          {loading&&<div style={{textAlign:'center',padding:'30px 0',color:C.dim,...MONO,fontSize:12}}>⟳ Searching releases…</div>}
+          {loading&&<div style={{textAlign:'center',padding:'30px 0',color:C.dim,...MONO,fontSize:12}}>{t('vinyl.releases.searching')}</div>}
           {error&&<div style={{background:'#1a0000',border:'1px solid '+C.accent+'44',borderRadius:8,padding:'12px 14px',color:'#f87171',fontSize:12,...MONO}}>
-            {error.includes('not configured')?'⚙ Configure DISCOGS_TOKEN in Vercel → Environment Variables':`⚠ ${error}`}
+            {error.includes('not configured')?t('vinyl.releases.configErr'):`⚠ ${error}`}
           </div>}
           {!loading&&!error&&vinylData?.variants?.length===0&&(
-            <div style={{textAlign:'center',padding:'24px 0',color:C.dim,...MONO,fontSize:12}}>No vinyl releases found on Discogs</div>
+            <div style={{textAlign:'center',padding:'24px 0',color:C.dim,...MONO,fontSize:12}}>{t('vinyl.releases.none')}</div>
           )}
           {!loading&&!error&&vinylData?.variants?.length>0&&(
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -279,13 +280,13 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                       <div style={{textAlign:'right',flexShrink:0}}>
                         <div style={{...BEBAS,fontSize:20,color:C.accent,lineHeight:1}}>${v.lowestPrice.toFixed(0)}</div>
                         <div style={{fontSize:8,color:C.dim,...MONO}}>
-                          {v.numForSale > 0 ? `lowest · ${v.numForSale} for sale` : 'lowest'}
+                          {v.numForSale > 0 ? t('vinyl.forSale', { n: v.numForSale }) : t('vinyl.lowest')}
                         </div>
                       </div>
                     ) : (
                       <div style={{textAlign:'right',flexShrink:0,opacity:0.5}}>
                         <div style={{fontSize:9,color:C.dim,...MONO,lineHeight:1.2}}>
-                          Price<br/>unavailable
+                          {t('vinyl.priceUnavailable')}
                         </div>
                       </div>
                     )}
@@ -295,7 +296,7 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                       onClick={e=>e.stopPropagation()}
                       style={{flex:1,display:'block',background:C.bg4,border:'1px solid '+C.border,
                         borderRadius:7,padding:'7px',fontSize:11,color:C.muted,...MONO,textDecoration:'none',textAlign:'center'}}>
-                      🔗 Discogs
+                      {t('vinyl.discogsLink')}
                     </a>
                     <button onClick={()=>onWatchToggle({
                         id: album.id + '_' + v.id,
@@ -306,7 +307,7 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                       })}
                       style={{flex:1,background:C.bg4,border:'1px solid '+C.border,borderRadius:7,
                         padding:'7px',fontSize:11,color:C.muted,...MONO,cursor:'pointer'}}>
-                      ☆ Watch
+                      {t('vinyl.watchBtn')}
                     </button>
                     <button onClick={()=>onAddToCollection({
                         discogs_id:v.id,artist:album.artist,album:album.album,
@@ -314,7 +315,7 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                       })}
                       style={{flex:1,background:'#001a00',border:'1px solid #166534',borderRadius:7,
                         padding:'7px',fontSize:11,color:'#4ade80',...MONO,cursor:'pointer'}}>
-                      + Vault
+                      {t('vinyl.addVaultBtn')}
                     </button>
                   </div>
                 </div>
@@ -328,20 +329,20 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
             <div style={{padding:'0 16px 16px'}}>
               {!premium ? (
                 <div style={{background:'linear-gradient(135deg,#0a0a1a,#14142a)',border:'1px solid #3333aa55',borderRadius:10,padding:'12px 14px'}}>
-                  <div style={{fontSize:10,color:'#818cf8',...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:4}}>📈 Price History</div>
-                  <div style={{fontSize:11,color:'#6366f1',...MONO,marginBottom:8}}>See how this vinyl's value changed over time.</div>
-                  <div style={{fontSize:10,color:'#4f46e5',...MONO}}>🔒 Metal Vault Pro feature</div>
+                  <div style={{fontSize:10,color:'#818cf8',...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:4}}>{t('vinyl.priceHistory.title')}</div>
+                  <div style={{fontSize:11,color:'#6366f1',...MONO,marginBottom:8}}>{t('vinyl.priceHistory.desc')}</div>
+                  <div style={{fontSize:10,color:'#4f46e5',...MONO}}>{t('vinyl.priceHistory.proLabel')}</div>
                 </div>
               ) : history === null && !histLoading ? (
                 <button onClick={()=>loadHistory(album.id)}
                   style={{width:'100%',background:C.bg3,border:'1px solid '+C.border,borderRadius:10,padding:'10px',color:C.dim,cursor:'pointer',...MONO,fontSize:11}}>
-                  📈 Load price history
+                  {t('vinyl.priceHistory.load')}
                 </button>
               ) : histLoading ? (
-                <div style={{textAlign:'center',padding:'16px',color:C.dim,...MONO,fontSize:11}}>⏳ Loading history…</div>
+                <div style={{textAlign:'center',padding:'16px',color:C.dim,...MONO,fontSize:11}}>{t('vinyl.priceHistory.loading')}</div>
               ) : history && history.length >= 2 ? (
                 <div style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:10,padding:'12px 14px'}}>
-                  <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:10}}>📈 Price History ({history.length} days)</div>
+                  <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:10}}>{t('vinyl.priceHistory.titleN', { n: history.length })}</div>
                   {(() => {
                     const vals = history.map(h => Number(h.median_price || h.lowest_price) || 0).filter(v=>v>0);
                     if (!vals.length) return null;
@@ -382,7 +383,7 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                   })()}
                 </div>
               ) : history && history.length < 2 ? (
-                <div style={{fontSize:10,color:C.dim,...MONO,textAlign:'center',padding:'8px'}}>📈 Not enough history yet — check back after the daily cron runs</div>
+                <div style={{fontSize:10,color:C.dim,...MONO,textAlign:'center',padding:'8px'}}>{t('vinyl.priceHistory.notEnough')}</div>
               ) : null}
             </div>
           )}

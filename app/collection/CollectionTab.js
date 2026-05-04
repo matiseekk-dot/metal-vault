@@ -201,8 +201,8 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
     <div style={{ padding: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-          {watchlist.length} {watchlist.length === 1 ? 'album' : 'albums'}
-          {user && <span style={{ color: '#4ade80' }}> · synced ✓</span>}
+          {watchlist.length} {watchlist.length === 1 ? t('watchlist.album') : t('watchlist.albums')}
+          {user && <span style={{ color: '#4ade80' }}> {t('watchlist.synced')}</span>}
         </div>
         <select value={sort} onChange={e => setSort(e.target.value)}
           style={{ background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.muted, padding: '5px 8px', fontSize: 11, ...MONO, cursor: 'pointer', outline: 'none' }}>
@@ -253,9 +253,9 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                   </div>
                   {hasAlert && (
                     <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginTop: 2 }}>
-                      🔔 {hasAlert.type === 'PRICE_DROP'   && 'Alert: ≤$' + hasAlert.price}
-                      {  hasAlert.type === 'PERCENT_DROP' && 'Alert: drop ≥' + hasAlert.price + '%'}
-                      {  hasAlert.type === 'LOW_STOCK'    && 'Alert: stock ≤' + hasAlert.price + ' copies'}
+                      🔔 {hasAlert.type === 'PRICE_DROP'   && t('alert.summaryPrice',   { n: hasAlert.price })}
+                      {  hasAlert.type === 'PERCENT_DROP' && t('alert.summaryPercent', { n: hasAlert.price })}
+                      {  hasAlert.type === 'LOW_STOCK'    && t('alert.summaryStock',   { n: hasAlert.price })}
                     </div>
                   )}
                 </div>
@@ -269,15 +269,15 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                 <button onClick={() => { setAlertItem(alertItem === id ? null : id); setAlertPrice(''); }}
                   style={{ flex: 1, padding: '8px 14px', background: alertItem === id ? '#1a0a00' : 'transparent', border: 'none', color: alertItem === id ? '#f5c842' : hasAlert ? '#f5c842' : '#555', cursor: 'pointer', fontSize: 11, ...MONO, display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.05em', textAlign: 'left' }}>
                   🔔 {hasAlert ? (
-                    hasAlert.type === 'PRICE_DROP'   ? 'Alert active: ≤$' + hasAlert.price + ' · edit' :
-                    hasAlert.type === 'PERCENT_DROP' ? 'Alert active: drop ' + hasAlert.price + '% · edit' :
-                    hasAlert.type === 'LOW_STOCK'    ? 'Alert active: stock ≤' + hasAlert.price + ' · edit' :
-                    'Alert active · edit'
-                  ) : 'Set price alert'}
+                    hasAlert.type === 'PRICE_DROP'   ? t('alert.activePrice',   { n: hasAlert.price }) :
+                    hasAlert.type === 'PERCENT_DROP' ? t('alert.activePercent', { n: hasAlert.price }) :
+                    hasAlert.type === 'LOW_STOCK'    ? t('alert.activeStock',   { n: hasAlert.price }) :
+                    t('alert.active')
+                  ) : t('alert.set')}
                 </button>
                 {hasAlert && (
-                  <button onClick={(e) => { e.stopPropagation(); if (confirm('Remove price alert for this record?')) removeAlert(album); }}
-                    title="Remove alert"
+                  <button onClick={(e) => { e.stopPropagation(); if (confirm(t('alert.confirmRemove'))) removeAlert(album); }}
+                    title={t('alert.removeTitle')}
                     style={{ padding: '8px 14px', background: 'transparent', border: 'none', borderLeft: '1px solid ' + C.border, color: '#f87171', cursor: 'pointer', fontSize: 14, lineHeight: 1, flexShrink: 0 }}>
                     🗑
                   </button>
@@ -285,18 +285,18 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
               </div>
               {alertItem === id && (
                 <div style={{ borderTop: '1px solid ' + C.border, padding: '10px 14px', background: '#1a0a00', borderRadius: '0 0 10px 10px' }}>
-                  <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginBottom: 6 }}>🔔 Alert type</div>
+                  <div style={{ fontSize: 10, color: '#f5c842', ...MONO, marginBottom: 6 }}>{t('alert.typeLabel')}</div>
                   {/* Alert type selector — 3 options for wantlist */}
                   <select value={alertType} onChange={e => setAlertType(e.target.value)}
                     style={{ width: '100%', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 12, ...MONO, marginBottom: 8, outline: 'none' }}>
-                    <option value="PRICE_DROP">Price drops below threshold</option>
-                    <option value="PERCENT_DROP">Price drops by % from current</option>
-                    <option value="LOW_STOCK">Low stock — copies for sale below threshold</option>
+                    <option value="PRICE_DROP">{t('alert.type.priceDrop')}</option>
+                    <option value="PERCENT_DROP">{t('alert.type.percentDrop')}</option>
+                    <option value="LOW_STOCK">{t('alert.type.lowStock')}</option>
                   </select>
                   <div style={{ fontSize: 10, color: C.muted, ...MONO, marginBottom: 6 }}>
-                    {alertType === 'PRICE_DROP'   && 'Notify when median price ≤ this amount'}
-                    {alertType === 'PERCENT_DROP' && 'Notify when price drops by this % from current value'}
-                    {alertType === 'LOW_STOCK'    && 'Notify when copies on Discogs ≤ this number'}
+                    {alertType === 'PRICE_DROP'   && t('alert.help.priceDrop')}
+                    {alertType === 'PERCENT_DROP' && t('alert.help.percentDrop')}
+                    {alertType === 'LOW_STOCK'    && t('alert.help.lowStock')}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <span style={{ ...BEBAS, fontSize: 18, color: C.muted, minWidth: 16, textAlign: 'center' }}>
@@ -304,17 +304,17 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                     </span>
                     <input type="number" value={alertPrice} onChange={e => setAlertPrice(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && saveAlert(album)}
-                      placeholder={alertType === 'PRICE_DROP' ? 'e.g. 25' : alertType === 'PERCENT_DROP' ? 'e.g. 20' : 'e.g. 5'}
+                      placeholder={alertType === 'PRICE_DROP' ? t('alert.placeholderPrice') : alertType === 'PERCENT_DROP' ? t('alert.placeholderPct') : t('alert.placeholderStock')}
                       autoFocus
                       style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 16, ...MONO, outline: 'none' }} />
                     <button onClick={() => saveAlert(album)} disabled={alertSaving || !user}
                       style={{ padding: '10px 18px', background: !user || alertSaving ? C.bg3 : C.accent, border: 'none', borderRadius: 8, color: '#fff', cursor: !user ? 'default' : 'pointer', ...BEBAS, fontSize: 17, flexShrink: 0 }}>
-                      {alertSaving ? '…' : 'OK'}
+                      {alertSaving ? t('alert.savingShort') : t('alert.ok')}
                     </button>
                     <button onClick={() => { setAlertItem(null); setAlertPrice(''); setAlertType('PRICE_DROP'); }}
                       style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 10px', cursor: 'pointer', ...MONO, fontSize: 10, flexShrink: 0 }}>✕</button>
                   </div>
-                  {!user && <div style={{ fontSize: 10, color: '#f87171', ...MONO, marginTop: 4 }}>Sign in to set alerts</div>}
+                  {!user && <div style={{ fontSize: 10, color: '#f87171', ...MONO, marginTop: 4 }}>{t('alert.signInRequired')}</div>}
                 </div>
               )}
             </div>
@@ -998,8 +998,8 @@ export function CollectionTab({
                               color: (item.sleeve_grade || item.vinyl_grade) ? '#f5c842' : C.dim,
                               padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10, width: '100%', textAlign: 'left' }}>
                               {(item.sleeve_grade || item.vinyl_grade || item.inner_sleeve_grade)
-                                ? 'Detailed grading set — tap to edit'
-                                : '💎 Add detailed grading ' + (gradingExpandedId === item.id ? '▴' : '▾')}
+                                ? t('grading.editHint')
+                                : t('grading.add') + ' ' + (gradingExpandedId === item.id ? '▴' : '▾')}
                             </button>
 
                             {gradingExpandedId === item.id && (() => {
@@ -1028,11 +1028,11 @@ export function CollectionTab({
                               );
                               return (
                                 <div style={{ background: C.bg3, border: '1px solid ' + C.border, borderRadius: 8, padding: 10, marginTop: 6 }}>
-                                  <GradeRow label="Sleeve grade" hint="outer cover/jacket"
+                                  <GradeRow label={t('grading.sleeveLabel')} hint={t('grading.sleeveHint')}
                                     value={draft.sleeve_grade || ''} onChange={v => updateDraft('sleeve_grade', v)}/>
-                                  <GradeRow label="Vinyl grade" hint="playing surface"
+                                  <GradeRow label={t('grading.vinylLabel')} hint={t('grading.vinylHint')}
                                     value={draft.vinyl_grade || ''} onChange={v => updateDraft('vinyl_grade', v)}/>
-                                  <GradeRow label="Inner sleeve / insert" hint="inner bag, lyric sheet"
+                                  <GradeRow label={t('grading.innerLabel')} hint={t('grading.innerHint')}
                                     value={draft.inner_sleeve_grade || ''} onChange={v => updateDraft('inner_sleeve_grade', v)}/>
                                   <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <input type="checkbox" id={'hs-' + item.id}
@@ -1040,16 +1040,16 @@ export function CollectionTab({
                                       onChange={e => updateDraft('hype_sticker', e.target.checked)}
                                       style={{ width: 16, height: 16, cursor: 'pointer', accentColor: C.accent }}/>
                                     <label htmlFor={'hs-' + item.id} style={{ fontSize: 11, color: C.text, ...MONO, cursor: 'pointer' }}>
-                                      Original hype sticker intact
+                                      {t('grading.hypeLabel')}
                                     </label>
                                   </div>
                                   <div style={{ marginBottom: 8 }}>
                                     <div style={{ fontSize: 9, color: C.muted, ...MONO, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>
-                                      Playback notes <span style={{ color: C.dim, textTransform: 'none', letterSpacing: 0 }}>· pops, clicks, warps, skips</span>
+                                      {t('grading.notesLabel')} <span style={{ color: C.dim, textTransform: 'none', letterSpacing: 0 }}>· {t('grading.notesHint')}</span>
                                     </div>
                                     <textarea value={draft.playback_notes || ''}
                                       onChange={e => updateDraft('playback_notes', e.target.value)}
-                                      placeholder="e.g. light surface noise on side A track 2, otherwise plays clean"
+                                      placeholder={t('grading.notesPh')}
                                       rows={2}
                                       style={{ width: '100%', background: C.bg2, border: '1px solid ' + C.border,
                                         borderRadius: 6, color: C.text, padding: '7px 9px', fontSize: 12,
@@ -1058,11 +1058,11 @@ export function CollectionTab({
                                   <div style={{ display: 'flex', gap: 6 }}>
                                     <button onClick={() => setGradingExpandedId(null)}
                                       style={{ flex: 1, background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '8px', cursor: 'pointer', ...MONO, fontSize: 11 }}>
-                                      Cancel
+                                      {t('common.cancel')}
                                     </button>
                                     <button onClick={() => saveGrading(item.id)} disabled={gradingSaving}
                                       style={{ flex: 2, background: '#f5c842', border: 'none', borderRadius: 6, color: '#1a0800', padding: '8px', cursor: 'pointer', ...BEBAS, fontSize: 13, letterSpacing: '0.06em', opacity: gradingSaving ? 0.5 : 1 }}>
-                                      {gradingSaving ? 'SAVING…' : 'SAVE GRADING'}
+                                      {gradingSaving ? t('grading.saving') : t('grading.save')}
                                     </button>
                                   </div>
                                 </div>
@@ -1074,7 +1074,7 @@ export function CollectionTab({
                             style={{ background: 'none', border: '1px dashed ' + C.border, borderRadius: 6,
                               color: C.dim, padding: '5px 10px', cursor: 'pointer', ...MONO, fontSize: 10,
                               width: '100%', textAlign: 'left', marginBottom: 8 }}>
-                            Detailed grading · <span style={{ color: '#f5c842' }}>PRO</span>
+                            {t('grading.proCta')} · <span style={{ color: '#f5c842' }}>PRO</span>
                           </button>
                         )}
                         {/* Set price — inline input matching watchlist pattern (works on iOS) */}
@@ -1096,7 +1096,7 @@ export function CollectionTab({
                                 if (fresh.items) onUpdate(fresh.items);
                                 setShowAlertForm(null); setPriceInputVal('');
                               }}
-                              placeholder="e.g. 25" autoFocus
+                              placeholder={t('vault.priceModal.placeholder')} autoFocus
                               style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border,
                                 borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 16,
                                 ...MONO, outline: 'none' }} />
@@ -1114,7 +1114,7 @@ export function CollectionTab({
                             }}
                               style={{ padding: '10px 18px', background: C.accent, border: 'none',
                                 borderRadius: 8, color: '#fff', cursor: 'pointer', ...BEBAS, fontSize: 16, flexShrink: 0 }}>
-                              OK
+                              {t('alert.ok')}
                             </button>
                             <button onClick={() => { setShowAlertForm(null); setPriceInputVal(''); }}
                               style={{ padding: '8px 10px', background: 'none', border: '1px solid ' + C.border,
@@ -1128,7 +1128,7 @@ export function CollectionTab({
                             style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6,
                               color: item.purchase_price ? C.gold : C.dim,
                               padding: '8px 12px', cursor: 'pointer', ...MONO, fontSize: 11, marginBottom: 8, minHeight: 36 }}>
-                            {item.purchase_price ? '💳 $' + Number(item.purchase_price).toFixed(0) + ' · edit' : '+ Set purchase price'}
+                            {item.purchase_price ? t('vault.priceModal.editBtn', { n: Number(item.purchase_price).toFixed(0) }) : t('vault.priceModal.setBtn')}
                           </button>
                         )}
                         {/* Alert + Delete */}
@@ -1136,26 +1136,26 @@ export function CollectionTab({
                           {item.discogs_id && (showAlertForm === item.id ? (
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                               <select value={alertType} onChange={e => setAlertType(e.target.value)} style={{ ...inputSt, padding: '5px 8px', fontSize: 11 }}>
-                                <option value="PRICE_DROP">Price drops to ≤ $</option>
-                                <option value="PRICE_RISE">Price rises to ≥ $</option>
-                                <option value="PERCENT_DROP">Drops by ≥ %</option>
-                                <option value="PERCENT_RISE">Rises by ≥ %</option>
-                                <option value="LOW_STOCK">Less than N copies for sale</option>
+                                <option value="PRICE_DROP">{t('alert.type.priceDrop')}</option>
+                                <option value="PRICE_RISE">{t('alert.type.priceRise')}</option>
+                                <option value="PERCENT_DROP">{t('alert.type.percentDrop')}</option>
+                                <option value="PERCENT_RISE">{t('alert.type.percentRise')}</option>
+                                <option value="LOW_STOCK">{t('alert.type.lowStock')}</option>
                               </select>
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                 <input type="number" value={targetPrice} onChange={e => setTargetPrice(e.target.value)}
                                   placeholder={
-                                    alertType === 'PERCENT_DROP' || alertType === 'PERCENT_RISE' ? '%'
-                                    : alertType === 'LOW_STOCK' ? 'copies'
-                                    : '$'
+                                    alertType === 'PERCENT_DROP' || alertType === 'PERCENT_RISE' ? t('alert.placeholderPct')
+                                    : alertType === 'LOW_STOCK' ? t('alert.placeholderCopies')
+                                    : t('alert.placeholderPrice')
                                   }
                                   style={{ ...inputSt, padding: '6px 10px', fontSize: 14, flex: 1 }} />
-                                <button onClick={() => createAlert(item)} disabled={saving} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>{saving ? '…' : 'OK'}</button>
+                                <button onClick={() => createAlert(item)} disabled={saving} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>{saving ? '…' : t('alert.ok')}</button>
                                 <button onClick={() => { setShowAlertForm(null); setAlertType('PRICE_DROP'); }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => setShowAlertForm(item.id)} style={{ flex: 1, background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 10px', cursor: 'pointer', ...MONO, fontSize: 10 }}>🔔 Set price alert</button>
+                            <button onClick={() => setShowAlertForm(item.id)} style={{ flex: 1, background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 10px', cursor: 'pointer', ...MONO, fontSize: 10 }}>🔔 {t('alert.set')}</button>
                           ))}
                           <button onClick={() => { if (expandedId === item.id) setExpandedId(null); onRemove(item.id); }} style={{ background: 'none', border: '1px solid #7f1d1d', borderRadius: 6, color: '#f87171', padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🗑</button>
                         </div>
