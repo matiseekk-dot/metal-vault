@@ -123,8 +123,15 @@ export async function GET(req) {
       lastfmConfigured: isLastfmConfigured(),
     },
     {
+      // Only cache positive responses. If we couldn't find a Spotify image
+      // AND no Last.fm bio, the response is mostly empty and likely
+      // reflects unconfigured env — caching that for 24h means even after
+      // the operator adds keys the user keeps seeing blank artist pages.
+      // For the rich case (image OR bio present) cache for a day.
       headers: {
-        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+        'Cache-Control': (spotifyMeta?.image || lfmInfo?.bioSummary)
+          ? 'public, s-maxage=86400, stale-while-revalidate=604800'
+          : 'no-store',
       },
     }
   );

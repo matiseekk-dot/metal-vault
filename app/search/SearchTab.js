@@ -287,7 +287,9 @@ function MemberCard({ item, photo }) {
     setLoading(true);
     setExpanded(true);
     try {
-      const r = await fetch(`/api/artists/related?name=${encodeURIComponent(item.name)}&mbid=${encodeURIComponent(item.mbid || '')}`);
+      // v=2 busts the stale "image: null" responses that got cached at
+      // the edge before Spotify env vars were added in Vercel.
+      const r = await fetch(`/api/artists/related?name=${encodeURIComponent(item.name)}&mbid=${encodeURIComponent(item.mbid || '')}&v=2`);
       const d = await r.json();
       setAllBands(d.sideProjects || []);
     } catch {}

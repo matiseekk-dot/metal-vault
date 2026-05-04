@@ -59,7 +59,8 @@ function ArtistAbout({ artistName, locale }) {
   useEffect(() => {
     if (!artistName) return;
     let cancelled = false;
-    fetch(`/api/artists/related?name=${encodeURIComponent(artistName)}&lang=${encodeURIComponent(locale || 'en')}`)
+    // v=2 busts pre-Spotify-config cache entries.
+    fetch(`/api/artists/related?name=${encodeURIComponent(artistName)}&lang=${encodeURIComponent(locale || 'en')}&v=2`)
       .then(r => r.json())
       .then(d => { if (!cancelled) setData(d); })
       .catch(() => {});

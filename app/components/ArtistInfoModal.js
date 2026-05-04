@@ -116,7 +116,9 @@ function Sheet({ artist, onClose }) {
       lang: locale,
       ...(artist.mbid ? { mbid: artist.mbid } : {}),
     });
-    fetch(`/api/artists/related?${params}`)
+    // v=2 busts the stale "image: null" responses cached at the edge
+    // before Spotify env vars were configured.
+    fetch(`/api/artists/related?${params}&v=2`)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
