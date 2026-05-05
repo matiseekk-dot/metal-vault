@@ -15,12 +15,17 @@ export async function GET() {
   const user = await getUser(supabase);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Narrow select — UI uses these 8 fields. The table also stores
-  // last_triggered, last_seen_price, baseline_price (cron-only), and
-  // collection_item_id (rarely needed). Skip them on the read path.
+  // Narrow select — UI uses these fields. The table also stores
+  // last_triggered, last_seen_price, baseline_price (cron-only).
+  // Note: NO `direction` column — the original 001_schema.sql comment
+  // implied one but the actual CREATE TABLE never declared it. Adding
+  // it here used to throw "column price_alerts.direction does not
+  // exist" (42703), 500'ing the whole alerts list on load. Same
+  // shape-bug we hit on persona.genre. Also added `collection_id` so
+  // the client can attribute alerts to specific collection rows.
   const { data, error } = await supabase
     .from('price_alerts')
-    .select('id, discogs_id, album_id, artist, album, target_price, alert_type, is_active, direction, created_at')
+    .select('id, collection_id, discogs_id, album_id, artist, album, target_price, alert_type, is_active, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
@@ -62,10 +67,15 @@ export async function POST(request) {
   // even when the source row (collection or watchlist) has been
   // edited/deleted; we copy them at insert time as a denormalized
   // snapshot used by digest emails and cron logs.
+  //
+  // NOTE: dropped `direction` and `collection_item_id` from this list.
+  // Neither column exists on price_alerts (the 001 schema declares
+  // collection_id only; direction was a documentation-only artifact).
+  // Sending either previously slipped past whitelist validation and
+  // exploded the supabase INSERT with 42703.
   const ALLOWED = [
-    'collection_id', 'collection_item_id',
-    'album_id', 'discogs_id', 'artist', 'album',
-    'target_price', 'direction', 'is_active', 'alert_type', 'baseline_price',
+    'collection_id', 'album_id', 'discogs_id', 'artist', 'album',
+    'target_price', 'is_active', 'alert_type', 'baseline_price',
   ];
   const safe = Object.fromEntries(
     Object.entries(body || {}).filter(([k]) => ALLOWED.includes(k))
@@ -79,9 +89,6 @@ export async function POST(request) {
     }
     safe.target_price = p;
   }
-  if (safe.direction && !['above', 'below'].includes(safe.direction)) {
-    return NextResponse.json({ error: 'direction must be "above" or "below"' }, { status: 400 });
-  }
 
   // discogs_id may arrive as a string (Discogs master IDs sometimes
   // come through that way). Normalize to BIGINT-castable or null.
@@ -93,7 +100,7 @@ export async function POST(request) {
   }
 
   // Require at least one identifier so the cron can find this alert.
-  if (!safe.discogs_id && !safe.album_id && !safe.collection_id && !safe.collection_item_id) {
+  if (!safe.discogs_id && !safe.album_id && !safe.collection_id) {
     return NextResponse.json({
       error: 'Need at least one of: discogs_id, album_id, collection_id'
     }, { status: 400 });
@@ -123,7 +130,8 @@ export async function PATCH(request) {
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
   const body = await request.json();
 
-  const ALLOWED = ['target_price', 'direction', 'is_active', 'alert_type', 'baseline_price'];
+  // No `direction` here either — column doesn't exist on the table.
+  const ALLOWED = ['target_price', 'is_active', 'alert_type', 'baseline_price'];
   const safe = Object.fromEntries(
     Object.entries(body || {}).filter(([k]) => ALLOWED.includes(k))
   );
