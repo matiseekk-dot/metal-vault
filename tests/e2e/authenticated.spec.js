@@ -74,7 +74,9 @@ test.describe('Authenticated user — Vault tab', () => {
     // and we want this test deterministic regardless.
     await page.evaluate(() => { try { localStorage.setItem('mv_last_tab', 'vault'); } catch {} });
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    // Wait for hydration without relying on networkidle — SW background
+    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     await expectNoErrorBoundary(page);
     assertNoFailures();
   });
@@ -88,7 +90,9 @@ test.describe('Authenticated user — Vault tab', () => {
       } catch {}
     });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Wait for hydration without relying on networkidle — SW background
+    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     // Specifically: persona must not 500. This is the regression that
     // hid the entire Vault tab behind ErrorBoundary for days.
     const personaReq = page.waitForResponse(r => r.url().includes('/api/persona'));
@@ -110,7 +114,9 @@ test.describe('Authenticated user — When\'s On tab (Calendar / Live / Dziennik
       } catch {}
     });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Wait for hydration without relying on networkidle — SW background
+    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     await expectNoErrorBoundary(page);
     assertNoFailures();
   });
@@ -128,7 +134,9 @@ test.describe('Authenticated user — When\'s On tab (Calendar / Live / Dziennik
       } catch {}
     });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Wait for hydration without relying on networkidle — SW background
+    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     await expectNoErrorBoundary(page);
     assertNoFailures();
   });
@@ -142,7 +150,9 @@ test.describe('Authenticated user — When\'s On tab (Calendar / Live / Dziennik
       } catch {}
     });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Wait for hydration without relying on networkidle — SW background
+    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     await expectNoErrorBoundary(page);
     assertNoFailures();
   });
@@ -203,7 +213,9 @@ test.describe('Authenticated user — no /api/* should ever 500', () => {
     const assertNoFailures = trackApiFailures(page);
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Wait for hydration without relying on networkidle — SW background
+    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
 
     // Iterate vault sub-tabs
     for (const sub of ['collection', 'watchlist', 'bands', 'search', 'stats']) {
@@ -214,7 +226,9 @@ test.describe('Authenticated user — no /api/* should ever 500', () => {
         } catch {}
       }, sub);
       await page.reload();
-      await page.waitForLoadState('networkidle');
+      // Wait for hydration without relying on networkidle — SW background
+    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     }
 
     // Iterate whens-on sub-tabs
@@ -226,7 +240,9 @@ test.describe('Authenticated user — no /api/* should ever 500', () => {
         } catch {}
       }, sub);
       await page.reload();
-      await page.waitForLoadState('networkidle');
+      // Wait for hydration without relying on networkidle — SW background
+    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     }
 
     // Profile + feed
@@ -235,7 +251,9 @@ test.describe('Authenticated user — no /api/* should ever 500', () => {
         try { localStorage.setItem('mv_last_tab', t); } catch {}
       }, tab);
       await page.reload();
-      await page.waitForLoadState('networkidle');
+      // Wait for hydration without relying on networkidle — SW background
+    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     }
 
     assertNoFailures();

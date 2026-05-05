@@ -32,8 +32,10 @@ test.describe('Public surface', () => {
     });
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    // Bottom nav is the rendering signal — present after hydration.
+    // Don't waitForLoadState('networkidle') — production has SW
+    // background syncs and Sentry pings that keep the network "busy"
+    // indefinitely from Playwright's perspective. Visible-element wait
+    // is the recommended pattern in the Playwright docs anyway.
     await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
 
     // Tolerate Sentry init noise + service-worker bootstrap warnings;
@@ -66,10 +68,17 @@ test.describe('Public surface', () => {
 
   test('service worker registers + has SKIP_WAITING handler', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Use serviceWorker.ready instead of networkidle — ready resolves
+    // when the SW is active and controlling the page, which is what we
+    // actually want to assert. networkidle never settles in prod
+    // because the SW + Sentry keep poking the network in the background.
     const swActive = await page.evaluate(async () => {
       if (!('serviceWorker' in navigator)) return false;
-      const reg = await navigator.serviceWorker.getRegistration();
+      // 10 s timeout in case registration is somehow blocked.
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, rej) => setTimeout(() => rej(new Error('SW ready timeout')), 10_000)),
+      ]).catch(() => null);
       return !!reg;
     });
     expect(swActive).toBeTruthy();
@@ -120,9 +129,9 @@ test.describe('API health', () => {
 test.describe('Routing', () => {
   test('/ deep-link tab=vault stays on vault', async ({ page }) => {
     await page.goto('/?tab=vault');
-    await page.waitForLoadState('networkidle');
-    // localStorage is not yet populated for first visit; just check
-    // that we landed somewhere that renders.
+    // Wait for ANY interactive element to confirm hydration before
+    // asserting the URL. networkidle would never settle (SW + Sentry).
+    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     expect(page.url()).toContain('/');
   });
 
