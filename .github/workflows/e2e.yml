@@ -27,6 +27,15 @@ on:
   push:
     branches: [main]
 
+# Default GITHUB_TOKEN scope on this repo doesn't include pull-requests
+# write, so the digest-posting step was getting 403 silently and never
+# making a comment despite the step reporting "success" (curl -sS prints
+# error to stderr, doesn't exit non-zero). Grant only what we need:
+# read code, write to PR discussion, write deployment comments.
+permissions:
+  contents:      read
+  pull-requests: write
+
 # Cancel duplicate runs on rapid pushes — saves CI minutes and keeps
 # the PR check from flapping.
 concurrency:
@@ -138,7 +147,30 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Run E2E suite
-        run: npx playwright test
+        id: tests
+        continue-on-error: true
+        # set -o pipefail so the pipeline exit status reflects
+        # Playwright's, not tee's. Without it a test failure was
+        # masked behind tee's 0-exit and steps.tests.outcome stayed
+        # "success" even on red runs.
+        # Also echo discovered tests + config so we can diagnose
+        # "0 tests run in 1 s" type results from the PR comment alone.
+        run: |
+          set -o pipefail
+          echo "=== Test files in tests/e2e ==="
+          ls -la tests/e2e/
+          echo
+          echo "=== AUTH_ENABLED flags ==="
+          echo "TEST_AUTH_SECRET set: $([ -n \"${TEST_AUTH_SECRET:-}\" ] && echo yes || echo no)"
+          echo "MV_TEST_EMAIL set:    $([ -n \"${MV_TEST_EMAIL:-}\" ] && echo yes || echo no)"
+          echo "MV_TEST_PASSWORD set: $([ -n \"${MV_TEST_PASSWORD:-}\" ] && echo yes || echo no)"
+          echo "BYPASS set:           $([ -n \"${VERCEL_AUTOMATION_BYPASS_TOKEN:-}\" ] && echo yes || echo no)"
+          echo
+          echo "=== Discovered tests (--list) ==="
+          npx playwright test --list 2>&1 | tee /tmp/test-list.txt | head -80
+          echo
+          echo "=== Running ==="
+          npx playwright test --reporter=list 2>&1 | tee /tmp/playwright-output.txt
         env:
           PWPLAYWRIGHT_BASE_URL: ${{ steps.target.outputs.url }}
           # Auth tier env vars are passed ONLY on pull_request runs.
@@ -167,7 +199,7 @@ jobs:
       # debug without re-running locally. Retention 7 days is enough
       # to investigate within the typical PR review cycle.
       - name: Upload Playwright report
-        if: failure()
+        if: steps.tests.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ github.run_id }}
@@ -175,3 +207,69 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+      # Post a digest as a PR comment regardless of pass/fail — keeps
+      # us honest about WHAT actually ran (a previous green CI run was
+      # actually 0 tests collected, masquerading as success). On
+      # private repos the workflow log is admin-only, so PR comments
+      # are the only failure-diagnostic surface available without
+      # bouncing through the user.
+      #
+      # Uses actions/github-script (octokit-backed) instead of raw
+      # curl. Two reasons:
+      #   - automatic GITHUB_TOKEN auth dance with proper error
+      #     reporting (curl was getting non-201 silently and the
+      #     ::error:: line inside the log was admin-only readable)
+      #   - JSON body construction stays in JS so we don't have to
+      #     escape backticks / newlines through bash/jq
+      - name: Post test digest as PR comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const read = (p, slice) => {
+              try {
+                const s = fs.readFileSync(p, 'utf8');
+                return slice === 'tail' ? s.slice(-50000) : s.slice(0, 8000);
+              } catch { return ''; }
+            };
+            const list = read('/tmp/test-list.txt', 'head');
+            const out  = read('/tmp/playwright-output.txt', 'tail');
+            const outcome = '${{ steps.tests.outcome }}';
+            const icon  = outcome === 'failure' ? '❌' : '✅';
+            const title = outcome === 'failure' ? 'failed' : 'passed';
+            const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const fence = '```';
+            const body = [
+              `${icon} **E2E run ${title}** — [run logs](${runUrl})`,
+              ``,
+              `<details><summary>discovered tests</summary>`,
+              ``,
+              fence,
+              list || '(empty)',
+              fence,
+              ``,
+              `</details>`,
+              ``,
+              `<details><summary>output (last 50KB)</summary>`,
+              ``,
+              fence,
+              out || '(empty)',
+              fence,
+              ``,
+              `</details>`,
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      # Make the workflow visibly red. Without this the
+      # continue-on-error on the test step would let the run finish
+      # green even when tests failed.
+      - name: Fail run on test failure
+        if: steps.tests.outcome == 'failure'
+        run: exit 1

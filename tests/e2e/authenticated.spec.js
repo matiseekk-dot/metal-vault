@@ -25,11 +25,11 @@
 // added after this file).
 
 import { test, expect } from '@playwright/test';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AUTH_FILE = path.join(__dirname, '../../playwright/.auth/user.json');
+// Path is relative to the project root — see auth.setup.js comment.
+// Touching `import.meta.url` here previously broke test discovery
+// entirely under the project's CommonJS-default package.json.
+const AUTH_FILE = 'playwright/.auth/user.json';
 
 test.use({ storageState: AUTH_FILE });
 
@@ -65,17 +65,33 @@ function trackApiFailures(page) {
   };
 }
 
+// Seed localStorage BEFORE the page loads. Initial test pattern was
+// `page.evaluate(() => localStorage.setItem(...))` then `page.goto()`,
+// but evaluate runs against the current page context (about:blank
+// before the first nav), so the writes never landed on the deploy's
+// origin. By the time React hydrated, localStorage was empty and the
+// app fell back to the default tab — making "Vault → Stats" tests
+// silently navigate to "Vault → Collection" instead and time out
+// waiting for a /api/persona request that was never going to fire.
+//
+// addInitScript registers a script that runs on EVERY future page
+// load BEFORE any page script — perfect for seeding localStorage so
+// React's first render sees the right values.
+async function seedLocalStorage(page, entries) {
+  await page.addInitScript((data) => {
+    try {
+      for (const [k, v] of Object.entries(data)) {
+        localStorage.setItem(k, v);
+      }
+    } catch {}
+  }, entries);
+}
+
 test.describe('Authenticated user — Vault tab', () => {
   test('vault default sub-tab renders without ErrorBoundary', async ({ page }) => {
     const assertNoFailures = trackApiFailures(page);
+    await seedLocalStorage(page, { mv_last_tab: 'vault' });
     await page.goto('/');
-    // Force vault tab — the user's `mv_last_tab` localStorage may
-    // point elsewhere from prior usage, but storage state is per-user
-    // and we want this test deterministic regardless.
-    await page.evaluate(() => { try { localStorage.setItem('mv_last_tab', 'vault'); } catch {} });
-    await page.reload();
-    // Wait for hydration without relying on networkidle — SW background
-    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
     await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     await expectNoErrorBoundary(page);
     assertNoFailures();
@@ -83,20 +99,17 @@ test.describe('Authenticated user — Vault tab', () => {
 
   test('vault → stats sub-tab renders + /api/persona 200', async ({ page }) => {
     const assertNoFailures = trackApiFailures(page);
-    await page.evaluate(() => {
-      try {
-        localStorage.setItem('mv_last_tab', 'vault');
-        localStorage.setItem('mv_vault_subtab', 'stats');
-      } catch {}
+    await seedLocalStorage(page, {
+      mv_last_tab:       'vault',
+      mv_vault_subtab:   'stats',
     });
+    // Register the response listener BEFORE navigation so we don't
+    // miss /api/persona if it fires very early in StatsTab's mount.
+    const personaReq = page.waitForResponse(
+      r => r.url().includes('/api/persona'),
+      { timeout: 20_000 },
+    );
     await page.goto('/');
-    // Wait for hydration without relying on networkidle — SW background
-    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
-    await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
-    // Specifically: persona must not 500. This is the regression that
-    // hid the entire Vault tab behind ErrorBoundary for days.
-    const personaReq = page.waitForResponse(r => r.url().includes('/api/persona'));
-    await page.reload();
     const persona = await personaReq;
     expect(persona.status(), '/api/persona should not 500 anymore').toBeLessThan(500);
     await expectNoErrorBoundary(page);
@@ -107,15 +120,11 @@ test.describe('Authenticated user — Vault tab', () => {
 test.describe('Authenticated user — When\'s On tab (Calendar / Live / Dziennik)', () => {
   test('whens-on default (calendar sub-tab) renders', async ({ page }) => {
     const assertNoFailures = trackApiFailures(page);
-    await page.evaluate(() => {
-      try {
-        localStorage.setItem('mv_last_tab', 'calendar');
-        localStorage.setItem('mv_whenson_subtab', 'calendar');
-      } catch {}
+    await seedLocalStorage(page, {
+      mv_last_tab:        'calendar',
+      mv_whenson_subtab:  'calendar',
     });
     await page.goto('/');
-    // Wait for hydration without relying on networkidle — SW background
-    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
     await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     await expectNoErrorBoundary(page);
     assertNoFailures();
@@ -127,15 +136,11 @@ test.describe('Authenticated user — When\'s On tab (Calendar / Live / Dziennik
     // the i18n(plural+dates) refactor; rendering a single event row
     // crashed the whole tab.
     const assertNoFailures = trackApiFailures(page);
-    await page.evaluate(() => {
-      try {
-        localStorage.setItem('mv_last_tab', 'calendar');
-        localStorage.setItem('mv_whenson_subtab', 'upcoming');
-      } catch {}
+    await seedLocalStorage(page, {
+      mv_last_tab:        'calendar',
+      mv_whenson_subtab:  'upcoming',
     });
     await page.goto('/');
-    // Wait for hydration without relying on networkidle — SW background
-    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
     await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     await expectNoErrorBoundary(page);
     assertNoFailures();
@@ -143,15 +148,11 @@ test.describe('Authenticated user — When\'s On tab (Calendar / Live / Dziennik
 
   test('whens-on → dziennik (concerts) sub-tab renders', async ({ page }) => {
     const assertNoFailures = trackApiFailures(page);
-    await page.evaluate(() => {
-      try {
-        localStorage.setItem('mv_last_tab', 'calendar');
-        localStorage.setItem('mv_whenson_subtab', 'concerts');
-      } catch {}
+    await seedLocalStorage(page, {
+      mv_last_tab:        'calendar',
+      mv_whenson_subtab:  'concerts',
     });
     await page.goto('/');
-    // Wait for hydration without relying on networkidle — SW background
-    // syncs + Sentry pings keep the network non-idle indefinitely on prod.
     await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
     await expectNoErrorBoundary(page);
     assertNoFailures();
