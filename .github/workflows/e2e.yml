@@ -59,17 +59,61 @@ jobs:
           npm install --no-save @playwright/test@latest
           npx playwright install --with-deps chromium
 
-      # Block on Vercel's deployment for this exact commit. The
-      # patrickedqvist action polls GitHub's deployment_status events
-      # (which Vercel writes via its GitHub app) and outputs the URL
-      # once status==success.
+      # Wait for Vercel's deployment for THIS exact commit. We poll
+      # GitHub's deployment-statuses API directly because the popular
+      # third-party wait-for-vercel-preview action filters on the
+      # "Preview" environment by default and ignores "Production"
+      # deployments — push-to-main creates a Production deployment so
+      # the action timed out at 10 min finding nothing.
+      #
+      # Polls every 10 s for up to 10 min. Accepts any state in
+      # success / error / failure, then asserts state == "success"
+      # so a failed Vercel build fails the workflow visibly instead
+      # of silently passing.
       - name: Wait for Vercel deployment
         id: vercel
-        uses: patrickedqvist/wait-for-vercel-preview@v1.3.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          max_timeout: 600
-          check_interval: 10
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            depls=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments?sha=${SHA}&per_page=10")
+
+            # Walk every deployment for this SHA until we find one
+            # with a terminal status (success/error/failure).
+            depl_count=$(echo "$depls" | jq 'length')
+            for i in $(seq 0 $((depl_count - 1))); do
+              depl_id=$(echo "$depls" | jq -r ".[$i].id")
+              env_name=$(echo "$depls" | jq -r ".[$i].environment // \"\"")
+              statuses=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments/${depl_id}/statuses?per_page=10")
+
+              # Latest status is statuses[0] (API returns newest first).
+              state=$(echo "$statuses" | jq -r '.[0].state // "pending"')
+              url=$(echo "$statuses" | jq -r '.[0].environment_url // .[0].target_url // ""')
+
+              echo "deployment=$depl_id env=$env_name state=$state url=$url"
+
+              if [ "$state" = "success" ] && [ -n "$url" ]; then
+                echo "url=$url" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              if [ "$state" = "error" ] || [ "$state" = "failure" ]; then
+                echo "::error::Vercel deployment $depl_id ($env_name) reported state=$state — failing the E2E run."
+                exit 1
+              fi
+            done
+
+            echo "no terminal status yet — sleeping 10 s"
+            sleep 10
+          done
+          echo "::error::Timed out waiting 10 min for any Vercel deployment status on ${SHA}."
+          exit 1
 
       - name: Run E2E suite
         run: npx playwright test
