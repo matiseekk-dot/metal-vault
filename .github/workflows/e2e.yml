@@ -115,10 +115,32 @@ jobs:
           echo "::error::Timed out waiting 10 min for any Vercel deployment status on ${SHA}."
           exit 1
 
+      # The deployment-specific URL Vercel writes into target_url has
+      # Vercel Authentication enabled (Project → Deployment Protection
+      # → Vercel Authentication: "All Deployments"), so anonymous
+      # requests get a 401 SSO redirect. For push-to-main runs we want
+      # the public production alias instead. For pull_request runs we
+      # keep the deployment URL — those need the bypass token (see
+      # tests/e2e/README.md) or Deployment Protection disabled for
+      # Preview to actually return the app.
+      - name: Resolve test target URL
+        id: target
+        env:
+          VERCEL_URL: ${{ steps.vercel.outputs.url }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "push" ]; then
+            url="https://metal-vault-six.vercel.app"
+          else
+            url="$VERCEL_URL"
+          fi
+          echo "Using $url for $EVENT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
       - name: Run E2E suite
         run: npx playwright test
         env:
-          PWPLAYWRIGHT_BASE_URL: ${{ steps.vercel.outputs.url }}
+          PWPLAYWRIGHT_BASE_URL: ${{ steps.target.outputs.url }}
           # Auth tier env vars are passed ONLY on pull_request runs.
           # The /api/test-auth/login route on the serving instance is
           # gated by TEST_AUTH_SECRET being set on that deploy. The

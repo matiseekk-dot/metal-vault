@@ -79,7 +79,31 @@ export MV_TEST_PASSWORD=…
 
 Or drop them in `.env.local` (already gitignored). Don't commit them.
 
-### 5. Mirror the same secrets to GitHub Actions
+### 5. Disable Vercel Authentication for Preview deployments
+
+Vercel projects ship with **Deployment Protection → Vercel
+Authentication** set to "All Deployments" by default — every
+deployment URL returns a 401 SSO redirect to anonymous traffic.
+Production alias (`metal-vault-six.vercel.app`) is exempt because
+it's the team's public domain, but per-deployment URLs aren't.
+
+CI on push-to-main uses the production alias automatically. CI on
+PRs needs Preview URLs to be reachable, so:
+
+**Option A — disable protection for Preview (simpler):**
+Project → Settings → Deployment Protection → Vercel Authentication →
+toggle to **"Only Production Deployments"** (Preview becomes public).
+Acceptable while the project is unreleased; revisit before public PRs
+land.
+
+**Option B — bypass token (keeps protection on):**
+Project → Settings → Deployment Protection → Protection Bypass for
+Automation → Generate token. Add it as `VERCEL_AUTOMATION_BYPASS_TOKEN`
+to GitHub repo secrets. The workflow can then send
+`x-vercel-protection-bypass: <token>` header (TODO: not wired up yet —
+add when needed).
+
+### 6. Mirror the same secrets to GitHub Actions
 
 GitHub repo → Settings → Secrets and variables → Actions →
 "New repository secret". Add the same three names + values you put
