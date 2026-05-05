@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getArtistDiscography as mbDiscography } from '@/lib/musicbrainz';
 
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,41 @@ function norm(str) {
 const CACHE = new Map();
 const TTL   = 2 * 60 * 60 * 1000; // 2 hours
 
+// ── MusicBrainz fallback ──────────────────────────────────────
+// When Discogs rate-limits us (or fails entirely) we fall back to MB.
+// Slower (1 req/sec throttle) but free and no auth. UI still shows the
+// discography; we tag the response with `source: 'musicbrainz'` so the
+// frontend can display a small note.
+async function fallbackToMusicbrainz(artist, vinylOnly) {
+  const result = await mbDiscography(artist);
+  if (!result?.albums) return null;
+
+  let albums = result.albums.map(a => ({
+    id:         a.id,
+    title:      a.title,
+    year:       a.year,
+    cover:      a.cover,
+    format:     a.format,
+    discogsUrl: a.discogsUrl,           // actually MB URL — same field name keeps UI compatible
+    normTitle:  norm(a.title),
+  }));
+
+  // vinylOnly is harmless here — MB doesn't track per-format pressings
+  // at the release-group level. We pass everything through.
+  if (vinylOnly) {
+    // No filtering possible without N more MB calls; return as-is.
+  }
+
+  return {
+    artist:    result.name || artist,
+    artistId:  result.mbid,
+    total:     albums.length,
+    albums,
+    source:   'musicbrainz',
+    note:     'Discogs rate-limited — using MusicBrainz catalog',
+  };
+}
+
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const artist    = (searchParams.get('artist') || '').trim();
@@ -43,6 +79,11 @@ export async function GET(req) {
 
   const headers = { ...UA, Authorization: token };
 
+  // Sentinel error class: when Discogs is rate-limited we throw this
+  // so the outer catch can swap in MusicBrainz instead of bubbling 500
+  // to the client.
+  class RateLimited extends Error { constructor(msg) { super(msg); this.code = 'RATE_LIMITED'; } }
+
   try {
     // ── Step 1: find Discogs artist ID ──────────────────────────
     let artistId = forcedId;
@@ -59,7 +100,7 @@ export async function GET(req) {
         if (sr.status === 429) {
           attempts++;
           if (attempts < 3) await new Promise(r => setTimeout(r, 1200 * attempts));
-          else throw new Error('Discogs rate limited — please wait a moment and try again');
+          else throw new RateLimited('Discogs rate limited');
         } else break;
       }
       if (!sr.ok) throw new Error('Discogs search failed: ' + sr.status);
@@ -84,7 +125,7 @@ export async function GET(req) {
       if (relResp.status === 429) {
         relAttempts++;
         if (relAttempts < 3) await new Promise(r => setTimeout(r, 1200 * relAttempts));
-        else throw new Error('Discogs rate limited — please wait a moment and try again');
+        else throw new RateLimited('Discogs rate limited');
       } else break;
     }
     if (!relResp.ok) throw new Error('Releases fetch failed: ' + relResp.status);
@@ -156,6 +197,23 @@ export async function GET(req) {
     return NextResponse.json(result);
 
   } catch (e) {
+    // Rate-limited? Try MusicBrainz instead — slower (1 req/sec hard
+    // throttle on their side) but free, no auth, and covers the metal
+    // catalog very well. Other Discogs errors bubble up so the user
+    // sees the actual problem rather than a misleading "MB result".
+    if (e.code === 'RATE_LIMITED') {
+      const mb = await fallbackToMusicbrainz(artist, vinylOnly);
+      if (mb) {
+        // Cache the MB result with a shorter TTL so we go back to
+        // Discogs sooner once the rate window resets.
+        CACHE.set(cacheKey, { ts: Date.now() - (TTL - 15 * 60 * 1000), data: mb });
+        return NextResponse.json(mb);
+      }
+      return NextResponse.json({
+        error: 'Discogs rate-limited and MusicBrainz returned nothing.',
+        artist, albums: [],
+      }, { status: 503 });
+    }
     return NextResponse.json({ error: e.message, artist, albums: [] }, { status: 500 });
   }
 }

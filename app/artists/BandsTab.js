@@ -461,6 +461,16 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
 
       {/* Summary row */}
       <div style={{ marginBottom:14 }}>
+        {data.source === 'musicbrainz' && (
+          <div style={{
+            fontSize: 10, color: '#60a5fa', ...MONO,
+            background: '#0d1428', border: '1px solid #1e3a8a',
+            borderRadius: 6, padding: '5px 9px', marginBottom: 8,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <span>ℹ {t('bands.fallbackNote')}</span>
+          </div>
+        )}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
           <div style={{ fontSize:10, color:C.dim, ...MONO }}>
             {enriched.length} release{enriched.length !== 1 ? 's' : ''}
