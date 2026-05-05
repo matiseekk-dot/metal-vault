@@ -214,44 +214,58 @@ jobs:
       # private repos the workflow log is admin-only, so PR comments
       # are the only failure-diagnostic surface available without
       # bouncing through the user.
+      #
+      # Uses actions/github-script (octokit-backed) instead of raw
+      # curl. Two reasons:
+      #   - automatic GITHUB_TOKEN auth dance with proper error
+      #     reporting (curl was getting non-201 silently and the
+      #     ::error:: line inside the log was admin-only readable)
+      #   - JSON body construction stays in JS so we don't have to
+      #     escape backticks / newlines through bash/jq
       - name: Post test digest as PR comment
         if: always() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          OUTCOME:   ${{ steps.tests.outcome }}
-        run: |
-          icon="✅"
-          title="passed"
-          if [ "$OUTCOME" = "failure" ]; then
-            icon="❌"
-            title="failed"
-          fi
-          list=""
-          if [ -s /tmp/test-list.txt ]; then list=$(head -c 8000 /tmp/test-list.txt); fi
-          out=""
-          if [ -s /tmp/playwright-output.txt ]; then out=$(tail -c 50000 /tmp/playwright-output.txt); fi
-          body=$(jq -Rs \
-            --arg icon "$icon" \
-            --arg title "$title" \
-            --arg run "${{ github.run_id }}" \
-            --arg list "$list" \
-            --arg out "$out" \
-            -n \
-            '"\($icon) E2E run \($title) — [run \($run)](https://github.com/${{ github.repository }}/actions/runs/\($run))\n\n<details><summary>discovered tests</summary>\n\n```\n" + $list + "\n```\n\n</details>\n\n<details><summary>output (last 50KB)</summary>\n\n```\n" + $out + "\n```\n\n</details>"')
-          # -w for status, -o for stderr-friendly response capture so a
-          # 403 doesn't silently swallow the digest like it did the first
-          # two times.
-          status=$(curl -sS -X POST -o /tmp/comment-resp.txt -w "%{http_code}" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-            -d "$body")
-          echo "PR comment POST → HTTP $status"
-          if [ "$status" != "201" ]; then
-            cat /tmp/comment-resp.txt
-            exit 1
-          fi
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const read = (p, slice) => {
+              try {
+                const s = fs.readFileSync(p, 'utf8');
+                return slice === 'tail' ? s.slice(-50000) : s.slice(0, 8000);
+              } catch { return ''; }
+            };
+            const list = read('/tmp/test-list.txt', 'head');
+            const out  = read('/tmp/playwright-output.txt', 'tail');
+            const outcome = '${{ steps.tests.outcome }}';
+            const icon  = outcome === 'failure' ? '❌' : '✅';
+            const title = outcome === 'failure' ? 'failed' : 'passed';
+            const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const fence = '```';
+            const body = [
+              `${icon} **E2E run ${title}** — [run logs](${runUrl})`,
+              ``,
+              `<details><summary>discovered tests</summary>`,
+              ``,
+              fence,
+              list || '(empty)',
+              fence,
+              ``,
+              `</details>`,
+              ``,
+              `<details><summary>output (last 50KB)</summary>`,
+              ``,
+              fence,
+              out || '(empty)',
+              fence,
+              ``,
+              `</details>`,
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
 
       # Make the workflow visibly red. Without this the
       # continue-on-error on the test step would let the run finish
