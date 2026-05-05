@@ -110,11 +110,18 @@ export async function POST() {
       }
 
       if (trigger) {
-        await sb.from('price_alerts').update({
-          triggered_at:    new Date().toISOString(),
-          is_active:       false,
-          last_seen_price: lowest,
+        // Schema reality: price_alerts has `last_triggered`, NOT
+        // `triggered_at`. Earlier code referenced two more columns
+        // (`last_seen_price`, `updated_at`) that were never added.
+        // Both UPDATEs were silently failing — alert stayed
+        // is_active=true forever, push/email did fire on first hit
+        // but every subsequent cron pass re-fired the same alert
+        // because is_active never flipped.
+        const { error: upErr } = await sb.from('price_alerts').update({
+          last_triggered: new Date().toISOString(),
+          is_active:      false,
         }).eq('id', alert.id);
+        if (upErr) console.error('[alerts/trigger] update failed:', upErr.message);
         await sendPushToUser(alert.user_id, {
           title: '🎯 Price alert hit',
           body:  alert.artist + ' — ' + alert.album + ' ' + msg,
@@ -133,10 +140,9 @@ export async function POST() {
         out.triggered++;
         out.results.push({ id: alert.id, status: 'TRIGGERED', msg });
       } else {
-        await sb.from('price_alerts').update({
-          last_seen_price: lowest,
-          updated_at:      new Date().toISOString(),
-        }).eq('id', alert.id);
+        // No-fire branch — there's no real column to write here in
+        // the current schema (last_seen_price + updated_at don't
+        // exist). Just record the result for the response payload.
         out.results.push({ id: alert.id, status: 'NO_FIRE', lowest, target });
       }
     } catch (e) {

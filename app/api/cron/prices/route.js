@@ -85,11 +85,18 @@ export async function GET(request) {
   // before reaching the alerts loop. With alerts first, even a 12-alert
   // user gets them processed in ~7s — well under any timeout.
   {
-    const { data: alerts } = await sb
+    // ORDER BY last_triggered ASC NULLS FIRST: never-triggered alerts
+    // get processed first (they're the user's "I'm waiting on this"
+    // signal), then we cycle through previously-triggered ones in
+    // age order. Earlier code referenced a nonexistent `updated_at`
+    // column here — Postgres would 42703 the whole select, which is
+    // why the cron silently no-op'd for everyone.
+    const { data: alerts, error: alertsErr } = await sb
       .from('price_alerts')
       .select('*, auth_user:user_id(email)')
       .eq('is_active', true)
-      .order('updated_at', { ascending: true, nullsFirst: true });
+      .order('last_triggered', { ascending: true, nullsFirst: true });
+    if (alertsErr) console.error('[cron/prices] alerts select failed:', alertsErr.message);
 
     const alertsToCheck = alerts || [];
     results.totalAlertsActive = alertsToCheck.length;
@@ -158,11 +165,15 @@ export async function GET(request) {
         }
 
         if (trigger) {
-          await sb.from('price_alerts').update({
-            triggered_at: new Date().toISOString(),
-            is_active:    false,
-            last_seen_price: lowest,
+          // Use last_triggered (the column that exists) instead of
+          // triggered_at + last_seen_price (which don't). Old code
+          // silently failed every UPDATE here, leaving is_active=true
+          // forever — same alert re-fired on every cron pass.
+          const { error: upErr } = await sb.from('price_alerts').update({
+            last_triggered: new Date().toISOString(),
+            is_active:      false,
           }).eq('id', alert.id);
+          if (upErr) console.error('[cron/prices] trigger update failed:', upErr.message);
 
           await sendPushToUser(alert.user_id, {
             title: '🎯 Price alert hit',
@@ -181,13 +192,12 @@ export async function GET(request) {
             );
           }
           results.alertsTriggered++;
-        } else {
-          // Even if not triggered, update last_seen_price + updated_at so we rotate fairly
-          await sb.from('price_alerts').update({
-            last_seen_price: lowest,
-            updated_at:      new Date().toISOString(),
-          }).eq('id', alert.id);
         }
+        // No-fire branch intentionally writes nothing — last_seen_price
+        // and updated_at columns don't exist in the schema, and
+        // last_triggered must stay NULL until the alert actually fires
+        // (the order-by uses NULLs-first to prioritise un-triggered
+        // alerts each pass).
       } catch (e) {
         results.errors.push('alert:'+alert.id+':'+e.message.slice(0,30));
       }

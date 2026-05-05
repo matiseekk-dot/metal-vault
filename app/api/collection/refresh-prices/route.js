@@ -146,18 +146,36 @@ export async function POST(request) {
         let current = d.lowest_price?.value || null;
         let median  = current;
 
-        // ── Step 2b: price_suggestions fallback ──
-        // marketplace/stats only reflects ACTIVE listings. For niche
-        // metal pressings (looking at you, GAEREA Mirage) Discogs
-        // frequently has zero active listings even though the record
-        // sells regularly — the user reports "I bought it on Discogs
-        // and it has a price" while the stats endpoint returns null.
+        // ── Step 2b: /releases/{id} fallback ──
+        // The release endpoint returns its own `lowest_price` field
+        // (same source as marketplace/stats so it'll usually agree)
+        // plus `community.have/want` which we ignore here. Trying it
+        // costs an extra round-trip but sometimes the two fields
+        // disagree right after a listing comes/goes — pick whichever
+        // is non-null.
+        if (!current) {
+          const rel = await fetchDiscogs('https://api.discogs.com/releases/' + discogsId);
+          const relPrice = rel?.lowest_price;
+          if (Number.isFinite(relPrice) && relPrice > 0) {
+            current = relPrice;
+            median  = relPrice;
+          }
+        }
+
+        // ── Step 2c: price_suggestions fallback ──
+        // marketplace/stats + /releases/{id} both reflect ACTIVE
+        // listings. For niche metal pressings Discogs frequently has
+        // zero active listings even though the record sells regularly
+        // — user proves this by owning a Discogs-bought copy with no
+        // current listings.
         //
-        // /marketplace/price_suggestions/{id} returns historical median
-        // by condition (Mint, NM, VG+, ...) and works even when
-        // current listings are zero. We pick the NM band as the
-        // "headline" price (most common collector grade), fall back
-        // to VG+ then VG if NM is missing.
+        // /marketplace/price_suggestions/{id} returns historical
+        // median by condition (Mint, NM, VG+, ...). NOTE: this
+        // endpoint requires *user* OAuth in some Discogs API tiers.
+        // Our server uses app-level credentials (key+secret or token)
+        // so it may return 401 — that's silent in fetchDiscogs (null)
+        // and we just skip the fallback. Still worth trying because
+        // some integrations succeed.
         if (!current) {
           const sug = await fetchDiscogs('https://api.discogs.com/marketplace/price_suggestions/' + discogsId);
           if (sug && typeof sug === 'object') {
@@ -176,13 +194,16 @@ export async function POST(request) {
           }
         }
 
-        // Stamp last_price_check unconditionally — the cooldown logic
-        // above (10 min for null, 7 d for non-null) is what gates retry.
-        const update = {
-          current_price:    current,
-          median_price:     median,
-          last_price_check: new Date().toISOString(),
-        };
+        // Build the update — preserve existing prices when refresh
+        // came back null. The previous implementation overwrote
+        // current_price/median_price with null on every empty
+        // result, which meant a record like Mirage that had a price
+        // last week but no active listings today went from
+        // "186 zł" back to "—" on every refresh. Last-known is
+        // a strictly more useful signal than nothing.
+        const update = { last_price_check: new Date().toISOString() };
+        if (current !== null) update.current_price = current;
+        if (median  !== null) update.median_price  = median;
         await supabase.from('collection').update(update).eq('id', item.id);
 
         if (current || median) {

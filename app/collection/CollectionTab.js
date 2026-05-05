@@ -676,6 +676,10 @@ export function CollectionTab({
   const [priceInputVal, setPriceInputVal] = useState('');
   const [targetPrice, setTargetPrice]     = useState('');
   const [alertType,   setAlertType]       = useState('PRICE_DROP');
+  // When non-null, the inline alert form is in EDIT mode for that
+  // alert id — saving fires PATCH /api/alerts?id= instead of POST.
+  // Null means create new.
+  const [editingAlertId, setEditingAlertId] = useState(null);
   const [gradingExpandedId, setGradingExpandedId] = useState(null);
   const [gradingDraft, setGradingDraft]   = useState({});  // per-item draft {sleeve_grade, vinyl_grade, inner_sleeve_grade, hype_sticker, playback_notes}
   const [gradingSaving, setGradingSaving] = useState(false);
@@ -761,31 +765,34 @@ export function CollectionTab({
       return;
     }
     setSaving(true);
+    const editing = !!editingAlertId;
     // Capture current price as baseline for percent-based alerts
     const currentPrice = Number(item.median_price || item.current_price) || null;
-    const payload = {
-      discogs_id:    item.discogs_id,
-      collection_id: item.id,
-      artist:        item.artist,
-      album:         item.album,
-      target_price:  price,
-      alert_type:    alertType,
-    };
-    // Set baseline only for percent-based or rise alerts (drop alerts don't need it)
+    // PATCH only accepts these mutable fields; POST takes the full
+    // identity payload because the alert is new.
+    const payload = editing
+      ? { target_price: price, alert_type: alertType }
+      : {
+          discogs_id:    item.discogs_id,
+          collection_id: item.id,
+          artist:        item.artist,
+          album:         item.album,
+          target_price:  price,
+          alert_type:    alertType,
+        };
     if (alertType === 'PERCENT_DROP' || alertType === 'PERCENT_RISE' || alertType === 'PRICE_RISE') {
       payload.baseline_price = currentPrice;
     }
     try {
-      const res = await fetch('/api/alerts', {
-        method: 'POST',
+      const url    = editing ? '/api/alerts?id=' + encodeURIComponent(editingAlertId) : '/api/alerts';
+      const method = editing ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Free-tier limit gets a dedicated upsell flow; everything else
-        // surfaces the server's reason in a toast so the user can see
-        // why the silent fire-and-forget version was eating their input.
         if (d.error === 'ALERT_LIMIT_REACHED') {
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'ALERT_LIMIT_REACHED' } }));
@@ -796,7 +803,6 @@ export function CollectionTab({
         setSaving(false);
         return;
       }
-      // Authoritative state straight from the insert — no extra round-trip.
       const a = d.alert;
       if (a) {
         const key = a.collection_id || a.discogs_id;
@@ -809,10 +815,61 @@ export function CollectionTab({
       }
       toast.success(t('alert.saved') || 'Alert set');
       setShowAlertForm(null); setTargetPrice(''); setAlertType('PRICE_DROP');
+      setEditingAlertId(null);
     } catch (e) {
       toast.error(t('vault.alert.failed') || ('Could not save alert: ' + e.message));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Switch the inline alert form into edit mode for an existing
+  // alert. Pre-populates type + price; createAlert() will detect
+  // editingAlertId and use PATCH instead of POST.
+  const startEditAlert = (item, alert) => {
+    setEditingAlertId(alert.id);
+    setAlertType(alert.type || 'PRICE_DROP');
+    setTargetPrice(String(alert.price ?? ''));
+    setShowAlertForm(item.id);
+  };
+
+  // Trigger /api/alerts/trigger on demand — re-evaluates this user's
+  // active alerts against live Discogs prices NOW instead of waiting
+  // for the daily 09:00 UTC cron. Mirrors the WatchlistTab equivalent.
+  // Important for users who just set an alert and want to verify the
+  // pipeline (push subscription + VAPID + Resend) actually fires.
+  const checkAlertsNow = async () => {
+    try {
+      const r = await fetch('/api/alerts/trigger', { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast.error(d.error || t('alert.checkFailed') || 'Could not check alerts');
+        return;
+      }
+      if (d.triggered > 0) {
+        toast.success(t('alert.checkTriggered', { n: d.triggered })
+          || (d.triggered + ' alert(s) fired'));
+        // Refresh active-alerts state — triggered alerts flip to
+        // is_active=false, so they should disappear from the badge.
+        try {
+          const fresh = await fetch('/api/alerts').then(r => r.json());
+          if (fresh.alerts) {
+            const map = {};
+            for (const a of fresh.alerts) {
+              if (a.is_active === false) continue;
+              const key = a.collection_id || a.discogs_id;
+              if (!key) continue;
+              map[String(key)] = { id: a.id, price: Number(a.target_price), type: a.alert_type || 'PRICE_DROP' };
+            }
+            setActiveAlerts(map);
+          }
+        } catch {}
+      } else {
+        toast.success(t('alert.checkClean', { n: d.checked || 0 })
+          || ('Checked ' + (d.checked || 0) + ' alert(s) — no triggers'));
+      }
+    } catch (e) {
+      toast.error(e.message);
     }
   };
 
@@ -1459,23 +1516,46 @@ export function CollectionTab({
                                   }
                                   style={{ ...inputSt, padding: '6px 10px', fontSize: 14, flex: 1 }} />
                                 <button onClick={() => createAlert(item)} disabled={saving} style={{ background: C.accent, border: 'none', borderRadius: 6, color: '#fff', padding: '7px 12px', cursor: 'pointer', ...BEBAS, fontSize: 14 }}>{saving ? '…' : t('alert.ok')}</button>
-                                <button onClick={() => { setShowAlertForm(null); setAlertType('PRICE_DROP'); }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                                <button onClick={() => {
+                                  setShowAlertForm(null);
+                                  setAlertType('PRICE_DROP');
+                                  setTargetPrice('');
+                                  setEditingAlertId(null);
+                                }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
                               </div>
                             </div>
                           ) : myAlert ? (
                             // Item already has an alert — show "Active"
-                            // badge with target price + a delete-X. Was
-                            // missing entirely before, which is why the
-                            // user thought their alerts didn't save.
+                            // badge with target price + edit + delete.
+                            // The whole label is also clickable to open
+                            // the form pre-populated for edit (matches
+                            // the Vault → Watchlist UX where tapping
+                            // the badge opens edit mode).
                             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6,
                               background: '#1a1500', border: '1px solid #5a4a00', borderRadius: 6,
                               color: '#f5c842', padding: '6px 10px', ...MONO, fontSize: 10 }}>
-                              <span style={{ flex: 1 }}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); startEditAlert(item, myAlert); }}
+                                style={{ flex: 1, background: 'none', border: 'none',
+                                  color: 'inherit', textAlign: 'left', padding: 0,
+                                  cursor: 'pointer', font: 'inherit' }}>
                                 🔔 {myAlert.type === 'PRICE_DROP'   ? t('alert.activePrice',   { n: myAlert.price })
                                   : myAlert.type === 'PERCENT_DROP' ? t('alert.activePercent', { n: myAlert.price })
                                   : myAlert.type === 'LOW_STOCK'    ? t('alert.activeStock',   { n: myAlert.price })
                                   : t('alert.activePrice', { n: myAlert.price })}
-                              </span>
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); checkAlertsNow(); }}
+                                aria-label={t('alert.checkNow') || 'Check alerts now'}
+                                title={t('alert.checkNow') || 'Check alerts now'}
+                                style={{ background: 'none', border: 'none', color: '#4ade80',
+                                  cursor: 'pointer', fontSize: 12, padding: '0 4px', lineHeight: 1 }}>▶</button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); startEditAlert(item, myAlert); }}
+                                aria-label={t('alert.editTitle') || 'Edit alert'}
+                                title={t('alert.editTitle') || 'Edit alert'}
+                                style={{ background: 'none', border: 'none', color: '#f5c842',
+                                  cursor: 'pointer', fontSize: 12, padding: '0 4px', lineHeight: 1 }}>✎</button>
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation();
