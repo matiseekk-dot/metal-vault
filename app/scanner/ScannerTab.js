@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { lookupBarcodeLocal, queuePendingScan } from '@/lib/offline-barcode';
+import { useT } from '@/lib/i18n';
 
 
 function PriceTag({ label, value, color = C.accent }) {
@@ -107,6 +108,7 @@ function ResultCard({ release, onAddToCollection, onAddToWatchlist, inCollection
 }
 
 export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collection, watchlist }) {
+  const t = useT();
   const videoRef    = useRef(null);
   const streamRef   = useRef(null);
   const readerRef   = useRef(null);

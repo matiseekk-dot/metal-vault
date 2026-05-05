@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import { toast } from '@/app/components/Toast';
-import { useT } from '@/lib/i18n';
+import { useT, useLocale } from '@/lib/i18n';
 
 
 const VENUES = [
@@ -58,15 +58,18 @@ function Stars({value,onChange}){
 // (auto-fills concert form via callback) or dismiss. Prompts come from
 // daily snapshot of followed artists' past Bandsintown events.
 function AttendancePrompts({ onAttendConfirm }) {
+  const locale = useLocale();
   const [prompts, setPrompts] = useState([]);
   const [hidden,  setHidden]  = useState(false);
 
   useEffect(() => {
-    fetch('/api/concerts/attendance')
+    // Pass active locale so the server can apply a country whitelist —
+    // a Polish user shouldn't get prompts for shows in Texas.
+    fetch('/api/concerts/attendance?locale=' + encodeURIComponent(locale))
       .then(r => r.json())
       .then(d => setPrompts(d.prompts || []))
       .catch(() => setPrompts([]));
-  }, []);
+  }, [locale]);
 
   const respond = async (eventId, status, prompt) => {
     setPrompts(p => p.filter(x => x.event_id !== eventId));

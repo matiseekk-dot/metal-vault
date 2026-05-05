@@ -57,9 +57,20 @@ export default function MetalVault() {
   // UI — initial tab from URL ?tab=… (manifest shortcuts use this).
   // Only honour known tab ids; anything else falls back to feed.
   const [tab,             setTab]             = useState(() => {
-    if (typeof window === 'undefined') return 'feed';
+    if (typeof window === 'undefined') return 'vault';
+    const valid = ['feed','vault','calendar','profile'];
+    // ?tab=foo wins over everything else (deep links from notifications)
     const fromUrl = new URLSearchParams(window.location.search).get('tab');
-    return ['feed','vault','calendar','profile'].includes(fromUrl) ? fromUrl : 'feed';
+    if (valid.includes(fromUrl)) return fromUrl;
+    // Otherwise restore the last tab the user was on. Vault is the
+    // default for first-run because the Feed (Discogs releases) takes
+    // 1-2s on cold start while Vault renders instantly from local
+    // collection state — gives the user something useful immediately.
+    try {
+      const last = localStorage.getItem('mv_last_tab');
+      if (valid.includes(last)) return last;
+    } catch {}
+    return 'vault';
   });
   const [filter,          setFilter]          = useState('all');
   const [sort,            setSort]            = useState('date_desc');
@@ -653,7 +664,10 @@ export default function MetalVault() {
         )}
       </div>
 
-      <BottomNav tab={tab} onChange={setTab} user={user} onScan={()=>setShowScanner(true)}/>
+      <BottomNav tab={tab} onChange={(t)=>{
+          setTab(t);
+          try { localStorage.setItem('mv_last_tab', t); } catch {}
+        }} user={user} onScan={()=>setShowScanner(true)}/>
 
       {showUpgrade && (
         <UpgradeModal
