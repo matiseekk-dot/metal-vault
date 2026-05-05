@@ -79,6 +79,29 @@ export MV_TEST_PASSWORD=…
 
 Or drop them in `.env.local` (already gitignored). Don't commit them.
 
+### 5. Mirror the same secrets to GitHub Actions
+
+GitHub repo → Settings → Secrets and variables → Actions →
+"New repository secret". Add the same three names + values you put
+in Vercel:
+
+- `TEST_AUTH_SECRET`
+- `MV_TEST_EMAIL`
+- `MV_TEST_PASSWORD`
+
+The `.github/workflows/e2e.yml` workflow runs on every PR and every
+push to main:
+
+1. Waits for Vercel to finish deploying the preview (or production
+   for main).
+2. Runs Playwright against that deployment URL.
+3. Pulls the three secrets above into the runner so the auth tier
+   actually executes.
+
+Without these GitHub secrets the workflow still runs the smoke tier
+but silently skips the auth tier — fine for forks/contributors
+without credentials.
+
 ## How the auth flow works
 
 1. `auth.setup.js` runs first (Playwright project dependency).
