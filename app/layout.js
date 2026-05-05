@@ -54,10 +54,23 @@ export default function RootLayout({ children }) {
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/icons/icon-192.png" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Metal Vault" />
+        {/*
+          iOS PWA startup image. Until per-device splash PNGs are
+          generated (use https://appsco.pe/developer/splash-screens or
+          a similar tool against the icon + #0a0a0a background), iOS
+          falls back to a black background derived from theme_color.
+          Adding the explicit reference improves splash continuity and
+          stops iOS from briefly flashing white on first launch.
+          To finish: drop /public/splash/ios-2048.png + add per-device
+          <link rel="apple-touch-startup-image" media="..."> tags here.
+        */}
+        <link rel="apple-touch-startup-image" href="/icons/icon-512.png" />
+        <meta name="theme-color" content="#0a0a0a" />
       </head>
       <body>
         {children}

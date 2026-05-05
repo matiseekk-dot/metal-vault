@@ -20,8 +20,13 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   // Disable dangerous APIs we don't use
   { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(self), payment=(self)' },
-  // HSTS — force HTTPS for 1 year (Vercel serves HTTPS anyway)
-  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+  // HSTS — force HTTPS for 1 year, declare subdomains, opt into the
+  // browser preload list. After this header has been live with the
+  // `preload` directive for a few weeks we can submit the domain at
+  // https://hstspreload.org/ and Chrome/Firefox will hardcode it. Means
+  // even a first-ever visit on the Polish train wifi can't be MITM'd
+  // by an attacker who tricks the user into a plain http:// link.
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
   // CSP — toggle between report-only and enforce via env var.
   // Set CSP_ENFORCE=1 in Vercel env vars to switch to enforce mode.
   // Report-only mode is default for safety — violations log to console
