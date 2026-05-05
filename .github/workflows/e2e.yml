@@ -138,7 +138,13 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Run E2E suite
-        run: npx playwright test
+        id: tests
+        continue-on-error: true
+        # Tee stdout to a file so the next step can post a digest as
+        # a PR comment. Private-repo workflow logs aren't readable via
+        # the public API so we make failures self-serve via the PR
+        # discussion thread.
+        run: npx playwright test 2>&1 | tee /tmp/playwright-output.txt
         env:
           PWPLAYWRIGHT_BASE_URL: ${{ steps.target.outputs.url }}
           # Auth tier env vars are passed ONLY on pull_request runs.
@@ -167,7 +173,7 @@ jobs:
       # debug without re-running locally. Retention 7 days is enough
       # to investigate within the typical PR review cycle.
       - name: Upload Playwright report
-        if: failure()
+        if: steps.tests.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ github.run_id }}
@@ -175,3 +181,35 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+      # Post the failed-test digest as a PR comment so failures are
+      # diagnosable without admin-level access to the workflow logs
+      # (which the artifact API gates behind admin for private repos).
+      # Tail the last 200 lines of Playwright output — usually contains
+      # all FAILED entries plus their stack frames.
+      - name: Post failure digest as PR comment
+        if: steps.tests.outcome == 'failure' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ ! -s /tmp/playwright-output.txt ]; then
+            echo "No Playwright output captured."
+            exit 0
+          fi
+          tail=$(tail -c 60000 /tmp/playwright-output.txt)
+          body=$(jq -Rs --arg run "${{ github.run_id }}" \
+            '"### E2E run failed (run [\($run)](https://github.com/${{ github.repository }}/actions/runs/\($run)))\n\n<details><summary>last 200 lines of output</summary>\n\n```\n" + . + "\n```\n\n</details>"' \
+            <<< "$tail")
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            -d "$body"
+
+      # Make the workflow visibly red. Without this the
+      # continue-on-error on the test step would let the run finish
+      # green even when tests failed.
+      - name: Fail run on test failure
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
