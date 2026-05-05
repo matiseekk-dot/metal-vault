@@ -43,14 +43,20 @@ export async function POST(request) {
   const auth = discogsAuth();
   if (!auth) return NextResponse.json({ error: 'Discogs not configured' }, { status: 503 });
 
-  // Refresh window: 7 days for items that returned a real price (price
-  // moves slowly). Only 24 h for items that returned null — Discogs
-  // marketplace has zero listings for many niche metal pressings
-  // intermittently, so we want to retry the next day instead of waiting
-  // a week. Items that have NEVER been checked (last_price_check IS NULL)
-  // always qualify.
+  // Refresh windows.
+  // - Items that returned a real price last time → 7-day cooldown
+  //   (Discogs marketplace prices move slowly).
+  // - Items that returned NULL last time → 10-min cooldown.
+  //   Niche metal pressings often have zero active listings, so the
+  //   marketplace/stats endpoint returns null even though the item is
+  //   absolutely buyable on Discogs (the user proves this — they
+  //   bought one). Short cooldown lets the user-clicked Refresh button
+  //   actually retry without artificial backoff. Discogs rate-limit
+  //   protection comes from the 8-batch / 500-ms pacing below.
+  // - Items that have NEVER been checked (last_price_check IS NULL)
+  //   always qualify.
   const staleCutoff   = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();
-  const noDataCutoff  = new Date(Date.now() - 1  * 24 * 60 * 60 * 1000).toISOString();
+  const noDataCutoff  = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
   // Pull items: with discogs_id (refreshable), and items without
   // discogs_id (manual additions — we'll try to FIND a discogs_id by
@@ -61,10 +67,6 @@ export async function POST(request) {
     .eq('user_id', user.id)
     .not('discogs_id', 'is', null)
     .or(
-      // never-checked OR last refresh >7d ago OR last refresh returned
-      // null but is older than 24 h. The third clause means a record
-      // that came back without a price (Discogs has no listings) gets
-      // retried daily instead of frozen for a week.
       [
         'last_price_check.is.null',
         `last_price_check.lt.${staleCutoff}`,
@@ -136,20 +138,46 @@ export async function POST(request) {
           linked++;
         }
 
-        // ── Step 2: marketplace stats for this discogs_id ──
+        // ── Step 2: marketplace stats — current active listings ──
+        // Returns lowest_price (cheapest copy on sale RIGHT NOW) and
+        // num_for_sale. Null-ish when nobody is currently selling.
         const d = await fetchDiscogs('https://api.discogs.com/marketplace/stats/' + discogsId);
         if (!d) { errors++; return; }
-        const current = d.lowest_price?.value || null;
-        // Discogs marketplace/stats actually returns no median. Fall
-        // back to lowest_price for both fields so the UI's "median"
-        // surface still has data.
-        const median  = current;
+        let current = d.lowest_price?.value || null;
+        let median  = current;
 
-        // Only update last_price_check when we actually got a price
-        // OR the fast 24h "no-data" cooldown. That way a permanently
-        // unlisted item gets retried daily instead of being frozen
-        // for a week — fixes the "Mirage isn't getting a price" bug
-        // where one bad refresh locked the row out for 7 days.
+        // ── Step 2b: price_suggestions fallback ──
+        // marketplace/stats only reflects ACTIVE listings. For niche
+        // metal pressings (looking at you, GAEREA Mirage) Discogs
+        // frequently has zero active listings even though the record
+        // sells regularly — the user reports "I bought it on Discogs
+        // and it has a price" while the stats endpoint returns null.
+        //
+        // /marketplace/price_suggestions/{id} returns historical median
+        // by condition (Mint, NM, VG+, ...) and works even when
+        // current listings are zero. We pick the NM band as the
+        // "headline" price (most common collector grade), fall back
+        // to VG+ then VG if NM is missing.
+        if (!current) {
+          const sug = await fetchDiscogs('https://api.discogs.com/marketplace/price_suggestions/' + discogsId);
+          if (sug && typeof sug === 'object') {
+            const pickBand = (k) => {
+              const v = sug[k]?.value;
+              return Number.isFinite(v) && v > 0 ? Number(v) : null;
+            };
+            const nm  = pickBand('Near Mint (NM or M-)') || pickBand('Mint (M)');
+            const vgp = pickBand('Very Good Plus (VG+)');
+            const vg  = pickBand('Very Good (VG)');
+            const fallback = nm || vgp || vg;
+            if (fallback) {
+              current = fallback;
+              median  = nm || vgp || vg;
+            }
+          }
+        }
+
+        // Stamp last_price_check unconditionally — the cooldown logic
+        // above (10 min for null, 7 d for non-null) is what gates retry.
         const update = {
           current_price:    current,
           median_price:     median,
