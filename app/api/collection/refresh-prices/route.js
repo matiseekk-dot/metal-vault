@@ -145,6 +145,12 @@ export async function POST(request) {
         if (!d) { errors++; return; }
         let current = d.lowest_price?.value || null;
         let median  = current;
+        // num_for_sale drives the rarity badge (lib/rarity.js). Track
+        // it from the same source we get price from so they don't
+        // disagree. For Twoj specific pressing both come from
+        // marketplace/stats; if we fall through to master, we'll
+        // overwrite this with the master-aggregate count below.
+        let numForSale = Number.isFinite(d.num_for_sale) ? d.num_for_sale : null;
 
         // ── Step 2b: /releases/{id} fallback ──
         // The release endpoint returns its own `lowest_price` field
@@ -160,6 +166,9 @@ export async function POST(request) {
             current = relPrice;
             median  = relPrice;
           }
+          if (Number.isFinite(rel?.num_for_sale) && (numForSale == null || numForSale === 0)) {
+            numForSale = rel.num_for_sale;
+          }
           if (rel?.master_id) masterId = rel.master_id;
         }
 
@@ -172,12 +181,16 @@ export async function POST(request) {
         // across every version — this is the value that shows on the
         // album's master page on discogs.com. Less precise than the
         // exact variant's price, but a much better signal than "—".
-        if (!current && masterId) {
+        // Same logic for num_for_sale → drives the rarity badge.
+        if ((!current || (numForSale == null || numForSale === 0)) && masterId) {
           const master = await fetchDiscogs('https://api.discogs.com/masters/' + masterId);
           const masterPrice = master?.lowest_price;
-          if (Number.isFinite(masterPrice) && masterPrice > 0) {
+          if (!current && Number.isFinite(masterPrice) && masterPrice > 0) {
             current = masterPrice;
             median  = masterPrice;
+          }
+          if ((numForSale == null || numForSale === 0) && Number.isFinite(master?.num_for_sale)) {
+            numForSale = master.num_for_sale;
           }
         }
 
@@ -213,9 +226,14 @@ export async function POST(request) {
         // last week but no active listings today went from
         // "186 zł" back to "—" on every refresh. Last-known is
         // a strictly more useful signal than nothing.
+        // num_for_sale also written so the rarity badge updates —
+        // earlier the column was set once at sync time and never
+        // touched again, so any record that became rarer (or more
+        // common) never reflected it.
         const update = { last_price_check: new Date().toISOString() };
-        if (current !== null) update.current_price = current;
-        if (median  !== null) update.median_price  = median;
+        if (current    !== null) update.current_price = current;
+        if (median     !== null) update.median_price  = median;
+        if (numForSale !== null) update.num_for_sale  = numForSale;
         await supabase.from('collection').update(update).eq('id', item.id);
 
         if (current || median) {
