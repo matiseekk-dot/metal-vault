@@ -19,7 +19,19 @@ export const dynamic = 'force-dynamic';
 
 const NO_CACHE = { 'Cache-Control': 'no-store' };
 
+// Admin gate. The debug endpoint leaks env-var presence + Spotify/Deezer
+// HTTP statuses + body excerpts — useful for ops but not for arbitrary
+// visitors. In prod we require DEBUG_ENDPOINTS_ENABLED=1 to be set in
+// Vercel env; locally everything is open.
+function debugAllowed() {
+  if (process.env.NODE_ENV !== 'production') return true;
+  return process.env.DEBUG_ENDPOINTS_ENABLED === '1';
+}
+
 export async function GET(req) {
+  if (!debugAllowed()) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   const name = (new URL(req.url).searchParams.get('name') || 'Opeth').trim();
 
   const out = {

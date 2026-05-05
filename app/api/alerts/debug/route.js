@@ -20,6 +20,13 @@ import { createClient } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
 
+// Admin gate. The debug endpoint dumps the user's full alert table +
+// live Discogs lookups; keep it off in prod unless explicitly enabled.
+function debugAllowed() {
+  if (process.env.NODE_ENV !== 'production') return true;
+  return process.env.DEBUG_ENDPOINTS_ENABLED === '1';
+}
+
 function discogsAuth() {
   const k = process.env.DISCOGS_KEY, s = process.env.DISCOGS_SECRET, t = process.env.DISCOGS_TOKEN;
   if (k && s) return 'Discogs key=' + k + ', secret=' + s;
@@ -28,6 +35,9 @@ function discogsAuth() {
 }
 
 export async function GET() {
+  if (!debugAllowed()) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
