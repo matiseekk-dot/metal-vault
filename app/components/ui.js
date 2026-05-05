@@ -7,6 +7,7 @@ import PhotoUploader from '@/app/components/PhotoUploader';
 import Icon from '@/app/components/Icon';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { useT } from '@/lib/i18n';
+import { useCurrency, useFx, formatPrice } from '@/lib/currency';
 
 // ── formatDate helper ─────────────────────────────────────────
 function formatDate(dateStr) {
@@ -91,6 +92,8 @@ export function StatsBar({releases}){
 
 // ── AlbumCard ─────────────────────────────────────────────────
 export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,onFollowToggle,user,isInCollection,onQuickAdd}){
+  const cur = useCurrency();
+  const fx  = useFx();
   const today=new Date();
   const rd=new Date(album.releaseDate);
   const isPreorder=(rd>today)||album.preorder===true;
@@ -159,7 +162,7 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
             {isPreorder?'🗓 '+formatDate(album.releaseDate||''):formatDate(album.releaseDate||'')}
           </div>
           {album.lowest_price>0&&(
-            <span style={{fontSize:10,color:'#4ade80',...MONO}}>${Number(album.lowest_price).toFixed(0)}</span>
+            <span style={{fontSize:10,color:'#4ade80',...MONO}}>{formatPrice(album.lowest_price, cur, fx)}</span>
           )}
         </div>
         {user&&(
@@ -178,6 +181,8 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
 // ── VinylModal ────────────────────────────────────────────────
 export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollection,vinylData,loading,error,premium,collectionItem,onUpgrade,onPhotosChange}){
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   const [history, setHistory] = useState(null);
   const [histLoading, setHistLoading] = useState(false);
   useBackButton(true, onClose);
@@ -278,7 +283,7 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                     </div>
                     {v.lowestPrice ? (
                       <div style={{textAlign:'right',flexShrink:0}}>
-                        <div style={{...BEBAS,fontSize:20,color:C.accent,lineHeight:1}}>${v.lowestPrice.toFixed(0)}</div>
+                        <div style={{...BEBAS,fontSize:20,color:C.accent,lineHeight:1}}>{formatPrice(v.lowestPrice, cur, fx)}</div>
                         <div style={{fontSize:8,color:C.dim,...MONO}}>
                           {v.numForSale > 0 ? t('vinyl.forSale', { n: v.numForSale }) : t('vinyl.lowest')}
                         </div>
@@ -363,7 +368,7 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                     return (
                       <div>
                         <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
-                          <span style={{fontSize:11,color:C.dim,...MONO}}>${min.toFixed(0)} – ${max.toFixed(0)}</span>
+                          <span style={{fontSize:11,color:C.dim,...MONO}}>{formatPrice(min, cur, fx)} – {formatPrice(max, cur, fx)}</span>
                           <span style={{fontSize:12,color:change>=0?'#4ade80':'#f87171',...MONO,fontWeight:'bold'}}>
                             {change>=0?'+':''}{change.toFixed(0)} ({change>=0?'+':''}{((change/first)*100).toFixed(0)}%)
                           </span>

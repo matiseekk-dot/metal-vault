@@ -15,6 +15,7 @@ import WhensOnTab from '@/app/whens-on/WhensOnTab';
 import Icon from '@/app/components/Icon';
 import UpgradeModal from '@/app/components/UpgradeModal';
 import ArtistInfoModal from '@/app/components/ArtistInfoModal';
+import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 import WhatsNew from '@/app/components/WhatsNew';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm } from '@/app/components/Toast';
@@ -43,6 +44,8 @@ const ALL_GENRES = ['Heavy Metal','Death Metal','Black Metal','Thrash Metal','Do
 export default function MetalVault() {
   const supabase = useRef(createClient()).current;
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
 
   // Auth
   const [user,    setUser]    = useState(null);
@@ -494,11 +497,11 @@ export default function MetalVault() {
           {user && col.collectionSummary && col.collectionSummary.totalCurrent > 0 ? (
             <button onClick={()=>setTab('stats')} style={{ background:'none', border:'none', cursor:'pointer', textAlign:'right', padding:0 }}>
               <div style={{ ...BEBAS, fontSize:22, color:C.gold, lineHeight:1, letterSpacing:'0.04em' }}>
-                ${col.collectionSummary.totalCurrent.toFixed(0)}
+                {formatPrice(col.collectionSummary.totalCurrent, cur, fx)}
               </div>
               {col.collectionSummary.gain !== 0 && (
                 <div style={{ fontSize:9, color: col.collectionSummary.gain >= 0 ? '#4ade80' : '#f87171', ...MONO, textAlign:'right' }}>
-                  {col.collectionSummary.gain >= 0 ? '+' : ''}${col.collectionSummary.gain.toFixed(0)}
+                  {formatChange(col.collectionSummary.gain, cur, fx)}
                 </div>
               )}
             </button>

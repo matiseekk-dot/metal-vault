@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { lookupBarcodeLocal, queuePendingScan } from '@/lib/offline-barcode';
 import { useT } from '@/lib/i18n';
+import { useCurrency, useFx, formatPrice } from '@/lib/currency';
 
 
 function PriceTag({ label, value, color = C.accent }) {
@@ -16,6 +17,8 @@ function PriceTag({ label, value, color = C.accent }) {
 }
 
 function ResultCard({ release, onAddToCollection, onAddToWatchlist, inCollection, inWatchlist }) {
+  const cur = useCurrency();
+  const fx  = useFx();
   const [added, setAdded] = useState('');
 
   return (
@@ -53,7 +56,7 @@ function ResultCard({ release, onAddToCollection, onAddToWatchlist, inCollection
       {/* Price stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: C.border, margin: '0 16px', borderRadius: 8, overflow: 'hidden' }}>
         {[
-          { label: 'Lowest',  value: release.lowestPrice ? '$'+release.lowestPrice.toFixed(0) : '—', color: '#4ade80' },
+          { label: 'Lowest',  value: release.lowestPrice ? formatPrice(release.lowestPrice, cur, fx) : '—', color: '#4ade80' },
           { label: 'For sale', value: release.numForSale || '—', color: C.muted },
           { label: 'Have',    value: release.community?.have || '—', color: C.dim },
         ].map(s => (

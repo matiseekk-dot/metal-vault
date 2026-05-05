@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import { toast } from '@/app/components/Toast';
 import { useT, useLocale } from '@/lib/i18n';
+import { useCurrency, useFx, formatPrice } from '@/lib/currency';
 
 
 const VENUES = [
@@ -210,6 +211,8 @@ function SetlistViewer({ artist, year, city, onClose }) {
 
 export default function ConcertsTab() {
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   const [concerts,setConcerts] = useState([]);
   const [venues,setVenues]     = useState(VENUES);
   const [tab,setTab]           = useState('list'); // list | ranking
@@ -392,7 +395,7 @@ export default function ConcertsTab() {
         {[
           {icon:'🎸',val:concerts.length,label:'shows'},
           {icon:'🏆',val:Object.keys(bandMap).length,label:'bands'},
-          {icon:'🎟',val:totalSpent>0?'$'+totalSpent.toFixed(0):'—',label:'spent'},
+          {icon:'🎟',val:totalSpent>0 ? formatPrice(totalSpent, cur, fx) : '—',label:'spent'},
         ].map(s=>(
           <div key={s.label} style={{flex:1,textAlign:'center',padding:'10px 4px'}}>
             <div style={{fontSize:11,...MONO,color:C.dim}}>{s.icon}</div>
