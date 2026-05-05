@@ -101,19 +101,41 @@ export async function GET(request) {
     const alertsToCheck = alerts || [];
     results.totalAlertsActive = alertsToCheck.length;
 
+    // Resolve missing alert.discogs_id from alert.collection_id →
+    // collection.discogs_id in one batch, so watchlist-originated
+    // alerts (which often have discogs_id=null because POST
+    // normalised a slug album_id to NULL) actually get evaluated
+    // instead of silently skipped each pass.
+    const colIds = alertsToCheck.map(a => a.collection_id).filter(Boolean);
+    const colMap = {};
+    if (colIds.length) {
+      const { data: cols } = await sb
+        .from('collection').select('id, discogs_id').in('id', colIds);
+      for (const c of (cols || [])) colMap[c.id] = c.discogs_id;
+    }
+    const resolveDiscogsId = (alert) => {
+      if (alert.discogs_id) return alert.discogs_id;
+      if (alert.collection_id && colMap[alert.collection_id]) return colMap[alert.collection_id];
+      if (alert.album_id) {
+        const n = Number(alert.album_id);
+        if (Number.isFinite(n) && n > 0) return n;
+      }
+      return null;
+    };
+
     for (const alert of alertsToCheck) {
       if (budgetExpired()) break;
-      // Skip alerts with no Discogs ID — those came from BandsTab "♥
-      // wanted" toggles or MB-fallback rows and have nothing for the
-      // marketplace stats endpoint to look up. They stay in the table
-      // as wishlist reminders but don't consume the cron budget.
-      if (!alert.discogs_id) {
+      const did = resolveDiscogsId(alert);
+      if (!did) {
+        // Genuinely no resolvable Discogs ID (watchlist row from
+        // BandsTab "♥ wanted" toggle or MB-fallback). Skip without
+        // burning the budget — these are wishlist reminders only.
         results.alertsSkippedNoId = (results.alertsSkippedNoId || 0) + 1;
         continue;
       }
       try {
         const r = await fetch(
-          'https://api.discogs.com/marketplace/stats/'+alert.discogs_id,
+          'https://api.discogs.com/marketplace/stats/'+did,
           { headers: { Authorization: discogsAuth, 'User-Agent': 'MetalVault/1.0' } }
         );
         if (!r.ok) continue;

@@ -76,12 +76,46 @@ export async function POST() {
   const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
   const out = { checked: 0, triggered: 0, skipped_no_id: 0, results: [] };
 
+  // Pre-fetch all referenced collection rows in one round-trip so we
+  // can fall back to collection.discogs_id when the alert row itself
+  // doesn't have one (watchlist-originated alerts often store
+  // album_id as a slug, which the POST normalisation strips to NULL).
+  const collectionIds = (alerts || []).map(a => a.collection_id).filter(Boolean);
+  let colMap = {};
+  if (collectionIds.length) {
+    const { data: cols } = await sb
+      .from('collection').select('id, discogs_id').in('id', collectionIds);
+    for (const c of (cols || [])) colMap[c.id] = c.discogs_id;
+  }
+
+  // Resolve a usable Discogs release ID for an alert, even when the
+  // alert row itself has discogs_id=null. Order:
+  //   1. alert.discogs_id (already a numeric column)
+  //   2. collection_id → collection.discogs_id (collection-anchored alerts)
+  //   3. album_id, if it parses to a positive integer (some watchlist
+  //      rows store the Discogs master/release id there as a string)
+  // Returns null if none work — caller should record skipped_no_id.
+  const resolveDiscogsId = (alert) => {
+    if (alert.discogs_id) return alert.discogs_id;
+    if (alert.collection_id && colMap[alert.collection_id]) return colMap[alert.collection_id];
+    if (alert.album_id) {
+      const n = Number(alert.album_id);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    return null;
+  };
+
   for (const alert of (alerts || [])) {
-    if (!alert.discogs_id) { out.skipped_no_id++; continue; }
+    const did = resolveDiscogsId(alert);
+    if (!did) {
+      out.skipped_no_id++;
+      out.results.push({ id: alert.id, status: 'no_discogs_id', album_id: alert.album_id });
+      continue;
+    }
     out.checked++;
     try {
       const r = await fetch(
-        'https://api.discogs.com/marketplace/stats/' + alert.discogs_id,
+        'https://api.discogs.com/marketplace/stats/' + did,
         { headers: { Authorization: auth, 'User-Agent': 'MetalVault/1.0' } }
       );
       if (!r.ok) {
