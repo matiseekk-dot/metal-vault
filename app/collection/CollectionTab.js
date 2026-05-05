@@ -931,7 +931,7 @@ export function CollectionTab({
                 await fetch('/api/collection/batch', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
                 onUpdate([]);
               }} style={{ flex: 1, padding: '7px', background: '#1a0000', border: '1px solid #7f1d1d', borderRadius: 7, color: '#f87171', cursor: 'pointer', fontSize: 10, ...MONO }}>
-                🗑 {t('common.delete').replace(/[a-z]+/, m => m + ' all')}
+                🗑 {t('vault.bulk.deleteAll')}
               </button>
             </div>
           )}
@@ -1065,7 +1065,14 @@ export function CollectionTab({
                           {item.format && item.format !== 'Vinyl' && <span style={{ fontSize: 8, color: C.dim, ...MONO, padding: '1px 4px', background: C.bg3, borderRadius: 3 }}>{item.format}</span>}
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>{formatPrice(paid, cur, fx)}</span>}
                           {now > 0  && <span style={{ fontSize: 9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO }}>→{formatPrice(now, cur, fx)}{gain !== null ? (gain >= 0 ? ' ▲' : ' ▼') : ''}</span>}
-                          {now === 0 && paid > 0 && <span style={{ fontSize: 8, color: '#444', ...MONO }}>⏳</span>}
+                          {now === 0 && paid > 0 && (
+                            // Was an ⏳ hourglass — users read it as a live
+                            // spinner ("keeps searching for the last record's
+                            // price") even though no fetch is in flight.
+                            // Plain dash + tooltip is unambiguous.
+                            <span title={t('vault.refreshPrices.pending')}
+                              style={{ fontSize: 9, color: '#666', ...MONO }}>—</span>
+                          )}
                           {/* Rarity badge — uses Discogs num_for_sale */}
                           {(() => {
                             const r = rarityFromCount(item.num_for_sale);

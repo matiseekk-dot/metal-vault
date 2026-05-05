@@ -215,7 +215,7 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
       {!loading && visible.length > 0 && (
         <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {visible.map(ev => (
-            <EventCard key={ev.id + '_' + ev.artist} ev={ev}/>
+            <EventCard key={ev.id + '_' + ev.artist} ev={ev} locale={locale}/>
           ))}
         </div>
       )}
@@ -277,7 +277,7 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
   );
 }
 
-function EventCard({ ev }) {
+function EventCard({ ev, locale }) {
   const days = daysUntil(ev.datetime);
   const isSoon  = days != null && days <= 14;
   const isToday = days === 0;
