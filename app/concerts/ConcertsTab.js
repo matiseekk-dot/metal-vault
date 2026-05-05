@@ -59,6 +59,7 @@ function Stars({value,onChange}){
 // (auto-fills concert form via callback) or dismiss. Prompts come from
 // daily snapshot of followed artists' past Bandsintown events.
 function AttendancePrompts({ onAttendConfirm }) {
+  const t = useT();
   const locale = useLocale();
   const [prompts, setPrompts] = useState([]);
   const [hidden,  setHidden]  = useState(false);
@@ -94,7 +95,7 @@ function AttendancePrompts({ onAttendConfirm }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div style={{ fontSize: 10, color: '#4ade80', ...MONO,
           letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-          {prompts.length} show{prompts.length > 1 ? 's' : ''} you may have attended
+          {t(prompts.length === 1 ? 'concerts.attendedTitle.one' : 'concerts.attendedTitle.many', { n: prompts.length })}
         </div>
         <button onClick={() => setHidden(true)}
           style={{ background: 'none', border: 'none', color: C.dim,
@@ -118,21 +119,21 @@ function AttendancePrompts({ onAttendConfirm }) {
                 background: '#0a3d0a', border: '1px solid #1a6d1a',
                 borderRadius: 6, color: '#4ade80', cursor: 'pointer',
                 ...MONO, fontSize: 11, letterSpacing: '0.04em' }}>
-              ✓ Yes, I went
+              ✓ {t('concerts.attended.yes')}
             </button>
             <button onClick={() => respond(p.event_id, 'dismissed', p)}
               style={{ flex: 1, padding: '7px',
                 background: 'transparent', border: '1px solid ' + C.border,
                 borderRadius: 6, color: C.dim, cursor: 'pointer',
                 ...MONO, fontSize: 11 }}>
-              No
+              {t('concerts.attended.no')}
             </button>
           </div>
         </div>
       ))}
       {prompts.length > 3 && (
         <div style={{ fontSize: 9, color: C.dim, ...MONO, textAlign: 'center', marginTop: 4 }}>
-          +{prompts.length - 3} more
+          {t('concerts.attended.more', { n: prompts.length - 3 })}
         </div>
       )}
     </div>
@@ -338,7 +339,7 @@ export default function ConcertsTab() {
   };
 
   const submit = () => {
-    if(!form.band.trim()){setError('Enter band name');return;}
+    if(!form.band.trim()){setError(t('concerts.error.bandRequired'));return;}
     const entry = {...form,band:form.band.trim(),id:editId||crypto.randomUUID()};
     const updated = editId ? concerts.map(c=>c.id===editId?entry:c) : [entry,...concerts];
     save(updated);
@@ -393,9 +394,9 @@ export default function ConcertsTab() {
       {/* Stats strip */}
       <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,background:C.bg2}}>
         {[
-          {icon:'🎸',val:concerts.length,label:'shows'},
-          {icon:'🏆',val:Object.keys(bandMap).length,label:'bands'},
-          {icon:'🎟',val:totalSpent>0 ? formatPrice(totalSpent, cur, fx) : '—',label:'spent'},
+          {icon:'🎸',val:concerts.length,label:t('concerts.stats.shows')},
+          {icon:'🏆',val:Object.keys(bandMap).length,label:t('concerts.stats.bands')},
+          {icon:'🎟',val:totalSpent>0 ? formatPrice(totalSpent, cur, fx) : '—',label:t('concerts.stats.spent')},
         ].map(s=>(
           <div key={s.label} style={{flex:1,textAlign:'center',padding:'10px 4px'}}>
             <div style={{fontSize:11,...MONO,color:C.dim}}>{s.icon}</div>
@@ -539,7 +540,7 @@ export default function ConcertsTab() {
                       venueId: null,
                     });
                   }
-                  if (!imported.length) { toast.error('No valid rows found'); return; }
+                  if (!imported.length) { toast.error(t('concerts.import.noValidRows')); return; }
                   const merged = [...concerts];
                   const existing = new Set(concerts.map(c=>(c.band+c.year).toLowerCase()));
                   let added = 0;
@@ -585,7 +586,7 @@ export default function ConcertsTab() {
 
             {/* Venue */}
             <div>
-              <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>Venue</label>
+              <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.venue')}</label>
               {/* Keep value as string — built-in venues use numeric ids
                   but user-added venues use crypto.randomUUID() strings.
                   Number(uuidString) returns NaN, breaking lookup. The
@@ -593,7 +594,7 @@ export default function ConcertsTab() {
                   shapes because <option value> is always stringified. */}
               <select value={form.venueId==null?'':String(form.venueId)} onChange={e=>setForm(f=>({...f,venueId:e.target.value||null}))}
                 style={{...inputSt,cursor:'pointer'}}>
-                <option value="">— Select venue —</option>
+                <option value="">{t('concerts.form.selectVenue')}</option>
                 {['Arena','Club','Festival','Hall','Other'].map(cat=>{
                   const vs=venues.filter(v=>v.cat===cat);
                   return vs.length>0?(
@@ -606,14 +607,14 @@ export default function ConcertsTab() {
               {!showVenueAdd?(
                 <button onClick={()=>setShowVenueAdd(true)}
                   style={{fontSize:10,color:C.accent,...MONO,background:'none',border:'none',cursor:'pointer',marginTop:4,padding:0}}>
-                  + Add new venue
+                  + {t('concerts.form.addVenue')}
                 </button>
               ):(
                 <div style={{display:'flex',gap:6,marginTop:6}}>
-                  <input value={newVenue} onChange={e=>setNewVenue(e.target.value)} placeholder="Venue name"
+                  <input value={newVenue} onChange={e=>setNewVenue(e.target.value)} placeholder={t('concerts.form.venueName')}
                     onKeyDown={e=>e.key==='Enter'&&addVenue()}
                     style={{...inputSt,flex:1,padding:'8px 10px'}}/>
-                  <button onClick={addVenue} style={{background:C.accent,border:'none',borderRadius:8,color:'#fff',padding:'0 14px',cursor:'pointer',...BEBAS,fontSize:15}}>ADD</button>
+                  <button onClick={addVenue} style={{background:C.accent,border:'none',borderRadius:8,color:'#fff',padding:'0 14px',cursor:'pointer',...BEBAS,fontSize:15}}>{t('concerts.form.add').toUpperCase()}</button>
                 </div>
               )}
             </div>
@@ -621,11 +622,11 @@ export default function ConcertsTab() {
             {/* Year + Genre */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <div>
-                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>Year</label>
-                <input type="number" min="1950" max="2099" value={form.year} onChange={e=>setForm(f=>({...f,year:e.target.value}))} style={inputSt}/>
+                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.year')}</label>
+                <input type="number" inputMode="numeric" min="1950" max="2099" value={form.year} onChange={e=>setForm(f=>({...f,year:e.target.value}))} style={inputSt}/>
               </div>
               <div>
-                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>Genre</label>
+                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.genre')}</label>
                 <select value={form.genre} onChange={e=>setForm(f=>({...f,genre:e.target.value}))} style={{...inputSt,cursor:'pointer'}}>
                   {GENRES.map(g=><option key={g}>{g}</option>)}
                 </select>
@@ -635,41 +636,41 @@ export default function ConcertsTab() {
             {/* Rating + Price */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <div>
-                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:6}}>Rating</label>
+                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:6}}>{t('concerts.form.rating')}</label>
                 <Stars value={form.rating} onChange={v=>setForm(f=>({...f,rating:v}))}/>
               </div>
               <div>
-                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>Ticket price ($)</label>
-                <input type="number" min="0" value={form.price} onChange={e=>setForm(f=>({...f,price:e.target.value}))} placeholder="e.g. 75" style={inputSt}/>
+                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.price')}</label>
+                <input type="number" inputMode="decimal" min="0" value={form.price} onChange={e=>setForm(f=>({...f,price:e.target.value}))} placeholder={t('concerts.form.pricePlaceholder')} style={inputSt}/>
               </div>
             </div>
 
             {/* Note */}
             <div>
-              <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>Note</label>
+              <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.note')}</label>
               <textarea value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))}
-                placeholder="How was it?" rows={2} style={{...inputSt,resize:'vertical',fontStyle:'italic'}}/>
+                placeholder={t('concerts.form.notePlaceholder')} rows={2} style={{...inputSt,resize:'vertical',fontStyle:'italic'}}/>
             </div>
 
             {error&&<div style={{color:C.accent,fontSize:12,...MONO}}>{error}</div>}
 
             <button onClick={submit} style={{padding:'13px',background:`linear-gradient(135deg,${C.accent},${C.accent2})`,border:'none',borderRadius:8,color:'#fff',cursor:'pointer',...BEBAS,fontSize:17,letterSpacing:'0.1em'}}>
-              {editId?'SAVE CHANGES':'SAVE CONCERT'}
+              {editId ? t('concerts.form.saveChanges') : t('concerts.form.save')}
             </button>
           </div>
         )}
 
         {/* Search + Sort */}
         <div style={{display:'flex',gap:8,marginBottom:12}}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t('common.search') + '…'}
             style={{...inputSt,flex:1,padding:'9px 12px'}}/>
           <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
             style={{background:C.bg3,border:`1px solid ${C.border}`,borderRadius:8,color:C.muted,
               padding:'0 10px',fontSize:13,...MONO,cursor:'pointer',outline:'none'}}>
-            <option value="year_desc">Year ↓</option>
-            <option value="year_asc">Year ↑</option>
-            <option value="band">Band A–Z</option>
-            <option value="rating">Rating ↓</option>
+            <option value="year_desc">{t('concerts.sort.yearDesc')}</option>
+            <option value="year_asc">{t('concerts.sort.yearAsc')}</option>
+            <option value="band">{t('concerts.sort.band')}</option>
+            <option value="rating">{t('concerts.sort.rating')}</option>
           </select>
         </div>
 
@@ -678,7 +679,7 @@ export default function ConcertsTab() {
           filtered.length===0
             ?<div style={{textAlign:'center',padding:'50px 0',color:C.dim,...MONO}}>
                <div style={{fontSize:44,marginBottom:10}}>🎸</div>
-               <div style={{...BEBAS,fontSize:18,color:'#333'}}>{concerts.length===0?'Add your first concert!':'No results'}</div>
+               <div style={{...BEBAS,fontSize:18,color:'#333'}}>{concerts.length===0 ? t('concerts.empty.cta') : t('common.noResults')}</div>
              </div>
             :<div style={{display:'flex',flexDirection:'column',gap:8}}>
                {filtered.map(c=>{
