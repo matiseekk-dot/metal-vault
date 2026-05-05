@@ -680,7 +680,38 @@ export function CollectionTab({
   const [gradingDraft, setGradingDraft]   = useState({});  // per-item draft {sleeve_grade, vinyl_grade, inner_sleeve_grade, hype_sticker, playback_notes}
   const [gradingSaving, setGradingSaving] = useState(false);
   const [saving, setSaving]               = useState(false);
+  // Map of {[discogs_id|collection_id]: {price, type, id}} so the
+  // collection-card render can show "🔔 Active" badges on items that
+  // already have an alert. Loaded from /api/alerts on mount, kept in
+  // sync after createAlert/removeAlert.
+  const [activeAlerts, setActiveAlerts] = useState({});
   if (!onUpdate) onUpdate = () => {};
+
+  // Load existing alerts on mount so the cards know which items already
+  // have an alert. Without this state the user clicked "Set alert",
+  // typed a price, hit save, and got zero feedback either way (the
+  // earlier fire-and-forget createAlert dropped both 4xx errors AND
+  // success state on the floor).
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    fetch('/api/alerts').then(r => r.ok ? r.json() : null).then(d => {
+      if (cancelled || !d?.alerts) return;
+      const map = {};
+      for (const a of d.alerts) {
+        if (a.is_active === false) continue;
+        const key = a.collection_id || a.discogs_id;
+        if (!key) continue;
+        map[String(key)] = {
+          id:    a.id,
+          price: Number(a.target_price),
+          type:  a.alert_type || 'PRICE_DROP',
+        };
+      }
+      setActiveAlerts(map);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
 
   // Save detailed grading fields atomically — optimistic UI:
   // 1. Update local collection immediately (instant feedback, no lag)
@@ -724,7 +755,11 @@ export function CollectionTab({
   };
 
   const createAlert = async (item) => {
-    if (!targetPrice || isNaN(targetPrice)) return;
+    const price = parseFloat(targetPrice);
+    if (!targetPrice || !Number.isFinite(price) || price <= 0) {
+      toast.error(t('alert.invalidPrice') || 'Enter a valid price');
+      return;
+    }
     setSaving(true);
     // Capture current price as baseline for percent-based alerts
     const currentPrice = Number(item.median_price || item.current_price) || null;
@@ -733,19 +768,81 @@ export function CollectionTab({
       collection_id: item.id,
       artist:        item.artist,
       album:         item.album,
-      target_price:  parseFloat(targetPrice),
+      target_price:  price,
       alert_type:    alertType,
     };
     // Set baseline only for percent-based or rise alerts (drop alerts don't need it)
     if (alertType === 'PERCENT_DROP' || alertType === 'PERCENT_RISE' || alertType === 'PRICE_RISE') {
       payload.baseline_price = currentPrice;
     }
-    await fetch('/api/alerts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+    try {
+      const res = await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Free-tier limit gets a dedicated upsell flow; everything else
+        // surfaces the server's reason in a toast so the user can see
+        // why the silent fire-and-forget version was eating their input.
+        if (d.error === 'ALERT_LIMIT_REACHED') {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'ALERT_LIMIT_REACHED' } }));
+          }
+        } else {
+          toast.error(d.message || d.error || t('vault.alert.failed') || 'Could not save alert');
+        }
+        setSaving(false);
+        return;
+      }
+      // Authoritative state straight from the insert — no extra round-trip.
+      const a = d.alert;
+      if (a) {
+        const key = a.collection_id || a.discogs_id;
+        if (key) {
+          setActiveAlerts(m => ({
+            ...m,
+            [String(key)]: { id: a.id, price: Number(a.target_price), type: a.alert_type || 'PRICE_DROP' },
+          }));
+        }
+      }
+      toast.success(t('alert.saved') || 'Alert set');
+      setShowAlertForm(null); setTargetPrice(''); setAlertType('PRICE_DROP');
+    } catch (e) {
+      toast.error(t('vault.alert.failed') || ('Could not save alert: ' + e.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Delete an alert by id. Mirrors WatchlistTab.removeAlert: optimistic
+  // local removal, refetch authoritative on any non-OK response.
+  const deleteAlert = async (key, alertId) => {
+    if (!alertId) return;
+    setActiveAlerts(m => {
+      const copy = { ...m }; delete copy[String(key)]; return copy;
     });
-    setSaving(false); setShowAlertForm(null); setTargetPrice(''); setAlertType('PRICE_DROP');
+    let ok = false;
+    try {
+      const res = await fetch('/api/alerts?id=' + encodeURIComponent(alertId), { method: 'DELETE' });
+      ok = res.ok;
+    } catch {}
+    if (!ok) {
+      // Refetch on failure — same pattern as WatchlistTab
+      try {
+        const r = await fetch('/api/alerts').then(r => r.json());
+        if (r.alerts) {
+          const map = {};
+          for (const a of r.alerts) {
+            if (a.is_active === false) continue;
+            const k = a.collection_id || a.discogs_id;
+            if (k) map[String(k)] = { id: a.id, price: Number(a.target_price), type: a.alert_type || 'PRICE_DROP' };
+          }
+          setActiveAlerts(map);
+        }
+      } catch {}
+    }
   };
 
   if (!user) return (
@@ -1334,6 +1431,15 @@ export function CollectionTab({
                           </button>
                         )}
                         {/* Alert + Delete */}
+                        {(() => {
+                          // Look up active alert for this item — keyed by
+                          // collection_id first (covers manual additions
+                          // without discogs_id), falling back to discogs_id.
+                          const alertKey = activeAlerts[String(item.id)]
+                            ? String(item.id)
+                            : (item.discogs_id ? String(item.discogs_id) : null);
+                          const myAlert = alertKey ? activeAlerts[alertKey] : null;
+                          return (
                         <div style={{ display: 'flex', gap: 6 }}>
                           {item.discogs_id && (showAlertForm === item.id ? (
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1356,11 +1462,38 @@ export function CollectionTab({
                                 <button onClick={() => { setShowAlertForm(null); setAlertType('PRICE_DROP'); }} style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 8px', cursor: 'pointer', fontSize: 11 }}>✕</button>
                               </div>
                             </div>
+                          ) : myAlert ? (
+                            // Item already has an alert — show "Active"
+                            // badge with target price + a delete-X. Was
+                            // missing entirely before, which is why the
+                            // user thought their alerts didn't save.
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6,
+                              background: '#1a1500', border: '1px solid #5a4a00', borderRadius: 6,
+                              color: '#f5c842', padding: '6px 10px', ...MONO, fontSize: 10 }}>
+                              <span style={{ flex: 1 }}>
+                                🔔 {myAlert.type === 'PRICE_DROP'   ? t('alert.activePrice',   { n: myAlert.price })
+                                  : myAlert.type === 'PERCENT_DROP' ? t('alert.activePercent', { n: myAlert.price })
+                                  : myAlert.type === 'LOW_STOCK'    ? t('alert.activeStock',   { n: myAlert.price })
+                                  : t('alert.activePrice', { n: myAlert.price })}
+                              </span>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (await mvConfirm(t('alert.confirmRemove'), { kind: 'danger', confirmLabel: t('common.delete') })) {
+                                    deleteAlert(alertKey, myAlert.id);
+                                  }
+                                }}
+                                aria-label={t('alert.removeTitle')}
+                                style={{ background: 'none', border: 'none', color: '#f87171',
+                                  cursor: 'pointer', fontSize: 14, padding: '0 4px', lineHeight: 1 }}>×</button>
+                            </div>
                           ) : (
                             <button onClick={() => setShowAlertForm(item.id)} style={{ flex: 1, background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 10px', cursor: 'pointer', ...MONO, fontSize: 10 }}>🔔 {t('alert.set')}</button>
                           ))}
                           <button onClick={() => { if (expandedId === item.id) setExpandedId(null); onRemove(item.id); }} style={{ background: 'none', border: '1px solid #7f1d1d', borderRadius: 6, color: '#f87171', padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🗑</button>
                         </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
