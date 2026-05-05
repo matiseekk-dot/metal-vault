@@ -373,7 +373,7 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
                         <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
                           <span style={{fontSize:11,color:C.dim,...MONO}}>{formatPrice(min, cur, fx)} – {formatPrice(max, cur, fx)}</span>
                           <span style={{fontSize:12,color:change>=0?'#4ade80':'#f87171',...MONO,fontWeight:'bold'}}>
-                            {change>=0?'+':''}{change.toFixed(0)} ({change>=0?'+':''}{((change/first)*100).toFixed(0)}%)
+                            {(change>=0?'+':'−') + formatPrice(Math.abs(change), cur, fx)} ({change>=0?'+':''}{((change/first)*100).toFixed(0)}%)
                           </span>
                         </div>
                         <svg viewBox={'0 0 '+W+' '+H} style={{width:'100%',height:'auto'}}>
