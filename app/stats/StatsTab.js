@@ -403,6 +403,8 @@ function ConcertProximityCard() {
 // ── PersonaCard — shareable metal identity card ──
 function PersonaCard() {
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   const [persona, setPersona] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sharing, setSharing] = useState(false);
@@ -455,10 +457,13 @@ function PersonaCard() {
       ctx.fillText(persona.stats.recordCount + ' RECORDS · ' + persona.stats.uniqueArtists + ' ARTISTS',
                    W/2, 440);
       ctx.fillStyle = '#f5c842'; ctx.font = 'bold 96px Arial, sans-serif';
-      ctx.fillText('$' + persona.stats.totalValue, W/2, 560);
+      // Render using user's preferred currency. formatPrice handles
+      // conversion + Intl.NumberFormat grouping/symbol; canvas just
+      // draws the resulting string.
+      ctx.fillText(formatPrice(persona.stats.totalValue, cur, fx), W/2, 560);
       ctx.fillStyle = persona.stats.gain >= 0 ? '#4ade80' : '#f87171';
       ctx.font = '28px monospace';
-      const gainStr = (persona.stats.gain >= 0 ? '+' : '') + '$' + persona.stats.gain
+      const gainStr = formatChange(persona.stats.gain, cur, fx)
                     + ' (' + (persona.stats.gainPct >= 0 ? '+' : '') + persona.stats.gainPct + '%)';
       ctx.fillText(gainStr, W/2, 610);
 
@@ -564,7 +569,7 @@ function PersonaCard() {
         </div>
         <div>
           <div style={{ fontSize: 10, color: '#888', ...MONO }}>{t('stats.persona.value')}</div>
-          <div style={{ ...BEBAS, fontSize: 20, color: '#f5c842' }}>${persona.stats.totalValue}</div>
+          <div style={{ ...BEBAS, fontSize: 20, color: '#f5c842' }}>{formatPrice(persona.stats.totalValue, cur, fx)}</div>
         </div>
         <div>
           <div style={{ fontSize: 10, color: '#888', ...MONO }}>{t('stats.persona.era')}</div>
@@ -609,7 +614,7 @@ function PersonaCard() {
           </div>
           <div style={{ fontSize: 11, color: '#888', ...MONO, display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex: 1 }}>{persona.crownJewel.album}</span>
-            <span style={{ color: '#f5c842', flexShrink: 0, marginLeft: 8 }}>${Math.round(persona.crownJewel.value)}</span>
+            <span style={{ color: '#f5c842', flexShrink: 0, marginLeft: 8 }}>{formatPrice(persona.crownJewel.value, cur, fx)}</span>
           </div>
         </div>
       )}
