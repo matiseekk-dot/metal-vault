@@ -140,11 +140,28 @@ jobs:
       - name: Run E2E suite
         id: tests
         continue-on-error: true
-        # Tee stdout to a file so the next step can post a digest as
-        # a PR comment. Private-repo workflow logs aren't readable via
-        # the public API so we make failures self-serve via the PR
-        # discussion thread.
-        run: npx playwright test 2>&1 | tee /tmp/playwright-output.txt
+        # set -o pipefail so the pipeline exit status reflects
+        # Playwright's, not tee's. Without it a test failure was
+        # masked behind tee's 0-exit and steps.tests.outcome stayed
+        # "success" even on red runs.
+        # Also echo discovered tests + config so we can diagnose
+        # "0 tests run in 1 s" type results from the PR comment alone.
+        run: |
+          set -o pipefail
+          echo "=== Test files in tests/e2e ==="
+          ls -la tests/e2e/
+          echo
+          echo "=== AUTH_ENABLED flags ==="
+          echo "TEST_AUTH_SECRET set: $([ -n \"${TEST_AUTH_SECRET:-}\" ] && echo yes || echo no)"
+          echo "MV_TEST_EMAIL set:    $([ -n \"${MV_TEST_EMAIL:-}\" ] && echo yes || echo no)"
+          echo "MV_TEST_PASSWORD set: $([ -n \"${MV_TEST_PASSWORD:-}\" ] && echo yes || echo no)"
+          echo "BYPASS set:           $([ -n \"${VERCEL_AUTOMATION_BYPASS_TOKEN:-}\" ] && echo yes || echo no)"
+          echo
+          echo "=== Discovered tests (--list) ==="
+          npx playwright test --list 2>&1 | tee /tmp/test-list.txt | head -80
+          echo
+          echo "=== Running ==="
+          npx playwright test --reporter=list 2>&1 | tee /tmp/playwright-output.txt
         env:
           PWPLAYWRIGHT_BASE_URL: ${{ steps.target.outputs.url }}
           # Auth tier env vars are passed ONLY on pull_request runs.
@@ -182,25 +199,37 @@ jobs:
             test-results/
           retention-days: 7
 
-      # Post the failed-test digest as a PR comment so failures are
-      # diagnosable without admin-level access to the workflow logs
-      # (which the artifact API gates behind admin for private repos).
-      # Tail the last 200 lines of Playwright output — usually contains
-      # all FAILED entries plus their stack frames.
-      - name: Post failure digest as PR comment
-        if: steps.tests.outcome == 'failure' && github.event_name == 'pull_request'
+      # Post a digest as a PR comment regardless of pass/fail — keeps
+      # us honest about WHAT actually ran (a previous green CI run was
+      # actually 0 tests collected, masquerading as success). On
+      # private repos the workflow log is admin-only, so PR comments
+      # are the only failure-diagnostic surface available without
+      # bouncing through the user.
+      - name: Post test digest as PR comment
+        if: always() && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          OUTCOME:   ${{ steps.tests.outcome }}
         run: |
-          if [ ! -s /tmp/playwright-output.txt ]; then
-            echo "No Playwright output captured."
-            exit 0
+          icon="✅"
+          title="passed"
+          if [ "$OUTCOME" = "failure" ]; then
+            icon="❌"
+            title="failed"
           fi
-          tail=$(tail -c 60000 /tmp/playwright-output.txt)
-          body=$(jq -Rs --arg run "${{ github.run_id }}" \
-            '"### E2E run failed (run [\($run)](https://github.com/${{ github.repository }}/actions/runs/\($run)))\n\n<details><summary>last 200 lines of output</summary>\n\n```\n" + . + "\n```\n\n</details>"' \
-            <<< "$tail")
+          list=""
+          if [ -s /tmp/test-list.txt ]; then list=$(head -c 8000 /tmp/test-list.txt); fi
+          out=""
+          if [ -s /tmp/playwright-output.txt ]; then out=$(tail -c 50000 /tmp/playwright-output.txt); fi
+          body=$(jq -Rs \
+            --arg icon "$icon" \
+            --arg title "$title" \
+            --arg run "${{ github.run_id }}" \
+            --arg list "$list" \
+            --arg out "$out" \
+            -n \
+            '"\($icon) E2E run \($title) — [run \($run)](https://github.com/${{ github.repository }}/actions/runs/\($run))\n\n<details><summary>discovered tests</summary>\n\n```\n" + $list + "\n```\n\n</details>\n\n<details><summary>output (last 50KB)</summary>\n\n```\n" + $out + "\n```\n\n</details>"')
           curl -sS -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
