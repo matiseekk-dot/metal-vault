@@ -52,8 +52,17 @@ export async function POST(request) {
 
   const body = await request.json();
 
-  // SECURITY: whitelist writable fields — user_id, created_at, triggered_at are server-owned
-  const ALLOWED = ['collection_item_id', 'album_id', 'target_price', 'direction', 'is_active', 'alert_type', 'baseline_price'];
+  // SECURITY: whitelist writable fields — user_id, created_at,
+  // triggered_at are server-owned. We DO accept discogs_id / artist /
+  // album from the client because the alert needs to be attributable
+  // even when the source row (collection or watchlist) has been
+  // edited/deleted; we copy them at insert time as a denormalized
+  // snapshot used by digest emails and cron logs.
+  const ALLOWED = [
+    'collection_id', 'collection_item_id',
+    'album_id', 'discogs_id', 'artist', 'album',
+    'target_price', 'direction', 'is_active', 'alert_type', 'baseline_price',
+  ];
   const safe = Object.fromEntries(
     Object.entries(body || {}).filter(([k]) => ALLOWED.includes(k))
   );
@@ -69,6 +78,28 @@ export async function POST(request) {
   if (safe.direction && !['above', 'below'].includes(safe.direction)) {
     return NextResponse.json({ error: 'direction must be "above" or "below"' }, { status: 400 });
   }
+
+  // discogs_id may arrive as a string (Discogs master IDs sometimes
+  // come through that way). Normalize to BIGINT-castable or null.
+  // Slugged watchlist IDs like "hypno5e::acid_mist" become null here
+  // and the row is matched by album_id at cron-time instead.
+  if (safe.discogs_id !== undefined) {
+    const n = Number(safe.discogs_id);
+    safe.discogs_id = Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  // Require at least one identifier so the cron can find this alert.
+  if (!safe.discogs_id && !safe.album_id && !safe.collection_id && !safe.collection_item_id) {
+    return NextResponse.json({
+      error: 'Need at least one of: discogs_id, album_id, collection_id'
+    }, { status: 400 });
+  }
+
+  // Default identity fields if client didn't provide them. The schema
+  // declares artist/album NOT NULL — fill from explicit body or a
+  // generic placeholder if the alert is purely identifier-based.
+  if (!safe.artist) safe.artist = body?.artist || 'Unknown';
+  if (!safe.album)  safe.album  = body?.album  || 'Unknown';
 
   const { data, error } = await supabase
     .from('price_alerts')

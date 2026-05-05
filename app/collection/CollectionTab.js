@@ -76,6 +76,32 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
   const [alertType, setAlertType]     = useState('PRICE_DROP');  // PRICE_DROP / PERCENT_DROP / LOW_STOCK
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertDone, setAlertDone]     = useState({});
+  // Inline variant editor — which row is currently being edited and
+  // the local draft text. Saving fires an upsert via /api/watchlist
+  // POST; the parent re-fetches via mv-watchlist-changed.
+  const [editVariant, setEditVariant]       = useState(null);
+  const [variantDraft, setVariantDraft]     = useState({ format: '', color: '', label: '' });
+
+  const saveVariant = async (album) => {
+    try {
+      await fetch('/api/watchlist', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          album_id: album.album_id,
+          artist:   album.artist,
+          album:    album.album,
+          cover:    album.cover || null,
+          year:     album.year || null,
+          format:   variantDraft.format?.trim() || null,
+          color:    variantDraft.color?.trim()  || null,
+          label:    variantDraft.label?.trim()  || null,
+        }),
+      });
+      window.dispatchEvent(new CustomEvent('mv-watchlist-changed'));
+      setEditVariant(null);
+    } catch {}
+  };
 
   // Load saved alerts on mount — persists across tab switches
   useEffect(() => {
@@ -260,6 +286,33 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                       {  hasAlert.type === 'LOW_STOCK'    && t('alert.summaryStock',   { n: hasAlert.price })}
                     </div>
                   )}
+                  {/* Variant edit — small chip clicker that turns the
+                      row's variant info into editable fields. Lets the
+                      user record which exact pressing they want when
+                      multiple editions exist (Limited, color, label). */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (editVariant === id) {
+                        setEditVariant(null);
+                      } else {
+                        setEditVariant(id);
+                        setVariantDraft({
+                          format: album.format || '',
+                          color:  album.color  || '',
+                          label:  album.label  || '',
+                        });
+                      }
+                    }}
+                    style={{
+                      marginTop: 4, fontSize: 9, padding: '2px 8px', borderRadius: 4,
+                      background: editVariant === id ? C.accent + '22' : 'transparent',
+                      border: '1px dashed ' + (editVariant === id ? C.accent : C.border),
+                      color: editVariant === id ? C.accent : C.dim,
+                      ...MONO, cursor: 'pointer',
+                    }}>
+                    {(album.format || album.color || album.label) ? '✏ ' + t('watchlist.editVariant') : '+ ' + t('watchlist.addVariant')}
+                  </button>
                 </div>
                 {/* × button — always visible, fixed 40px column */}
                 <button onClick={() => onRemove(id)}
@@ -267,6 +320,44 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                     fontSize: 26, padding: 0, lineHeight: 1, width: 40, height: 40,
                     display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               </div>
+              {/* Variant edit form — rendered between header and alert
+                  row when active. Three small fields: format, color,
+                  label. Free-form so users can write anything ("Splatter
+                  red/black", "Limited 500", "Nuclear Blast 2023 reissue"). */}
+              {editVariant === id && (
+                <div style={{ borderTop: '1px solid ' + C.border, padding: '10px 14px', background: C.bg3 }}>
+                  <div style={{ fontSize: 10, color: C.accent, ...MONO, marginBottom: 8, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    {t('watchlist.editVariantTitle')}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <input
+                      value={variantDraft.format}
+                      onChange={e => setVariantDraft(d => ({ ...d, format: e.target.value }))}
+                      placeholder={t('watchlist.variantFormat')}
+                      style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 12, ...MONO, outline: 'none' }}/>
+                    <input
+                      value={variantDraft.color}
+                      onChange={e => setVariantDraft(d => ({ ...d, color: e.target.value }))}
+                      placeholder={t('watchlist.variantColor')}
+                      style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 12, ...MONO, outline: 'none' }}/>
+                    <input
+                      value={variantDraft.label}
+                      onChange={e => setVariantDraft(d => ({ ...d, label: e.target.value }))}
+                      placeholder={t('watchlist.variantLabel')}
+                      style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 12, ...MONO, outline: 'none' }}/>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                    <button onClick={() => setEditVariant(null)}
+                      style={{ flex: 1, padding: '7px', background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, cursor: 'pointer', fontSize: 11, ...MONO }}>
+                      {t('common.cancel')}
+                    </button>
+                    <button onClick={() => saveVariant(album)}
+                      style={{ flex: 2, padding: '7px', background: C.accent, border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 11, ...BEBAS, letterSpacing: '0.06em' }}>
+                      {t('common.save')}
+                    </button>
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'flex', borderTop: '1px solid ' + C.border }}>
                 <button onClick={() => { setAlertItem(alertItem === id ? null : id); setAlertPrice(''); }}
                   style={{ flex: 1, padding: '8px 14px', background: alertItem === id ? '#1a0a00' : 'transparent', border: 'none', color: alertItem === id ? '#f5c842' : hasAlert ? '#f5c842' : '#555', cursor: 'pointer', fontSize: 11, ...MONO, display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.05em', textAlign: 'left' }}>

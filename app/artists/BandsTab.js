@@ -351,7 +351,10 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
           await fetch('/api/watchlist?album_id=' + album.id, { method: 'DELETE' });
         }
       } else {
-        // Add to watchlist with minimal fields
+        // Add to watchlist. Pass format if discography data has it so
+        // the variant chip in the watchlist row shows context (e.g.
+        // "Album, Limited Edition"). User can refine later via inline
+        // edit; we only seed with what we know.
         await fetch('/api/watchlist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -361,6 +364,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
             album:    album.title,
             cover:    album.cover || null,
             year:     album.year || null,
+            format:   album.format || null,
           }),
         });
         // Notify parent so watchlist count updates everywhere

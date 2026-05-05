@@ -137,6 +137,14 @@ export async function GET(request) {
 
     for (const alert of alertsToCheck) {
       if (budgetExpired()) break;
+      // Skip alerts with no Discogs ID — those came from BandsTab "♥
+      // wanted" toggles or MB-fallback rows and have nothing for the
+      // marketplace stats endpoint to look up. They stay in the table
+      // as wishlist reminders but don't consume the cron budget.
+      if (!alert.discogs_id) {
+        results.alertsSkippedNoId = (results.alertsSkippedNoId || 0) + 1;
+        continue;
+      }
       try {
         const r = await fetch(
           'https://api.discogs.com/marketplace/stats/'+alert.discogs_id,
