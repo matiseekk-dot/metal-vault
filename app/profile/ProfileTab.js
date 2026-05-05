@@ -597,7 +597,7 @@ export default function ProfileTab({
         {discogsConnected ? (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontSize: 12, color: '#4ade80', ...MONO }}>✓ Discogs connected</div>
+              <div style={{ fontSize: 12, color: '#4ade80', ...MONO }}>{t('profile.discogs.connected')}</div>
               <button onClick={onSyncDiscogs} disabled={syncStatus === 'syncing'}
                 style={{
                   padding: '6px 14px',
@@ -608,7 +608,7 @@ export default function ProfileTab({
                   cursor: syncStatus === 'syncing' ? 'default' : 'pointer',
                   ...MONO, fontSize: 11,
                 }}>
-                {syncStatus === 'syncing' ? '⏳ Syncing…' : '↺ Sync collection'}
+                {syncStatus === 'syncing' ? t('profile.discogs.syncing') : t('profile.discogs.sync')}
               </button>
             </div>
             {syncStatus === 'done' && syncResult && (
@@ -616,20 +616,23 @@ export default function ProfileTab({
                 fontSize: 10, color: '#4ade80', ...MONO, lineHeight: 1.7,
                 background: '#0d1f0d', border: '1px solid #1a3d1a', borderRadius: 6, padding: '8px 10px',
               }}>
-                ✓ Added {syncResult.added ?? 0} new · Updated {syncResult.updated ?? 0} · Watchlist +{syncResult.watchAdded ?? 0}
+                ✓ {t('profile.discogs.syncResult', {
+                  added:   syncResult.added ?? 0,
+                  updated: syncResult.updated ?? 0,
+                  watch:   syncResult.watchAdded ?? 0,
+                })}
               </div>
             )}
             {(syncStatus === 'error' || syncResult?._error) && (
               <div style={{ fontSize: 10, color: '#f87171', ...MONO, lineHeight: 1.5 }}>
-                ⚠️ {syncResult?._error || 'Sync failed — try again'}
+                ⚠️ {syncResult?._error || t('profile.discogs.syncFailed')}
               </div>
             )}
           </div>
         ) : (
           <div>
             <div style={{ fontSize: 11, color: C.dim, ...MONO, lineHeight: 1.7, marginBottom: 10 }}>
-              Connect your Discogs account to automatically sync your collection and wantlist.
-              Works for all users — each person authorizes their own account.
+              {t('profile.discogs.connectDesc')}
             </div>
             <button onClick={onConnectDiscogs}
               style={{
@@ -638,10 +641,10 @@ export default function ProfileTab({
                 border: '1px solid #f5c842', borderRadius: 8, color: '#f5c842',
                 cursor: 'pointer', ...BEBAS, fontSize: 16, letterSpacing: '0.06em',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              }}><Icon name="external" size={14} color={C.accent} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 8 }}/>Connect Discogs Account
+              }}><Icon name="external" size={14} color={C.accent} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 8 }}/>{t('profile.discogs.connect')}
             </button>
             <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 8, lineHeight: 1.6, textAlign: 'center' }}>
-              Redirects to discogs.com → authorize → returns here → syncs automatically
+              {t('profile.discogs.connectFlow')}
             </div>
           </div>
         )}
@@ -651,19 +654,19 @@ export default function ProfileTab({
 
       {/* Data — Export + Import (combined, visible immediately) */}
       <div style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px', marginBottom: 12 }}>
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 12 , display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="pkg" size={12} color={C.accent}/> Data — Import & Export</div>
+        <div style={{ fontSize: 10, color: C.accent, letterSpacing: '0.2em', textTransform: 'uppercase', ...MONO, marginBottom: 12 , display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="pkg" size={12} color={C.accent}/> {t('profile.data.title')}</div>
 
         {/* Import from Discogs */}
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>From Discogs</div>
+          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>{t('profile.data.fromDiscogs')}</div>
           <button onClick={onShowImport}
-            style={{ width: '100%', padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, cursor: 'pointer', ...MONO, fontSize: 11, textAlign: 'center' }}><Icon name="download" size={12} color={C.accent} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }}/>Import from Discogs account
+            style={{ width: '100%', padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, cursor: 'pointer', ...MONO, fontSize: 11, textAlign: 'center' }}><Icon name="download" size={12} color={C.accent} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }}/>{t('profile.data.importDiscogs')}
           </button>
         </div>
 
         {/* Import from CSV or JSON */}
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>From file — CSV (any spreadsheet) or JSON (Metal Vault export)</div>
+          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>{t('profile.data.fromFile')}</div>
           <div style={{ display: 'flex', gap: 8 }}>
             {/* CSV */}
             <label style={{ flex: 1, cursor: importing ? 'default' : 'pointer' }}>
@@ -713,14 +716,14 @@ export default function ProfileTab({
               border: '1px solid ' + (importResult.error ? '#7f1d1d' : importResult.imported > 0 ? '#1a3d1a' : C.border),
               color: importResult.error ? '#f87171' : importResult.imported > 0 ? '#4ade80' : C.dim }}>
               {importResult.error ? '⚠ ' + importResult.error : importResult.message}
-              {importResult.imported > 0 && ' — reloading…'}
+              {importResult.imported > 0 && ' — ' + t('profile.data.reloading')}
             </div>
           )}
         </div>
 
         {/* Export */}
         <div style={{ borderTop: '1px solid ' + C.border, paddingTop: 10 }}>
-          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>Export your collection</div>
+          <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 6 }}>{t('profile.data.exportLabel')}</div>
           <div style={{ display: 'flex', gap: 8 }}>
           <a href="/api/collection/export?format=csv" download
             style={{ flex: 1, padding: '9px', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 7, color: C.muted, textDecoration: 'none', textAlign: 'center', fontSize: 11, ...MONO }}>
