@@ -27,6 +27,15 @@ on:
   push:
     branches: [main]
 
+# Default GITHUB_TOKEN scope on this repo doesn't include pull-requests
+# write, so the digest-posting step was getting 403 silently and never
+# making a comment despite the step reporting "success" (curl -sS prints
+# error to stderr, doesn't exit non-zero). Grant only what we need:
+# read code, write to PR discussion, write deployment comments.
+permissions:
+  contents:      read
+  pull-requests: write
+
 # Cancel duplicate runs on rapid pushes — saves CI minutes and keeps
 # the PR check from flapping.
 concurrency:
@@ -230,11 +239,19 @@ jobs:
             --arg out "$out" \
             -n \
             '"\($icon) E2E run \($title) — [run \($run)](https://github.com/${{ github.repository }}/actions/runs/\($run))\n\n<details><summary>discovered tests</summary>\n\n```\n" + $list + "\n```\n\n</details>\n\n<details><summary>output (last 50KB)</summary>\n\n```\n" + $out + "\n```\n\n</details>"')
-          curl -sS -X POST \
+          # -w for status, -o for stderr-friendly response capture so a
+          # 403 doesn't silently swallow the digest like it did the first
+          # two times.
+          status=$(curl -sS -X POST -o /tmp/comment-resp.txt -w "%{http_code}" \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-            -d "$body"
+            -d "$body")
+          echo "PR comment POST → HTTP $status"
+          if [ "$status" != "201" ]; then
+            cat /tmp/comment-resp.txt
+            exit 1
+          fi
 
       # Make the workflow visibly red. Without this the
       # continue-on-error on the test step would let the run finish
