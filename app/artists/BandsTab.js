@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { confirm as mvConfirm } from '@/app/components/Toast';
-import { useT, useLocale } from '@/lib/i18n';
+import { useT, useLocale, tn } from '@/lib/i18n';
 
 
 function norm(str) {
@@ -477,7 +477,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
         )}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
           <div style={{ fontSize:10, color:C.dim, ...MONO }}>
-            {enriched.length} release{enriched.length !== 1 ? 's' : ''}
+            {tn(enriched.length, 'plural.releases')}
           </div>
           <button onClick={() => setVinylOnly(v => !v)}
             style={{ background: vinylOnly ? C.accent+'22' : C.bg3,
@@ -494,7 +494,7 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
           </div>
         ) : (
           <div style={{ fontSize:10, color:C.dim, ...MONO, marginTop:4 }}>
-            {missing.length} album{missing.length !== 1 ? 's' : ''} missing
+            {tn(missing.length, 'plural.albumsMissing')}
             {hasAnyWanted && <span style={{ color:C.accent, marginLeft:4 }}>· wanted only</span>}
           </div>
         )}
@@ -991,7 +991,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
                     )}
                   </div>
                   <div style={{ fontSize:10, color:isComplete ? '#a08020' : C.dim, ...MONO, marginTop:1 }}>
-                    {items.length} record{items.length !== 1 ? 's' : ''} in vault
+                    {tn(items.length, 'plural.recordsInVault')}
                   </div>
                 </div>
 

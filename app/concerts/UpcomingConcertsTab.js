@@ -4,7 +4,7 @@
 // shows next 90 days by default with "Show all" expansion.
 
 import { useState, useEffect } from 'react';
-import { useT } from '@/lib/i18n';
+import { useT, useLocale, tn } from '@/lib/i18n';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 
@@ -15,11 +15,17 @@ const RADIUS_OPTIONS = [
   { id: '100',  label: '100 km',       km: 100  },
 ];
 
-function formatEventDate(iso) {
+// Locale-aware date formatter. Was hardcoded en-GB → "5 May 2026"
+// regardless of user choice. Now follows getLocale() so PL renders
+// "5 maj 2026" / DE renders "5. Mai 2026" via CLDR.
+function formatEventDate(iso, locale) {
   const d = new Date(iso);
   if (isNaN(d)) return '';
-  const opts = { day: 'numeric', month: 'short', year: 'numeric' };
-  return d.toLocaleDateString('en-GB', opts);
+  try {
+    return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
 }
 
 function daysUntil(iso) {
@@ -30,6 +36,7 @@ function daysUntil(iso) {
 
 export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
   const t = useT();
+  const locale = useLocale();
   const [events,    setEvents]    = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState(null);
@@ -146,7 +153,7 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
       {loading && (
         <div style={{ textAlign: 'center', padding: '40px 16px', color: C.dim, ...MONO, fontSize: 12 }}>
           <div style={{ ...BEBAS, fontSize: 14, marginBottom: 4 }}>Searching tour dates…</div>
-          <div style={{ fontSize: 10 }}>Querying {followedArtists.length} artist{followedArtists.length !== 1 ? 's' : ''}</div>
+          <div style={{ fontSize: 10 }}>Querying {tn(followedArtists.length, 'plural.artists')}</div>
         </div>
       )}
 
@@ -180,7 +187,7 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <div style={{ fontSize: 10, color: C.dim, ...MONO }}>
-            {visible.length} show{visible.length !== 1 ? 's' : ''}
+            {tn(visible.length, 'plural.shows')}
             {!expanded && events.length > visible.length && ' · next 90 days'}
           </div>
           {events.length > visible.length && (
@@ -240,7 +247,7 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
               fontSize: 10, color: C.muted, ...MONO, letterSpacing: '0.12em',
               textTransform: 'uppercase', marginBottom: 4,
             }}>
-              <Icon name="info" size={11} color={C.muted}/> {missing.length} band{missing.length !== 1 ? 's' : ''} without ticketmaster events
+              <Icon name="info" size={11} color={C.muted}/> {tn(missing.length, 'plural.bandsWithoutTm')}
             </div>
             <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 10, lineHeight: 1.5 }}>
               These bands aren&apos;t in Ticketmaster&apos;s database. Check Bandsintown — they often have indie/underground coverage.
@@ -300,7 +307,7 @@ function EventCard({ ev }) {
           minWidth: 80,
         }}>
           <div style={{ ...BEBAS, fontSize: 14, color: isSoon ? C.accent : C.text, lineHeight: 1, letterSpacing: '0.02em' }}>
-            {formatEventDate(ev.datetime)}
+            {formatEventDate(ev.datetime, locale)}
           </div>
           {days != null && days >= 0 && (
             <div style={{ fontSize: 9, color: isSoon ? C.accent : C.dim, ...MONO, marginTop: 2 }}>

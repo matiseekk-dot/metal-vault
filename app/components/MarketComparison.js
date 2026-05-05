@@ -13,8 +13,10 @@
 import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
+import { tn, useLocale } from '@/lib/i18n';
 
 export default function MarketComparison({ artist, album, format, discogsLowest }) {
+  const locale = useLocale();
   // i18n hook intentionally not added — this component is dense with
   // marketplace labels (Discogs/eBay/Allegro/Amazon/JPC) which stay
   // English regardless of locale; mark as tech debt for later sweep.
@@ -126,7 +128,7 @@ export default function MarketComparison({ artist, album, format, discogsLowest 
         ) : ebayLowest != null ? (
           <Row
             label="eBay"
-            sublabel={ebay.listings.length + ' active listing' + (ebay.listings.length !== 1 ? 's' : '')}
+            sublabel={tn(ebay.listings.length, 'plural.activeListings')}
             price={ebayLowest}
             currency={ebay.listings[0].currency || 'USD'}
             color="#86b817"
@@ -190,7 +192,7 @@ export default function MarketComparison({ artist, album, format, discogsLowest 
               </div>
               <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 2,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {concert.next.city || concert.next.venue} · {new Date(concert.next.datetime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                {concert.next.city || concert.next.venue} · {new Date(concert.next.datetime).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}
               </div>
             </div>
             <div style={{ ...BEBAS, fontSize: 11, color: '#00b896', letterSpacing: '0.08em' }}>
