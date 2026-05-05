@@ -117,11 +117,35 @@ export default function PortfolioChangeCard({ premium, onUpgrade }) {
       </div>
 
       {noHistory ? (
-        <div style={{ fontSize: 11, color: C.dim, ...MONO, lineHeight: 1.6, padding: '10px 0' }}>
-          📊 No historical price data yet. Daily price snapshots are collected
-          automatically — check back in a few days to see how your collection
-          has changed.
-        </div>
+        // Fallback view — daily snapshots haven't accumulated yet, so
+        // 30d/90d deltas are unavailable. We show lifetime gain vs
+        // purchase price instead (still informative) and a clear note
+        // that real time-trend will appear in a few days.
+        <>
+          {data.changeVsPaid != null && data.totalPaid > 0 ? (
+            <div style={{ background: C.bg3, borderRadius: 8, padding: '12px 14px', marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: C.dim, ...MONO, letterSpacing: '0.1em',
+                textTransform: 'uppercase', marginBottom: 4 }}>
+                {t('portfolioChange.vsPaidLabel')}
+              </div>
+              <div style={{ ...BEBAS, fontSize: 24,
+                color: data.changeVsPaid >= 0 ? '#4ade80' : '#f87171', lineHeight: 1 }}>
+                {fmtChange(data.changeVsPaid, cur, fx)}
+              </div>
+              <div style={{ fontSize: 11, color: data.changeVsPaid >= 0 ? '#4ade80' : '#f87171',
+                ...MONO, marginTop: 4 }}>
+                {data.percentVsPaid >= 0 ? '+' : ''}{data.percentVsPaid?.toFixed(1)}%
+              </div>
+              <div style={{ fontSize: 10, color: C.dim, ...MONO, marginTop: 6 }}>
+                {formatPrice(data.totalPaid, cur, fx)} {t('portfolioChange.paidArrow')} {formatPrice(data.current, cur, fx)}
+              </div>
+            </div>
+          ) : null}
+          <div style={{ fontSize: 10, color: C.dim, ...MONO, lineHeight: 1.6,
+            paddingTop: 6 }}>
+            📊 {t('portfolioChange.snapshotHint')}
+          </div>
+        </>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 12 }}>

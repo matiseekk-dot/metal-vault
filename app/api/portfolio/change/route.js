@@ -24,7 +24,7 @@ export async function GET() {
   // 1) Get user's collection
   const { data: collection } = await sb
     .from('collection')
-    .select('id, discogs_id, median_price, current_price')
+    .select('id, discogs_id, median_price, current_price, purchase_price, added_at')
     .eq('user_id', user.id);
 
   if (!collection || collection.length === 0) {
@@ -39,6 +39,14 @@ export async function GET() {
   const currentValue = collection.reduce((sum, item) => {
     const v = Number(item.median_price) || Number(item.current_price) || 0;
     return sum + v;
+  }, 0);
+
+  // Total paid — used as a fallback baseline when there's no
+  // historical price_history yet (cron just started running, or this
+  // is a fresh user). "Value vs purchase price" is still informative
+  // even if it's not the exact 30d/90d delta the user asked for.
+  const totalPaid = collection.reduce((sum, item) => {
+    return sum + (Number(item.purchase_price) || 0);
   }, 0);
 
   // 3) Historical lookup — admin client because price_history has RLS rules
@@ -100,6 +108,18 @@ export async function GET() {
   const change30d = currentValue - value30;
   const change90d = currentValue - value90;
 
+  const itemsWithHistory = Math.max(withHistory30, withHistory90);
+
+  // Purchase-price fallback for fresh users with no price_history yet.
+  // We surface BOTH the (zero-or-near-zero) time-based delta AND a
+  // purchase-baseline delta so the UI can pick whichever is more
+  // informative. Once the daily cron has run for a few days the real
+  // 30d numbers will dominate.
+  const changeVsPaid = totalPaid > 0 ? currentValue - totalPaid : null;
+  const percentVsPaid = (totalPaid > 0)
+    ? Math.round((changeVsPaid / totalPaid) * 1000) / 10
+    : null;
+
   return NextResponse.json({
     current:           Math.round(currentValue * 100) / 100,
     value30dAgo:       Math.round(value30 * 100) / 100,
@@ -109,9 +129,14 @@ export async function GET() {
     percentChange30d:  value30 > 0 ? Math.round((change30d / value30) * 1000) / 10 : 0,
     percentChange90d:  value90 > 0 ? Math.round((change90d / value90) * 1000) / 10 : 0,
     itemCount:         collection.length,
-    itemsWithHistory:  Math.max(withHistory30, withHistory90),
+    itemsWithHistory,
     coverage:          collection.length > 0
-      ? Math.round((Math.max(withHistory30, withHistory90) / collection.length) * 100)
+      ? Math.round((itemsWithHistory / collection.length) * 100)
       : 0,
+    // Fallback: lifetime gain vs purchase price. Always populated when
+    // the user has set purchase_price on at least one item.
+    totalPaid:         Math.round(totalPaid * 100) / 100,
+    changeVsPaid:      changeVsPaid != null ? Math.round(changeVsPaid * 100) / 100 : null,
+    percentVsPaid,
   });
 }
