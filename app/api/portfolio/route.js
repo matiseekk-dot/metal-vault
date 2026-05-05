@@ -13,8 +13,11 @@ export async function GET() {
   const since = new Date();
   since.setDate(since.getDate() - 90);
 
+  // Snapshots only need date + value columns for the chart; the table
+  // also has total_paid + item_count (used by summary, not the chart).
   const { data, error } = await supabase
-    .from('portfolio_snapshots').select('*')
+    .from('portfolio_snapshots')
+    .select('snapshot_date, total_value, total_paid, item_count')
     .eq('user_id', user.id)
     .gte('snapshot_date', since.toISOString().split('T')[0])
     .order('snapshot_date', { ascending: true });

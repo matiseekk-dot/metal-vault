@@ -186,9 +186,12 @@ export async function GET(request) {
         // Provide the same shape the rest of the loop reads downstream.
         const user = { email, email_confirmed_at: true };
 
-        // Load collection
+        // Load collection — only fields the report renders + does
+        // arithmetic on. Skip notes, grading, photo blobs etc.
         const { data: collection } = await sb
-          .from('collection').select('*').eq('user_id', profile.id);
+          .from('collection')
+          .select('artist, album, purchase_price, current_price, median_price')
+          .eq('user_id', profile.id);
 
         if (!collection || collection.length < 5) { results.skipped++; continue; }
 

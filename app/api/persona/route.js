@@ -34,8 +34,14 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Only fields persona logic actually reads — keeps row size + payload
+  // small for users with 500+ records. The 20 columns we don't touch
+  // here (notes, grading flags, photo blobs, etc) shouldn't ride along
+  // every persona request.
   const { data: items, error } = await supabase
-    .from('collection').select('*').eq('user_id', user.id);
+    .from('collection')
+    .select('id, artist, album, label, year, cover, purchase_price, current_price, median_price, genres, styles, genre, num_for_sale')
+    .eq('user_id', user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   if (!items || items.length === 0) {

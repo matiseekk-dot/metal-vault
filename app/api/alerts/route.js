@@ -15,8 +15,12 @@ export async function GET() {
   const user = await getUser(supabase);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Narrow select — UI uses these 8 fields. The table also stores
+  // last_triggered, last_seen_price, baseline_price (cron-only), and
+  // collection_item_id (rarely needed). Skip them on the read path.
   const { data, error } = await supabase
-    .from('price_alerts').select('*')
+    .from('price_alerts')
+    .select('id, discogs_id, album_id, artist, album, target_price, alert_type, is_active, direction, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
