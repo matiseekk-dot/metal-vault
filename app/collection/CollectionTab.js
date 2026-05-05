@@ -80,6 +80,10 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
   const [alertType, setAlertType]     = useState('PRICE_DROP');  // PRICE_DROP / PERCENT_DROP / LOW_STOCK
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertDone, setAlertDone]     = useState({});
+  // When non-null, the inline form is editing that alert id (PATCH
+  // instead of POST). Set when clicking "Alert aktywny" on an item
+  // that already has an alert.
+  const [editingAlertId, setEditingAlertId] = useState(null);
   // Inline variant editor — which row is currently being edited and
   // the local draft text. Saving fires an upsert via /api/watchlist
   // POST; the parent re-fetches via mv-watchlist-changed.
@@ -107,19 +111,24 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
     } catch {}
   };
 
-  // Load saved alerts on mount — persists across tab switches
+  // Load saved alerts on mount — persists across tab switches.
+  // Index by every identifier the watchlist UI might know about
+  // (album_id slug OR numeric discogs_id) so the active-alert badge
+  // shows up regardless of how the watchlist row was added.
   useEffect(() => {
     if (!user) return;
     fetch('/api/alerts').then(r => r.json()).then(d => {
       if (!d.alerts) return;
       const map = {};
       for (const a of d.alerts) {
-        if (a.is_active !== false) {
-          map[String(a.discogs_id)] = {
-            price: Number(a.target_price),
-            type:  a.alert_type || 'PRICE_DROP',
-          };
-        }
+        if (a.is_active === false) continue;
+        const entry = {
+          id:    a.id,
+          price: Number(a.target_price),
+          type:  a.alert_type || 'PRICE_DROP',
+        };
+        if (a.album_id != null)   map[String(a.album_id)]   = entry;
+        if (a.discogs_id != null) map[String(a.discogs_id)] = entry;
       }
       setAlertDone(map);
     }).catch(() => {});
@@ -135,24 +144,41 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
   const saveAlert = async (album) => {
     if (!alertPrice || isNaN(alertPrice) || !user) return;
     setAlertSaving(true);
-    const payload = {
-      discogs_id:   album.album_id || album.id,
-      artist:       album.artist,
-      album:        album.album,
-      target_price: parseFloat(alertPrice),
-      alert_type:   alertType,
-    };
-    // For percentage alerts, capture current price as baseline.
-    // The Wantlist doesn't store live prices, so user enters baseline manually
-    // via the same field — the cron will track relative change from this number.
+    // Identify the watchlist row for the alert. Three cases the cron
+    // needs to distinguish:
+    //   (a) numeric Discogs release id → discogs_id BIGINT (fastest path)
+    //   (b) slug like "gaahls-wyrd::ghosts-invited" → album_id TEXT
+    //   (c) numeric stored as string → both can be set; trigger uses
+    //       discogs_id first, then falls back to album_id parse
+    // Earlier code only sent discogs_id, so slug-based watchlist rows
+    // got their identifier silently dropped at the POST normalisation
+    // step (Number(slug) → NaN → null) and the alert was unevaluable
+    // forever — the user reported "Sprawdź teraz" returning 0 even
+    // though the alert clearly existed. Sending album_id alongside
+    // gives the trigger flow something to fall back on.
+    const rawId = album.album_id || album.id;
+    const numericId = Number(rawId);
+    const isNumeric = Number.isFinite(numericId) && numericId > 0;
+
+    const editing = !!editingAlertId;
+    // PATCH only takes mutable fields. POST takes full identity.
+    const payload = editing
+      ? { target_price: parseFloat(alertPrice), alert_type: alertType }
+      : {
+          discogs_id:   isNumeric ? numericId : null,
+          album_id:     String(rawId),
+          artist:       album.artist,
+          album:        album.album,
+          target_price: parseFloat(alertPrice),
+          alert_type:   alertType,
+        };
     if (alertType === 'PERCENT_DROP') {
       payload.baseline_price = parseFloat(alertPrice);
-      // For percent, alertPrice is interpreted as the % threshold (e.g. 20 = 20%)
-      // Actually we need a separate field — see UI below: percentInput holds %
-      // and currentPriceInput holds baseline. For now reuse alertPrice for both.
     }
-    const res = await fetch('/api/alerts', {
-      method: 'POST',
+    const url    = editing ? '/api/alerts?id=' + encodeURIComponent(editingAlertId) : '/api/alerts';
+    const method = editing ? 'PATCH' : 'POST';
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
@@ -169,16 +195,24 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
         const map = {};
         for (const a of r.alerts) {
           if (a.is_active !== false) {
-            map[String(a.discogs_id)] = {
-              price: Number(a.target_price),
-              type:  a.alert_type || 'PRICE_DROP',
-            };
+            // Index by every identifier we know — trigger flow may
+            // resolve via any of them, the UI lookup uses album_id ||
+            // discogs_id from the watchlist row.
+            const k = a.album_id || a.discogs_id;
+            if (k != null) {
+              map[String(k)] = {
+                id:    a.id,
+                price: Number(a.target_price),
+                type:  a.alert_type || 'PRICE_DROP',
+              };
+            }
           }
         }
         setAlertDone(map);
       }
     } catch {}
     setAlertSaving(false); setAlertItem(null); setAlertPrice(''); setAlertType('PRICE_DROP');
+    setEditingAlertId(null);
   };
 
 
@@ -251,19 +285,27 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
       }
       if (d.triggered > 0) {
         toast.success(t('alert.checkTriggered', { n: d.triggered }));
-        // Refresh alerts state so the UI flips active→done
         try {
           const fresh = await fetch('/api/alerts').then(r => r.json());
           if (fresh.alerts) {
             const map = {};
             for (const a of fresh.alerts) {
-              if (a.is_active !== false) {
-                map[String(a.discogs_id)] = { price: Number(a.target_price), type: a.alert_type || 'PRICE_DROP' };
-              }
+              if (a.is_active === false) continue;
+              const entry = { id: a.id, price: Number(a.target_price), type: a.alert_type || 'PRICE_DROP' };
+              if (a.album_id != null)   map[String(a.album_id)]   = entry;
+              if (a.discogs_id != null) map[String(a.discogs_id)] = entry;
             }
             setAlertDone(map);
           }
         } catch {}
+      } else if (d.checked === 0 && d.skipped_no_id > 0) {
+        // Every alert was skipped because no resolvable Discogs ID.
+        // Most likely the rows were created before saveAlert started
+        // sending album_id alongside discogs_id. User has to delete +
+        // recreate the alert to get a fresh row with the proper
+        // identifier set.
+        toast.error(t('alert.checkAllSkipped', { n: d.skipped_no_id })
+          || (d.skipped_no_id + ' alert(s) couldn\'t be checked — re-add to fix'));
       } else {
         toast.success(t('alert.checkClean', { n: d.checked || 0 }));
       }
@@ -415,7 +457,30 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                 </div>
               )}
               <div style={{ display: 'flex', borderTop: '1px solid ' + C.border }}>
-                <button onClick={() => { setAlertItem(alertItem === id ? null : id); setAlertPrice(''); }}
+                <button onClick={() => {
+                    if (alertItem === id) {
+                      // Toggle close
+                      setAlertItem(null);
+                      setEditingAlertId(null);
+                      setAlertPrice('');
+                      setAlertType('PRICE_DROP');
+                    } else {
+                      setAlertItem(id);
+                      // Edit mode — pre-populate from existing alert
+                      // so user sees current value and PATCH semantics.
+                      // Without this, opening the form on an active
+                      // alert would create a duplicate and confuse the
+                      // index-by-key dedupe.
+                      if (hasAlert) {
+                        setEditingAlertId(hasAlert.id);
+                        setAlertType(hasAlert.type || 'PRICE_DROP');
+                        setAlertPrice(String(hasAlert.price ?? ''));
+                      } else {
+                        setEditingAlertId(null);
+                        setAlertPrice('');
+                      }
+                    }
+                  }}
                   style={{ flex: 1, padding: '8px 14px', background: alertItem === id ? '#1a0a00' : 'transparent', border: 'none', color: alertItem === id ? '#f5c842' : hasAlert ? '#f5c842' : '#555', cursor: 'pointer', fontSize: 11, ...MONO, display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.05em', textAlign: 'left' }}>
                   🔔 {hasAlert ? (
                     hasAlert.type === 'PRICE_DROP'   ? t('alert.activePrice',   { n: hasAlert.price }) :
@@ -465,7 +530,12 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                       style={{ padding: '10px 18px', background: !user || alertSaving ? C.bg3 : C.accent, border: 'none', borderRadius: 8, color: '#fff', cursor: !user ? 'default' : 'pointer', ...BEBAS, fontSize: 17, flexShrink: 0 }}>
                       {alertSaving ? t('alert.savingShort') : t('alert.ok')}
                     </button>
-                    <button onClick={() => { setAlertItem(null); setAlertPrice(''); setAlertType('PRICE_DROP'); }}
+                    <button onClick={() => {
+                        setAlertItem(null);
+                        setAlertPrice('');
+                        setAlertType('PRICE_DROP');
+                        setEditingAlertId(null);
+                      }}
                       style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '7px 10px', cursor: 'pointer', ...MONO, fontSize: 10, flexShrink: 0 }}>✕</button>
                   </div>
                   {!user && <div style={{ fontSize: 10, color: '#f87171', ...MONO, marginTop: 4 }}>{t('alert.signInRequired')}</div>}
@@ -864,6 +934,9 @@ export function CollectionTab({
             setActiveAlerts(map);
           }
         } catch {}
+      } else if (d.checked === 0 && d.skipped_no_id > 0) {
+        toast.error(t('alert.checkAllSkipped', { n: d.skipped_no_id })
+          || (d.skipped_no_id + ' alert(s) couldn\'t be checked — re-add to fix'));
       } else {
         toast.success(t('alert.checkClean', { n: d.checked || 0 })
           || ('Checked ' + (d.checked || 0) + ' alert(s) — no triggers'));
