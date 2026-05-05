@@ -101,6 +101,34 @@ export async function GET(request) {
       }
     } catch (e) { console.warn('MA fetch failed:', e.message); }
 
+    // ── N+1 fix: pre-fetch Spotify for every UNIQUE artist once ────
+    // Old code looped per-user × per-artist, hitting Spotify search
+    // with O(M × N) calls. With 100 users following overlapping
+    // catalogs this exhausted the Spotify rate limit and the cron
+    // budget. We now collect every unique artist name across all
+    // users, fetch each once with 200ms pacing, then resolve per-user
+    // from the cache below — O(uniqueArtists) network, O(M × N) memory.
+    const uniqueArtists = new Set();
+    for (const ud of Object.values(byUser)) {
+      for (const a of ud.artists) uniqueArtists.add(a);
+    }
+    const spotifyCache = new Map();   // artistName → album[]
+    if (spotifyToken && uniqueArtists.size > 0) {
+      for (const artistName of uniqueArtists) {
+        if (budgetExpired()) break;
+        try {
+          const res = await fetch(
+            `https://api.spotify.com/v1/search?q=artist:"${encodeURIComponent(artistName)}"&type=album&limit=5`,
+            { headers: { Authorization: `Bearer ${spotifyToken}` } }
+          );
+          const data = await res.json();
+          spotifyCache.set(artistName, data.albums?.items || []);
+        } catch {}
+        await new Promise(r => setTimeout(r, 200));
+      }
+      results.spotifyArtistsFetched = spotifyCache.size;
+    }
+
     for (const [userId, userData] of Object.entries(byUser)) {
       if (budgetExpired()) {
         results.skippedBudget = (results.skippedBudget || 0) + 1;
@@ -133,13 +161,7 @@ export async function GET(request) {
 
         if (spotifyToken) {
           for (const artistName of userData.artists) {
-            const res = await fetch(
-              `https://api.spotify.com/v1/search?q=artist:"${encodeURIComponent(artistName)}"&type=album&limit=5`,
-              { headers: { Authorization: `Bearer ${spotifyToken}` } }
-            );
-            const data = await res.json();
-            const albums = data.albums?.items || [];
-
+            const albums = spotifyCache.get(artistName) || [];
             for (const album of albums) {
               if (album.release_date >= sinceStr) {
                 newReleases.push({
@@ -152,7 +174,6 @@ export async function GET(request) {
                 results.newReleases++;
               }
             }
-            await new Promise(r => setTimeout(r, 200));
           }
         }
 

@@ -152,15 +152,39 @@ export async function GET(request) {
     const { data: profiles } = await sb
       .from('profiles').select('id, display_name, username');
 
+    // ── N+1 fix: one bulk auth listUsers instead of getUserById per profile ──
+    // Old code called sb.auth.admin.getUserById in the loop body —
+    // O(N) admin API hits with a per-call HTTP round-trip. For 1000
+    // users that ate 30+s of cron budget before the first email went
+    // out. listUsers paginates 1000 per page; we walk pages once and
+    // hashmap by id for O(1) lookup in the loop.
+    const emailById = new Map();
+    {
+      const PAGE_SIZE = 1000;
+      let page = 1;
+      while (true) {
+        const { data, error } = await sb.auth.admin.listUsers({ page, perPage: PAGE_SIZE });
+        if (error || !data?.users?.length) break;
+        for (const u of data.users) {
+          if (u.email_confirmed_at) emailById.set(u.id, u.email);
+        }
+        if (data.users.length < PAGE_SIZE) break;
+        page++;
+        if (page > 50) break;  // hard stop at 50K users — avoid runaway pagination
+      }
+      results.usersIndexed = emailById.size;
+    }
+
     for (const profile of profiles || []) {
       if (budgetExpired()) {
         results.skippedBudget = (results.skippedBudget || 0) + 1;
         continue;
       }
       try {
-        // Get email from auth.users
-        const { data: { user } } = await sb.auth.admin.getUserById(profile.id);
-        if (!user?.email || !user?.email_confirmed_at) { results.skipped++; continue; }
+        const email = emailById.get(profile.id);
+        if (!email) { results.skipped++; continue; }
+        // Provide the same shape the rest of the loop reads downstream.
+        const user = { email, email_confirmed_at: true };
 
         // Load collection
         const { data: collection } = await sb
