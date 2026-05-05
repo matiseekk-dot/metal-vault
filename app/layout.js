@@ -92,35 +92,51 @@ export default function RootLayout({ children }) {
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').then(reg => {
-                  // Check for SW updates every time app loads
-                  reg.update();
+                  // Check for SW updates immediately on load AND every
+                  // 60 seconds while the tab stays open. The default
+                  // browser behaviour only calls update() on navigation
+                  // events; for a long-lived TWA / standalone PWA tab
+                  // that means the user can run the app for hours on
+                  // an old build. 60-second polling is cheap (Vercel
+                  // returns 304 if /sw.js hasn't changed, no full
+                  // re-download).
+                  const tick = () => reg.update().catch(() => {});
+                  tick();
+                  setInterval(tick, 60_000);
 
-                  // When a new SW is waiting, activate it immediately
+                  // Also re-check the moment the tab regains focus —
+                  // covers the "swiped app away, came back hours
+                  // later" pattern that 60s polling alone misses for
+                  // backgrounded TWA windows.
+                  document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') tick();
+                  });
+
+                  // When a new SW finishes installing, ask it to skip
+                  // the "waiting" phase so the controllerchange fires
+                  // immediately instead of on next navigation.
                   reg.addEventListener('updatefound', () => {
                     const newWorker = reg.installing;
+                    if (!newWorker) return;
                     newWorker.addEventListener('statechange', () => {
                       if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        // New version available — tell SW to skip waiting
                         newWorker.postMessage({ type: 'SKIP_WAITING' });
                       }
                     });
                   });
                 }).catch(() => {});
 
-                // When SW controller changes (new SW took over), reload the page
+                // When the active SW gets replaced, reload once. The
+                // refreshing flag stops a feedback loop when both the
+                // controllerchange event AND the SW_UPDATED postMessage
+                // fire (they often do back-to-back).
                 let refreshing = false;
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
-                  if (!refreshing) {
-                    refreshing = true;
-                    window.location.reload();
-                  }
+                  if (!refreshing) { refreshing = true; window.location.reload(); }
                 });
-
-                // Also listen for SW_UPDATED message
                 navigator.serviceWorker.addEventListener('message', e => {
                   if (e.data?.type === 'SW_UPDATED' && !refreshing) {
-                    refreshing = true;
-                    window.location.reload();
+                    refreshing = true; window.location.reload();
                   }
                 });
               });

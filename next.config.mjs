@@ -72,7 +72,31 @@ const nextConfig = {
     ],
   },
   async headers() {
-    return [{ source: '/(.*)', headers: securityHeaders }];
+    return [
+      // Default security headers for everything.
+      { source: '/(.*)', headers: securityHeaders },
+      // /sw.js MUST NOT be cached by the browser. Every page load
+      // calls navigator.serviceWorker.register() which fetches this
+      // URL — if the browser hands back a stale 200 from disk, the
+      // SW never updates and the user runs an old build for as long
+      // as the cache holds. Cloudflare/Vercel default for static
+      // assets is up to 1 year; that's catastrophic for sw.js.
+      // Same for /manifest.json: when Play Store / iOS revalidate
+      // the install metadata we want the latest.
+      {
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' },
+          { key: 'Service-Worker-Allowed', value: '/' },
+        ],
+      },
+      {
+        source: '/manifest.json',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' },
+        ],
+      },
+    ];
   },
 };
 
