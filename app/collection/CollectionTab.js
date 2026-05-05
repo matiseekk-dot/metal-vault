@@ -1236,47 +1236,66 @@ export function CollectionTab({
                         )}
                         {/* Set price — inline input matching watchlist pattern (works on iOS) */}
                         {showAlertForm === item.id + '_price' ? (
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-                            <span style={{ ...BEBAS, fontSize: 18, color: C.muted }}>$</span>
-                            <input type="number" value={priceInputVal}
-                              onChange={e => setPriceInputVal(e.target.value)}
-                              onKeyDown={async e => {
-                                if (e.key !== 'Enter') return;
-                                const n = parseFloat(String(priceInputVal).replace(',','.'));
-                                if (isNaN(n)) return;
-                                await fetch('/api/collection?id=' + item.id, {
+                          // Wrapped as <form> + type="submit" so a single tap on
+                          // OK or Enter on mobile keyboards both submit through
+                          // the same code path. Without the form, mobile Safari
+                          // would consume the first tap to dismiss the soft
+                          // keyboard (input loses focus → blur fires) and the
+                          // user had to tap OK twice.
+                          (() => {
+                            const submitPrice = async () => {
+                              const n = parseFloat(String(priceInputVal).replace(',','.'));
+                              if (isNaN(n)) { setShowAlertForm(null); setPriceInputVal(''); return; }
+                              // Optimistic patch — flip the local item immediately so
+                              // the UI shows the new value even before the round-trip
+                              // completes. If the PATCH errors we revert below.
+                              const prevPrice = item.purchase_price;
+                              const optimistic = collection.map(c =>
+                                c.id === item.id ? { ...c, purchase_price: n } : c);
+                              onUpdate(optimistic);
+                              setShowAlertForm(null); setPriceInputVal('');
+
+                              try {
+                                const r = await fetch('/api/collection?id=' + item.id, {
                                   method: 'PATCH',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ purchase_price: n }),
                                 });
+                                if (!r.ok) throw new Error('PATCH failed');
+                                // Authoritative refetch keeps median_price etc fresh too
                                 const fresh = await fetch('/api/collection').then(r => r.json());
                                 if (fresh.items) onUpdate(fresh.items);
-                                setShowAlertForm(null); setPriceInputVal('');
-                              }}
-                              placeholder={t('vault.priceModal.placeholder')} autoFocus
-                              style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border,
-                                borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 16,
-                                ...MONO, outline: 'none' }} />
-                            <button onClick={async () => {
-                              const n = parseFloat(String(priceInputVal).replace(',','.'));
-                              if (isNaN(n)) { setShowAlertForm(null); setPriceInputVal(''); return; }
-                              await fetch('/api/collection?id=' + item.id, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ purchase_price: n }),
-                              });
-                              const fresh = await fetch('/api/collection').then(r => r.json());
-                              if (fresh.items) onUpdate(fresh.items);
-                              setShowAlertForm(null); setPriceInputVal('');
-                            }}
-                              style={{ padding: '10px 18px', background: C.accent, border: 'none',
-                                borderRadius: 8, color: '#fff', cursor: 'pointer', ...BEBAS, fontSize: 16, flexShrink: 0 }}>
-                              {t('alert.ok')}
-                            </button>
-                            <button onClick={() => { setShowAlertForm(null); setPriceInputVal(''); }}
-                              style={{ padding: '8px 10px', background: 'none', border: '1px solid ' + C.border,
-                                borderRadius: 6, color: C.dim, cursor: 'pointer', fontSize: 14 }}>✕</button>
-                          </div>
+                              } catch {
+                                // Revert optimistic update on error
+                                const reverted = collection.map(c =>
+                                  c.id === item.id ? { ...c, purchase_price: prevPrice } : c);
+                                onUpdate(reverted);
+                                toast.error(t('vault.priceModal.saveFailed'));
+                              }
+                            };
+                            return (
+                              <form onSubmit={e => { e.preventDefault(); submitPrice(); }}
+                                style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+                                <span style={{ ...BEBAS, fontSize: 18, color: C.muted }}>$</span>
+                                <input type="number" inputMode="decimal" step="0.01"
+                                  value={priceInputVal}
+                                  onChange={e => setPriceInputVal(e.target.value)}
+                                  placeholder={t('vault.priceModal.placeholder')} autoFocus
+                                  style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border,
+                                    borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 16,
+                                    ...MONO, outline: 'none' }} />
+                                <button type="submit"
+                                  style={{ padding: '10px 18px', background: C.accent, border: 'none',
+                                    borderRadius: 8, color: '#fff', cursor: 'pointer', ...BEBAS, fontSize: 16, flexShrink: 0 }}>
+                                  {t('alert.ok')}
+                                </button>
+                                <button type="button"
+                                  onClick={() => { setShowAlertForm(null); setPriceInputVal(''); }}
+                                  style={{ padding: '8px 10px', background: 'none', border: '1px solid ' + C.border,
+                                    borderRadius: 6, color: C.dim, cursor: 'pointer', fontSize: 14 }}>✕</button>
+                              </form>
+                            );
+                          })()
                         ) : (
                           <button onClick={() => {
                             setPriceInputVal(item.purchase_price ? String(item.purchase_price) : '');

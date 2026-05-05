@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
+import { lookupBarcodeLocal, queuePendingScan } from '@/lib/offline-barcode';
 
 
 function PriceTag({ label, value, color = C.accent }) {
