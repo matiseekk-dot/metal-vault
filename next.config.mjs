@@ -92,4 +92,19 @@ async function maybeWithSentry(cfg) {
   }
 }
 
-export default await maybeWithSentry(nextConfig);
+// ── Optional bundle analyzer ───────────────────────────────────
+// Run with `ANALYZE=true npm run build` to open the treemap reports.
+// Install once: `npm i -D @next/bundle-analyzer`. Until installed the
+// import fails, so we wrap it the same way as Sentry — flags off, no
+// op without the dep present. Doesn't affect normal builds.
+async function maybeWithBundleAnalyzer(cfg) {
+  if (process.env.ANALYZE !== 'true') return cfg;
+  try {
+    const { default: bundleAnalyzer } = await import('@next/bundle-analyzer');
+    return bundleAnalyzer({ enabled: true })(cfg);
+  } catch {
+    return cfg;
+  }
+}
+
+export default await maybeWithBundleAnalyzer(await maybeWithSentry(nextConfig));

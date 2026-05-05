@@ -6,12 +6,9 @@ import { loadLS, saveLS } from '@/lib/localStorage';
 import { useCollection } from '@/lib/hooks/useCollection';
 import { AlbumCard, VinylModal, StatsBar, BottomNav, AlbumCover } from '@/app/components/ui';
 import { CollectionTab, WatchlistTab } from '@/app/collection/CollectionTab';
-import ProfileTab from '@/app/profile/ProfileTab';
 import ErrorBoundary from '@/app/components/ErrorBoundary';
 import OnboardingScreen from '@/app/components/OnboardingScreen';
-import VaultTab from '@/app/vault/VaultTab';
 import { initPayments, startPurchase, openSubscriptionManagement, restorePurchases } from '@/lib/payments';
-import WhensOnTab from '@/app/whens-on/WhensOnTab';
 import Icon from '@/app/components/Icon';
 import UpgradeModal from '@/app/components/UpgradeModal';
 import ArtistInfoModal from '@/app/components/ArtistInfoModal';
@@ -24,12 +21,25 @@ import nextDynamic from 'next/dynamic';
 export const dynamic = 'force-dynamic';
 
 // Dynamic imports — only for components actually used directly in this file.
-// SearchTab/StatsTab/ConcertsTab/CalendarTab used to be top-level tabs but are now
-// wrapped inside VaultTab/WhensOnTab → those imports created identifier collisions
-// with VaultTab's static imports of the same modules, causing production build
-// to crash with "VaultTab is not defined" after tree-shaking. Removed.
-const ScannerTab    = nextDynamic(() => import('@/app/scanner/ScannerTab'),    { ssr: false });
-const DiscogsImport = nextDynamic(() => import('@/app/import/DiscogsImport'),  { ssr: false });
+// VaultTab, WhensOnTab, ProfileTab are gated behind tab clicks; lazy-loading
+// them shaves ~200kB from the initial bundle (Stats charts + concert table
+// + insurance PDF code don't need to ship until the user navigates there).
+// CollectionTab/WatchlistTab stay static because the default tab on first
+// open is now `vault`, so they're on the critical render path.
+//
+// Why ScannerTab + DiscogsImport stay dynamic: Scanner pulls @zxing/browser
+// (~80kB only needed when the user actually scans); DiscogsImport hits an
+// admin-only flow.
+//
+// SearchTab/StatsTab/ConcertsTab/CalendarTab were tried dynamic in both
+// page.js and VaultTab — that doubled the chunk and triggered a
+// "VaultTab is not defined" tree-shake bug. They live in VaultTab's static
+// imports now and get pulled in transitively when VaultTab itself loads.
+const VaultTab      = nextDynamic(() => import('@/app/vault/VaultTab'),       { ssr: false });
+const WhensOnTab    = nextDynamic(() => import('@/app/whens-on/WhensOnTab'),  { ssr: false });
+const ProfileTab    = nextDynamic(() => import('@/app/profile/ProfileTab'),   { ssr: false });
+const ScannerTab    = nextDynamic(() => import('@/app/scanner/ScannerTab'),   { ssr: false });
+const DiscogsImport = nextDynamic(() => import('@/app/import/DiscogsImport'), { ssr: false });
 
 // Filter ids stay stable for URL/state — labels resolve via t() in render.
 // Filter chips for the Feed/Premiery tab. Order matters — the most
