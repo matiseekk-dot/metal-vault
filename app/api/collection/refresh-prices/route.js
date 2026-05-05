@@ -148,11 +148,11 @@ export async function POST(request) {
 
         // ── Step 2b: /releases/{id} fallback ──
         // The release endpoint returns its own `lowest_price` field
-        // (same source as marketplace/stats so it'll usually agree)
-        // plus `community.have/want` which we ignore here. Trying it
-        // costs an extra round-trip but sometimes the two fields
-        // disagree right after a listing comes/goes — pick whichever
-        // is non-null.
+        // plus `master_id` which we use in step 2c if this fails too.
+        // For niche pressings (specific colour variants etc) the
+        // release-level price is often null even though OTHER
+        // pressings of the same album have active listings.
+        let masterId = null;
         if (!current) {
           const rel = await fetchDiscogs('https://api.discogs.com/releases/' + discogsId);
           const relPrice = rel?.lowest_price;
@@ -160,22 +160,34 @@ export async function POST(request) {
             current = relPrice;
             median  = relPrice;
           }
+          if (rel?.master_id) masterId = rel.master_id;
         }
 
-        // ── Step 2c: price_suggestions fallback ──
-        // marketplace/stats + /releases/{id} both reflect ACTIVE
-        // listings. For niche metal pressings Discogs frequently has
-        // zero active listings even though the record sells regularly
-        // — user proves this by owning a Discogs-bought copy with no
-        // current listings.
-        //
+        // ── Step 2c: master-version fallback ──
+        // If Twoje specific Discogs release has zero current listings
+        // (e.g. you own the Blue Transparent variant of an album that
+        // only exists in Gold + White + Red on the marketplace right
+        // now), fall back to other versions of the same MASTER album.
+        // /masters/{master_id} returns `lowest_price` aggregated
+        // across every version — this is the value that shows on the
+        // album's master page on discogs.com. Less precise than the
+        // exact variant's price, but a much better signal than "—".
+        if (!current && masterId) {
+          const master = await fetchDiscogs('https://api.discogs.com/masters/' + masterId);
+          const masterPrice = master?.lowest_price;
+          if (Number.isFinite(masterPrice) && masterPrice > 0) {
+            current = masterPrice;
+            median  = masterPrice;
+          }
+        }
+
+        // ── Step 2d: price_suggestions fallback ──
         // /marketplace/price_suggestions/{id} returns historical
-        // median by condition (Mint, NM, VG+, ...). NOTE: this
-        // endpoint requires *user* OAuth in some Discogs API tiers.
-        // Our server uses app-level credentials (key+secret or token)
-        // so it may return 401 — that's silent in fetchDiscogs (null)
-        // and we just skip the fallback. Still worth trying because
-        // some integrations succeed.
+        // median by condition (Mint, NM, VG+, ...). Requires user
+        // OAuth in current Discogs API — our app-level credentials
+        // (key+secret or token) get a 401, fetchDiscogs returns null,
+        // we silently skip. Kept here for environments where it does
+        // work.
         if (!current) {
           const sug = await fetchDiscogs('https://api.discogs.com/marketplace/price_suggestions/' + discogsId);
           if (sug && typeof sug === 'object') {
