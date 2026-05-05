@@ -308,21 +308,64 @@ export default function ConcertsTab() {
     if (v !== venues) { setVenues(v); saveLS(LS_VENUES, v); }
   };
 
-  // Fire-and-forget server-side persistence. Failures don't roll back —
-  // user keeps the local change; a toast lets them know to retry.
-  const syncConcert = (item) => {
-    fetch('/api/user-concerts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(item),
-    }).then(async r => {
-      if (r.status === 401 || r.ok) return;
-      const d = await r.json().catch(() => ({}));
-      toast.error('Saved locally — sync failed (' + (d.error || r.status) + ')');
-    }).catch(() => {});
+  // ── Pending-sync queue ──
+  // Audit caught the "save+sync rolls forward forever on failure"
+  // bug — fire-and-forget meant a 500 from the server was lost and
+  // local state diverged from the DB permanently. We now persist
+  // failed ops in localStorage and replay them on mount.
+  const PENDING_KEY = 'mv_concerts_pending';
+  const queuePending = (op) => {
+    try {
+      const q = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
+      q.push({ ...op, queuedAt: Date.now() });
+      // Bound to last 100 ops so a misbehaving server can't fill storage
+      localStorage.setItem(PENDING_KEY, JSON.stringify(q.slice(-100)));
+    } catch {}
   };
-  const syncDeleteConcert = (id) => {
-    fetch('/api/user-concerts?id=' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+  const flushPending = async () => {
+    let q = [];
+    try { q = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]'); } catch { return; }
+    if (!q.length) return;
+    const stillFailing = [];
+    for (const op of q) {
+      try {
+        const res = op.kind === 'delete'
+          ? await fetch('/api/user-concerts?id=' + encodeURIComponent(op.id), { method: 'DELETE' })
+          : await fetch('/api/user-concerts', {
+              method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(op.item),
+            });
+        if (!res.ok && res.status !== 401) stillFailing.push(op);
+      } catch { stillFailing.push(op); }
+    }
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify(stillFailing)); } catch {}
+  };
+  // Replay pending syncs on mount. Eslint-disabled deps because we
+  // intentionally only run once.
+  useEffect(() => { flushPending(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Optimistic-with-retry server persistence. Failure → queue for
+  // replay on next mount + toast user. 401 means anonymous; LS-only
+  // is the design, not a failure.
+  const syncConcert = async (item) => {
+    try {
+      const res = await fetch('/api/user-concerts', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(item),
+      });
+      if (res.status === 401 || res.ok) return;
+      queuePending({ kind:'upsert', item });
+      toast.error(t('concerts.syncFailedRetry'));
+    } catch {
+      queuePending({ kind:'upsert', item });
+    }
+  };
+  const syncDeleteConcert = async (id) => {
+    try {
+      const res = await fetch('/api/user-concerts?id=' + encodeURIComponent(id), { method:'DELETE' });
+      if (res.status === 401 || res.ok) return;
+      queuePending({ kind:'delete', id });
+    } catch {
+      queuePending({ kind:'delete', id });
+    }
   };
   const syncVenue = (v) => {
     fetch('/api/user-venues', {

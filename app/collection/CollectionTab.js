@@ -187,10 +187,17 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
       delete copy[String(id)];
       return copy;
     });
+    // Authoritative state always refetched on completion — covers
+    // both 4xx/5xx (silent rollback) and network failure. The audit
+    // caught a bug where `await fetch(...)` succeeded with a 4xx but
+    // the catch block wasn't entered, so a failed delete left the UI
+    // de-synced from the server forever.
+    let ok = false;
     try {
-      await fetch('/api/alerts?discogs_id=' + encodeURIComponent(id), { method: 'DELETE' });
-    } catch {
-      // On error, refetch authoritative state from server
+      const res = await fetch('/api/alerts?discogs_id=' + encodeURIComponent(id), { method: 'DELETE' });
+      ok = res.ok;
+    } catch {}
+    if (!ok) {
       try {
         const r = await fetch('/api/alerts').then(r => r.json());
         if (r.alerts) {
