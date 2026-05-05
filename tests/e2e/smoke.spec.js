@@ -38,10 +38,15 @@ test.describe('Public surface', () => {
     // is the recommended pattern in the Playwright docs anyway.
     await expect(page.locator('nav, [role="navigation"], button').first()).toBeVisible();
 
-    // Tolerate Sentry init noise + service-worker bootstrap warnings;
-    // fail only on actual runtime errors. Filter known-benign messages.
+    // Tolerate known-benign messages:
+    // - Sentry init noise / VAPID warnings / ServiceWorker bootstrap
+    // - "Discogs not configured" (deploy-specific)
+    // - "Loading chunk" (Next.js dev refresh artefact)
+    // - Vercel Live (preview-comments overlay) — CSP frame-src
+    //   blocks https://vercel.live/ on preview deploys; harmless and
+    //   only happens on Preview URLs, prod alias never sees it.
     const real = errors.filter(e =>
-      !/Sentry|ServiceWorker|VAPID|Discogs not configured|Loading chunk/i.test(e)
+      !/Sentry|ServiceWorker|VAPID|Discogs not configured|Loading chunk|vercel\.live|Content Security Policy/i.test(e)
     );
     expect(real, 'unexpected runtime errors:\n' + real.join('\n')).toEqual([]);
   });
