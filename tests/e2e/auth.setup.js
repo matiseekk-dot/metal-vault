@@ -23,11 +23,15 @@
 //      environment is enough — production never gets them).
 
 import { test as setup, expect } from '@playwright/test';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AUTH_FILE = path.join(__dirname, '../../playwright/.auth/user.json');
+// Path is relative to the project root because Playwright always
+// invokes from the package directory. Avoiding `import.meta.url` /
+// `__dirname` here keeps the file CJS-compatible — package.json has
+// no "type": "module" and the runner treats anything that touches
+// `import.meta` as a hard ESM-only file (which then can't resolve
+// require() during Playwright's internal transform, surfacing as
+// "Total: 0 tests in 0 files").
+const AUTH_FILE = 'playwright/.auth/user.json';
 
 setup('authenticate test user', async ({ page, baseURL }) => {
   const secret   = process.env.TEST_AUTH_SECRET;

@@ -25,11 +25,11 @@
 // added after this file).
 
 import { test, expect } from '@playwright/test';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AUTH_FILE = path.join(__dirname, '../../playwright/.auth/user.json');
+// Path is relative to the project root — see auth.setup.js comment.
+// Touching `import.meta.url` here previously broke test discovery
+// entirely under the project's CommonJS-default package.json.
+const AUTH_FILE = 'playwright/.auth/user.json';
 
 test.use({ storageState: AUTH_FILE });
 
