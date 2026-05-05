@@ -390,7 +390,22 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
 
   useEffect(() => { load(); }, [load]);
 
-  // Notify parent complete/incomplete — treats ♥ wanted as target if user marked any
+  // Notify parent complete/incomplete based on user intent.
+  //
+  // Earlier code revoked completion (onComplete(name, 0)) whenever
+  // collection < full Discogs discography. That's wrong: the Discogs
+  // catalogue includes singles, live albums, compilations, demo tapes
+  // etc — far more than what most collectors consider "complete".
+  // For Opeth a user with 18 studio LPs would get auto-revoked
+  // because Discogs lists ~30 releases counting splits + comps.
+  //
+  // New rule: only let this expanded view affect completion in two
+  // scenarios:
+  //   (a) user hearted ≥1 album → "wanted" intent is explicit, target
+  //       = hearts ∪ collection ∪ watchlist; revoke iff not all owned.
+  //   (b) full discography is collected → mark complete unconditionally.
+  // Otherwise leave completion alone — BandsTab's auto-mark useEffect
+  // covers the "owns ≥1 record, zero pending watchlist" case below.
   useEffect(() => {
     if (!data?.albums?.length) return;
     const normCol = collection
@@ -398,12 +413,22 @@ function ArtistDiscography({ artistName, collection, watchlist, onAddToWatchlist
       .map(i => norm(i.album));
     const wantedInDiscog = data.albums.filter(a => isWanted(a.title));
     const hasAnyWanted = wantedInDiscog.length > 0;
-    const targetList = hasAnyWanted
-      ? data.albums.filter(a => isWanted(a.title) || normCol.some(c => titleMatch(c, a.normTitle)))
-      : data.albums;
-    const have = targetList.filter(a => normCol.some(c => titleMatch(c, a.normTitle))).length;
-    const done = have === targetList.length && targetList.length > 0;
-    onComplete(artistName, done ? 100 : 0);
+
+    if (hasAnyWanted) {
+      const targetList = data.albums.filter(a =>
+        isWanted(a.title) || normCol.some(c => titleMatch(c, a.normTitle))
+      );
+      const have = targetList.filter(a => normCol.some(c => titleMatch(c, a.normTitle))).length;
+      const done = have === targetList.length && targetList.length > 0;
+      onComplete(artistName, done ? 100 : 0);
+      return;
+    }
+
+    // No hearts → only emit a positive signal when full discography is
+    // collected. Don't emit 0 (would revoke completion set by the
+    // BandsTab auto-mark which uses a more user-centric definition).
+    const haveAll = data.albums.every(a => normCol.some(c => titleMatch(c, a.normTitle)));
+    if (haveAll && data.albums.length > 0) onComplete(artistName, 100);
   }, [data, wanted, collection, artistName, isWanted, onComplete]);
 
   if (loading) return (
@@ -736,6 +761,7 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
           let changed = false;
 
           for (const artistName of Object.keys(localArtistMap)) {
+            const ownedTitles = localArtistMap[artistName].map(i => norm(i.album || ''));
             // Gather targets from both sources (deduped on normalized title)
             const keyPrefix = artistName.toLowerCase() + '::';
             const wantedTitles = wantedKeys
@@ -743,9 +769,26 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
               .map(k => norm(k.replace(keyPrefix, '')));
             const watchTitles = (watchByArtist[artistName] || []).map(norm);
             const interestSet = new Set([...wantedTitles, ...watchTitles].filter(Boolean));
-            if (interestSet.size === 0) continue;
 
-            const ownedTitles = localArtistMap[artistName].map(i => norm(i.album || ''));
+            // Pending watchlist for this artist = items the user wants
+            // but hasn't acquired yet. If this is empty AND user owns
+            // at least one record, we treat the artist as "done" —
+            // user explicitly didn't queue anything else, so there's
+            // nothing left to want. This is what catches the Opeth
+            // case (18 records, zero ♥ hearts, zero watchlist) that
+            // earlier revision missed.
+            const pendingWatch = watchTitles.filter(wt =>
+              !ownedTitles.some(ot => titleMatch(ot, wt))
+            );
+
+            if (interestSet.size === 0) {
+              if (pendingWatch.length === 0 && ownedTitles.length > 0 && next[artistName] !== 100) {
+                next[artistName] = 100;
+                changed = true;
+              }
+              continue;
+            }
+
             const hasAll = [...interestSet].every(wt =>
               ownedTitles.some(ot => titleMatch(ot, wt))
             );
