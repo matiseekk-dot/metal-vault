@@ -1,5 +1,7 @@
 # Metal Vault — E2E test suite
 
+<!-- Trivial edit to validate first PR run of the auth tier. -->
+
 Two tiers, both Playwright + Chromium:
 
 | Tier | File | Auth | What it catches |
