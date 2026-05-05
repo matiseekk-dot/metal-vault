@@ -119,15 +119,20 @@ jobs:
         run: npx playwright test
         env:
           PWPLAYWRIGHT_BASE_URL: ${{ steps.vercel.outputs.url }}
-          # Auth tier env: present only for Preview/PR runs because we
-          # never want production hitting the test-auth endpoint.
-          # On push-to-main, these secrets are still passed but the
-          # production deploy returns 404 from /api/test-auth/login
-          # (the route is gated by the env var being set on the
-          # serving instance, not the calling client).
-          TEST_AUTH_SECRET: ${{ secrets.TEST_AUTH_SECRET }}
-          MV_TEST_EMAIL:    ${{ secrets.MV_TEST_EMAIL }}
-          MV_TEST_PASSWORD: ${{ secrets.MV_TEST_PASSWORD }}
+          # Auth tier env vars are passed ONLY on pull_request runs.
+          # The /api/test-auth/login route on the serving instance is
+          # gated by TEST_AUTH_SECRET being set on that deploy. The
+          # secret only exists in Vercel's Preview environment (which
+          # PR runs land on), never Production. So if we passed the
+          # secrets to the workflow on a push-to-main run, the auth
+          # tier would still register in playwright.config.js but
+          # auth.setup.js would 404 against production /api/test-auth/login.
+          # Empty values here → AUTH_ENABLED in playwright.config.js
+          # is false → auth tier skips entirely → push-to-main runs
+          # only the smoke tier against Production.
+          TEST_AUTH_SECRET: ${{ github.event_name == 'pull_request' && secrets.TEST_AUTH_SECRET || '' }}
+          MV_TEST_EMAIL:    ${{ github.event_name == 'pull_request' && secrets.MV_TEST_EMAIL    || '' }}
+          MV_TEST_PASSWORD: ${{ github.event_name == 'pull_request' && secrets.MV_TEST_PASSWORD || '' }}
           CI: '1'
 
       # Upload trace + screenshot artifacts on failure so we can
