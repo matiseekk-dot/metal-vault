@@ -31,7 +31,11 @@ const ScannerTab    = nextDynamic(() => import('@/app/scanner/ScannerTab'),    {
 const DiscogsImport = nextDynamic(() => import('@/app/import/DiscogsImport'),  { ssr: false });
 
 // Filter ids stay stable for URL/state — labels resolve via t() in render.
-const FILTER_IDS = ['all', 'preorder', 'new', 'limited', 'vinyl'];
+// Filter chips for the Feed/Premiery tab. Order matters — the most
+// commonly used filters are first. `thisWeek` is a tighter window than
+// `preorder` (which can stretch 6+ months). `boxset` and `reissue` are
+// metal-specific filters users explicitly asked for.
+const FILTER_IDS = ['all', 'thisWeek', 'preorder', 'new', 'limited', 'vinyl', 'boxset', 'reissue', 'mine'];
 const ALL_GENRES = ['Heavy Metal','Death Metal','Black Metal','Thrash Metal','Doom Metal',
   'Progressive Metal','Power Metal','Metalcore','Groove Metal','Nu-Metal',
   'Symphonic Metal','Sludge Metal','Industrial Metal','Folk Metal','Post-Metal'];
@@ -416,10 +420,24 @@ export default function MetalVault() {
       const isPreorder = (rd > today) || r.preorder === true;
       const isNew = (today-rd)/864e5 < 180 && !isPreorder;  // 6 months = new
       const vinyl = col.vinylCache[r.id];
+      // ±7 days window (same week, either direction). Catches both
+      // "out yesterday" and "drops on Friday" without showing 6 months
+      // of preorders the user already scrolled past.
+      const daysAway = (rd - today) / 864e5;
+      const isThisWeek = daysAway >= -7 && daysAway <= 7;
+      // Mine = artist already in user's collection. Lets users see
+      // upcoming releases from bands they own without having to also
+      // be following them.
+      const collectionArtists = new Set(col.collection.map(c => (c.artist||'').toLowerCase()));
+      const isMine = collectionArtists.has((r.artist||'').toLowerCase());
+      if (filter==='thisWeek') return isThisWeek;
       if (filter==='new')      return isNew;
       if (filter==='preorder') return isPreorder||r.preorder;
       if (filter==='limited')  return vinyl?.hasLimited===true||r.limited===true;
       if (filter==='vinyl')    return vinyl?.hasVinyl===true;
+      if (filter==='boxset')   return r.boxset===true;
+      if (filter==='reissue')  return r.reissue===true;
+      if (filter==='mine')     return isMine;
       return true;
     })
     .filter(r => !search || r.artist.toLowerCase().includes(search.toLowerCase()) || r.album.toLowerCase().includes(search.toLowerCase()))

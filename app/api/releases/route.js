@@ -327,6 +327,17 @@ export async function GET(request) {
       const allDesc = fmts.flatMap(f => f.descriptions || []).join(' ').toLowerCase();
       const isLimited = allDesc.includes('limited') || allDesc.includes('numbered') ||
                        allDesc.includes('colored')  || allDesc.includes('colour');
+      // Box set — common in deluxe metal releases. Discogs format
+      // descriptions sometimes have "Box Set" as a separate token, or
+      // include words like "boxed".
+      const isBoxSet = allDesc.includes('box set') || allDesc.includes('boxset') || allDesc.includes('boxed');
+      // Reissue / anniversary / remastered — metal scene loves these.
+      // Detect by format descriptors first, then by title heuristics
+      // (e.g. "Painkiller (30th Anniversary Edition)").
+      const titleLower = String(full?.title || album || '').toLowerCase();
+      const isReissue = allDesc.includes('reissue') || allDesc.includes('remaster')
+        || allDesc.includes('re-issue') || allDesc.includes('re-release')
+        || /\b(anniversary|deluxe edition|expanded edition|reissue|remastered)\b/.test(titleLower);
 
       const cover = [full?.images?.[0]?.uri, item.cover_image]
         .find(u => u && !u.includes('spacer') && !u.includes('noimage')) || null;
@@ -342,6 +353,8 @@ export async function GET(request) {
         genre:       pickGenre(full, item),
         preorder:    isUpcoming,
         limited:     isLimited,
+        boxset:      isBoxSet,
+        reissue:     isReissue,
         label:       full?.labels?.[0]?.name || item.label?.[0] || '',
         country:     full?.country || item.country || '',
         discogsUrl:  'https://www.discogs.com/release/' + id,
