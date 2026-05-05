@@ -1,11 +1,26 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
-import { useT } from '@/lib/i18n';
+import { useT, useLocale } from '@/lib/i18n';
 
-
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+// ── Locale-aware month + weekday names ────────────────────────
+// We used to ship hardcoded English MONTHS/DAYS arrays which left PL
+// and DE users staring at "January", "Mon" etc. Now we resolve via
+// Intl.DateTimeFormat against the active app locale; full-month name
+// for the month-nav header, short weekday for the column headers.
+function monthName(year, month, locale) {
+  try {
+    return new Intl.DateTimeFormat(locale, { month: 'long' }).format(new Date(year, month, 1));
+  } catch { return String(month + 1); }
+}
+function weekdayShort(weekday, locale) {
+  try {
+    // Sunday-anchored grid (weekday 0 = Sun). new Date(2020,10,1) was a
+    // Sunday — used as the reference week to format each weekday.
+    return new Intl.DateTimeFormat(locale, { weekday: 'short' })
+      .format(new Date(2020, 10, 1 + weekday));
+  } catch { return ''; }
+}
 
 function AlbumCover({src,artist,size=40}){
   const [err,setErr]=useState(false);
@@ -23,6 +38,7 @@ function AlbumCover({src,artist,size=40}){
 
 export default function CalendarTab({releases=[],followedArtists=[]}){
   const t = useT();
+  const locale = useLocale();
   const now   = new Date();
   const [year,setYear]   = useState(now.getFullYear());
   const [month,setMonth] = useState(now.getMonth());
@@ -58,7 +74,6 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
     if (!d) return '';
     return year+'-'+String(month+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
   };
-  const hasRelease = (d) => byDate[dateKey(d)]?.length > 0;
 
   const upcoming = relevantReleases
     .filter(r => new Date(r.releaseDate) >= now)
@@ -82,12 +97,15 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
           <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>{t('calendar.upcoming') + ' · ' + t('calendar.recent')}</div>
         </div>
         <div style={{display:'flex',gap:6}}>
-          {['calendar','list'].map(v=>(
-            <button key={v} onClick={()=>setView(v)}
-              style={{padding:'5px 10px',borderRadius:20,background:view===v?C.accent+'22':C.bg3,
-                color:view===v?C.accent:C.dim,border:'1px solid '+(view===v?C.accent+'44':C.border),
+          {[
+            { id:'calendar', icon:'📅', label: t('calendar.viewCalendar') },
+            { id:'list',     icon:'📋', label: t('calendar.viewList')     },
+          ].map(v=>(
+            <button key={v.id} onClick={()=>setView(v.id)}
+              style={{padding:'5px 10px',borderRadius:20,background:view===v.id?C.accent+'22':C.bg3,
+                color:view===v.id?C.accent:C.dim,border:'1px solid '+(view===v.id?C.accent+'44':C.border),
                 cursor:'pointer',fontSize:10,...MONO}}>
-              {v==='calendar'?'📅':'📋'} {v}
+              {v.icon} {v.label}
             </button>
           ))}
         </div>
@@ -98,16 +116,18 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
           {/* Month nav */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
             <button onClick={()=>{if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1);}}
-              style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:8,color:C.muted,padding:'6px 12px',cursor:'pointer',...MONO,fontSize:12}}>‹</button>
-            <div style={{...BEBAS,fontSize:22,color:C.text,letterSpacing:'0.06em'}}>{MONTHS[month]} {year}</div>
+              aria-label={t('calendar.prevMonth')}
+              style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:8,color:C.muted,padding:'8px 14px',cursor:'pointer',...MONO,fontSize:14,minWidth:44,minHeight:44}}>‹</button>
+            <div style={{...BEBAS,fontSize:22,color:C.text,letterSpacing:'0.06em',textTransform:'capitalize'}}>{monthName(year, month, locale)} {year}</div>
             <button onClick={()=>{if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1);}}
-              style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:8,color:C.muted,padding:'6px 12px',cursor:'pointer',...MONO,fontSize:12}}>›</button>
+              aria-label={t('calendar.nextMonth')}
+              style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:8,color:C.muted,padding:'8px 14px',cursor:'pointer',...MONO,fontSize:14,minWidth:44,minHeight:44}}>›</button>
           </div>
 
           {/* Day headers */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
-            {DAYS.map(d=>(
-              <div key={d} style={{textAlign:'center',fontSize:9,color:C.dim,...MONO,padding:'4px 0'}}>{d}</div>
+            {[0,1,2,3,4,5,6].map(d=>(
+              <div key={d} style={{textAlign:'center',fontSize:9,color:C.dim,...MONO,padding:'4px 0',textTransform:'capitalize'}}>{weekdayShort(d, locale)}</div>
             ))}
           </div>
 
@@ -162,6 +182,7 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
                   </div>
                   {r.spotifyUrl&&(
                     <a href={r.spotifyUrl} target="_blank" rel="noopener noreferrer"
+                      aria-label="Spotify"
                       style={{fontSize:11,color:'#1db954',...MONO,textDecoration:'none',flexShrink:0}}>▶</a>
                   )}
                 </div>
@@ -176,7 +197,7 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
           {upcoming.length>0&&(
             <>
               <div style={{fontSize:10,color:'#4ade80',...MONO,letterSpacing:'0.15em',textTransform:'uppercase',margin:'12px 0 8px'}}>
-                ⏳ Upcoming ({upcoming.length})
+                ⏳ {t('calendar.upcoming')} ({upcoming.length})
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:6}}>
                 {upcoming.map((r,i)=>{
@@ -190,7 +211,7 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
                         <div style={{fontSize:11,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.album}</div>
                       </div>
                       <div style={{textAlign:'right',flexShrink:0}}>
-                        <div style={{fontSize:11,color:'#4ade80',...MONO}}>{daysLeft===0?'Today':daysLeft+'d'}</div>
+                        <div style={{fontSize:11,color:'#4ade80',...MONO}}>{daysLeft===0 ? t('calendar.today') : t('calendar.daysFromNow', { n: daysLeft })}</div>
                         <div style={{fontSize:9,color:C.dim,...MONO}}>{r.releaseDate}</div>
                       </div>
                     </div>
@@ -203,7 +224,7 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
           {recent.length>0&&(
             <>
               <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',margin:'16px 0 8px'}}>
-                🔥 Recent ({recent.length})
+                🔥 {t('calendar.recent')} ({recent.length})
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:6}}>
                 {recent.map((r,i)=>{
@@ -217,7 +238,7 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
                         <div style={{fontSize:11,color:C.muted,...MONO,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.album}</div>
                       </div>
                       <div style={{textAlign:'right',flexShrink:0}}>
-                        <div style={{fontSize:11,color:C.dim,...MONO}}>{daysAgo===0?'Today':daysAgo+'d ago'}</div>
+                        <div style={{fontSize:11,color:C.dim,...MONO}}>{daysAgo===0 ? t('calendar.today') : t('calendar.daysAgo', { n: daysAgo })}</div>
                         <div style={{fontSize:9,color:C.dim,...MONO}}>{r.releaseDate}</div>
                       </div>
                     </div>
@@ -230,7 +251,7 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
           {upcoming.length===0&&recent.length===0&&(
             <div style={{textAlign:'center',padding:'50px 0',color:C.dim,...MONO}}>
               <div style={{fontSize:40,marginBottom:12}}>📅</div>
-              <div style={{fontSize:13}}>No upcoming releases found</div>
+              <div style={{fontSize:13}}>{t('calendar.empty')}</div>
             </div>
           )}
         </div>
