@@ -8,12 +8,7 @@ import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 import { useT } from '@/lib/i18n';
-
-function formatChange(amount) {
-  const abs = Math.abs(amount);
-  const sign = amount >= 0 ? '+' : '−';
-  return sign + '$' + abs.toFixed(0);
-}
+import { useCurrency, useFx, formatChange as fmtChange, formatPrice } from '@/lib/currency';
 
 function formatPct(pct) {
   const abs = Math.abs(pct);
@@ -23,6 +18,8 @@ function formatPct(pct) {
 
 export default function PortfolioChangeCard({ premium, onUpgrade }) {
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -133,18 +130,20 @@ export default function PortfolioChangeCard({ premium, onUpgrade }) {
               change={data.change30d}
               percent={data.percentChange30d}
               fromValue={data.value30dAgo}
+              cur={cur} fx={fx}
             />
             <ChangeBox
               label={'90d'}
               change={data.change90d}
               percent={data.percentChange90d}
               fromValue={data.value90dAgo}
+              cur={cur} fx={fx}
             />
           </div>
 
           <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 12,
             paddingTop: 10, borderTop: '1px solid ' + C.border, lineHeight: 1.5 }}>
-            Current value: ${data.current.toFixed(0)} · {data.itemsWithHistory} of {data.itemCount} records have price history.
+            Current value: {formatPrice(data.current, cur, fx)} · {data.itemsWithHistory} of {data.itemCount} records have price history.
           </div>
         </>
       )}
@@ -152,7 +151,7 @@ export default function PortfolioChangeCard({ premium, onUpgrade }) {
   );
 }
 
-function ChangeBox({ label, change, percent, fromValue }) {
+function ChangeBox({ label, change, percent, fromValue, cur, fx }) {
   const positive = change >= 0;
   const color = positive ? '#4ade80' : '#f87171';
 
@@ -167,13 +166,13 @@ function ChangeBox({ label, change, percent, fromValue }) {
         {label}
       </div>
       <div style={{ ...BEBAS, fontSize: 22, color, lineHeight: 1, letterSpacing: '0.02em' }}>
-        {formatChange(change)}
+        {fmtChange(change, cur, fx)}
       </div>
       <div style={{ fontSize: 10, color, ...MONO, marginTop: 4 }}>
         {formatPct(percent)}
       </div>
       <div style={{ fontSize: 8, color: C.dim, ...MONO, marginTop: 4 }}>
-        from ${fromValue.toFixed(0)}
+        from {formatPrice(fromValue, cur, fx)}
       </div>
     </div>
   );

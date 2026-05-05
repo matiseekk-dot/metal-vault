@@ -6,6 +6,7 @@ import Icon from '@/app/components/Icon';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm as mvConfirm } from '@/app/components/Toast';
 import { useT, useLocale, setLocale, SUPPORTED_LOCALES } from '@/lib/i18n';
+import { useCurrency, setCurrency, SUPPORTED_CURRENCIES } from '@/lib/currency';
 
 
 // ── ConcertLocationCard ──
@@ -753,6 +754,9 @@ export default function ProfileTab({
       {/* Language picker — every locale defined in lib/i18n.js shows up */}
       <LanguagePicker/>
 
+      {/* Display currency — USD source data converted to user's choice */}
+      <CurrencyPicker/>
+
       {/* Sign out */}
       <button onClick={onSignOut}
         style={{
@@ -800,6 +804,44 @@ function LanguagePicker() {
               }}>
               <span style={{ fontSize: 16 }}>{l.flag}</span>
               <span>{l.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── CurrencyPicker — switches USD/EUR/PLN display ──────────────
+// Stored prices stay in USD (Discogs source); this only changes the
+// display formatter. FX rates load lazily via /api/fx (24h cached).
+function CurrencyPicker() {
+  const t = useT();
+  const code = useCurrency();
+  return (
+    <div style={{ marginTop: 16, padding: 14, border: '1px solid ' + C.border, borderRadius: 10, background: C.bg2 }}>
+      <div style={{ ...MONO, fontSize: 9, color: C.muted, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 4 }}>
+        {t('profile.currency.title')}
+      </div>
+      <div style={{ ...MONO, fontSize: 11, color: C.dim, marginBottom: 10, lineHeight: 1.5 }}>
+        {t('profile.currency.desc')}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {SUPPORTED_CURRENCIES.map(c => {
+          const active = c.code === code;
+          return (
+            <button key={c.code} onClick={() => setCurrency(c.code)}
+              style={{
+                flex: 1, padding: '10px 8px',
+                background: active ? C.accent + '22' : C.bg3,
+                border: '1px solid ' + (active ? C.accent + '66' : C.border),
+                borderRadius: 8,
+                color: active ? C.accent : C.dim,
+                cursor: 'pointer', ...MONO, fontSize: 12,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}>
+              <span style={{ ...BEBAS, fontSize: 14 }}>{c.symbol}</span>
+              <span>{c.code}</span>
             </button>
           );
         })}

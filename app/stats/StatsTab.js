@@ -6,6 +6,7 @@ import Icon from '@/app/components/Icon';
 import { useT } from '@/lib/i18n';
 import PortfolioChangeCard from '@/app/components/PortfolioChangeCard';
 import ListenStats from '@/app/components/ListenStats';
+import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 
 const GRADE_COLORS = {M:'#a78bfa',NM:'#4ade80','VG+':'#60a5fa',VG:'#f5c842','G+':'#f97316',G:'#f87171',F:'#888',P:'#555'};
 const GRADE_ORDER  = ['M','NM','VG+','VG','G+','G','F','P'];
@@ -46,6 +47,8 @@ function BarChart({data,colorFn}){
 
 function PortfolioChart({snapshots}){
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   if(!snapshots||snapshots.length<2)return(
     <div style={{textAlign:'center',padding:'24px 0',color:C.dim,...MONO,fontSize:11}}>
       {t('stats.portfolioChartEmpty')}
@@ -65,7 +68,7 @@ function PortfolioChart({snapshots}){
     <div>
       <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
         <span style={{fontSize:10,color:C.dim,...MONO}}>{t('stats.trend90d')}</span>
-        <span style={{fontSize:12,color:gainColor,...MONO}}>{gain>=0?'+$':'-$'}{Math.abs(gain).toFixed(0)}</span>
+        <span style={{fontSize:12,color:gainColor,...MONO}}>{formatChange(gain, cur, fx)}</span>
       </div>
       <svg viewBox={'0 0 '+W+' '+H} style={{width:'100%',height:'auto'}}>
         <defs>
@@ -159,6 +162,8 @@ function BadgesSection({ collection, watchlist }) {
 // ── Sell suggestions ──────────────────────────────────────────
 function SellSuggestions({ collection }) {
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   const candidates = collection
     .filter(i => {
       const paid = Number(i.purchase_price);
@@ -192,12 +197,15 @@ function SellSuggestions({ collection }) {
             <div style={{fontSize:12,color:C.text,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.artist}</div>
             <div style={{fontSize:10,color:C.dim,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.album}</div>
             <div style={{fontSize:10,color:C.dim,...MONO,marginTop:1}}>
-              {t('stats.paidNow', { paid: Number(item.purchase_price).toFixed(0), now: Number(item.median_price||item.current_price).toFixed(0) })}
+              {t('stats.paidNow', {
+                paid: formatPrice(Number(item.purchase_price), cur, fx),
+                now:  formatPrice(Number(item.median_price||item.current_price), cur, fx),
+              })}
             </div>
           </div>
           <div style={{textAlign:'right',flexShrink:0}}>
             <div style={{...BEBAS,fontSize:20,color:C.green,lineHeight:1}}>+{item.gainPct.toFixed(0)}%</div>
-            <div style={{fontSize:10,color:C.green,...MONO}}>+${item.gainAbs.toFixed(0)}</div>
+            <div style={{fontSize:10,color:C.green,...MONO}}>{formatChange(item.gainAbs, cur, fx)}</div>
           </div>
         </div>
       ))}
@@ -211,6 +219,8 @@ function SellSuggestions({ collection }) {
 // ── Grade distribution ────────────────────────────────────────
 function FormatBreakdown({ collection }) {
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   // Group by canonical format. Discogs returns multi-token formats like "Vinyl, LP, Album"
   // — we normalize to first matching primary format keyword.
   const buckets = {
@@ -252,7 +262,7 @@ function FormatBreakdown({ collection }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 11, ...MONO }}>
                 <span style={{ color: C.text }}>{b.icon} {name}</span>
                 <span style={{ color: C.dim }}>
-                  {b.count} ({pct.toFixed(0)}%) · ${b.value.toFixed(0)}
+                  {b.count} ({pct.toFixed(0)}%) · {formatPrice(b.value, cur, fx)}
                 </span>
               </div>
               <div style={{ background: C.bg3, height: 6, borderRadius: 3, overflow: 'hidden' }}>
@@ -623,6 +633,8 @@ function PersonaCard() {
 
 export default function StatsTab({collection,watchlist,collectionSummary,premium,onUpgrade}){
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   const [portfolio,setPortfolio]=useState(null);
   const [loading,setLoading]=useState(true);
 
@@ -679,17 +691,17 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
         </div>
         {loading?<Skeleton h={52} r={6}/>:(
           <div style={{...BEBAS,fontSize:54,color:C.text,lineHeight:1,marginBottom:6}}>
-            {totalValue>0?'$'+totalValue.toFixed(0):'—'}
+            {totalValue>0 ? formatPrice(totalValue, cur, fx) : '—'}
           </div>
         )}
         <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
           {totalPaid>0&&!loading&&(
             <span style={{fontSize:15,color:gain>=0?C.green:C.red,...MONO,fontWeight:'bold'}}>
-              {gain>=0?'▲ +$':'▼ -$'}{Math.abs(gain).toFixed(0)}
+              {gain>=0?'▲ ':'▼ '}{formatChange(gain, cur, fx)}
               <span style={{fontSize:11,marginLeft:4,opacity:0.8}}>({gain>=0?'+':''}{gainPct.toFixed(1)}%)</span>
             </span>
           )}
-          {totalPaid>0&&!loading&&<span style={{fontSize:10,color:C.dim,...MONO}}>{t('stats.vsPaid', { n: totalPaid.toFixed(0) })}</span>}
+          {totalPaid>0&&!loading&&<span style={{fontSize:10,color:C.dim,...MONO}}>{t('stats.vsPaid', { n: formatPrice(totalPaid, cur, fx) })}</span>}
         </div>
         <div style={{fontSize:9,color:priceCount>0?C.dim:'#f5c84299',...MONO,marginTop:6}}>
           {priceCount>0 ? t('stats.basedOnDiscogs', { n: priceCount, total: collection.length }) : t('stats.tracking')}
@@ -700,8 +712,8 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
         <StatCard iconName="pkg" value={collection.length} label={t('stats.recordsLabel')} color={C.accent}/>
         <StatCard iconName="star" value={watchlist.length} label={t('stats.watching')} color={C.gold}/>
-        <StatCard iconName="wallet" value={totalPaid>0?'$'+totalPaid.toFixed(0):'—'} label={t('stats.totalPaid')} color={C.muted} loading={loading}/>
-        <StatCard iconName="barChart" value={collection.length>0?'$'+(totalPaid/collection.length).toFixed(0):'—'} label={t('stats.avgRecord')} color={C.blue}/>
+        <StatCard iconName="wallet" value={totalPaid>0 ? formatPrice(totalPaid, cur, fx) : '—'} label={t('stats.totalPaid')} color={C.muted} loading={loading}/>
+        <StatCard iconName="barChart" value={collection.length>0 ? formatPrice(totalPaid/collection.length, cur, fx) : '—'} label={t('stats.avgRecord')} color={C.blue}/>
       </div>
 
       {/* Badges */}
@@ -723,7 +735,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
               </div>
               <div style={{textAlign:'right'}}>
                 <div style={{...BEBAS,fontSize:20,color:C.green,lineHeight:1}}>+{topGainer.gainPct.toFixed(0)}%</div>
-                <div style={{fontSize:10,color:C.green,...MONO}}>+${topGainer.gainAbs.toFixed(0)}</div>
+                <div style={{fontSize:10,color:C.green,...MONO}}>{formatChange(topGainer.gainAbs, cur, fx)}</div>
               </div>
             </div>
           )}
@@ -736,7 +748,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
               </div>
               <div style={{textAlign:'right'}}>
                 <div style={{...BEBAS,fontSize:20,color:C.red,lineHeight:1}}>{topLoser.gainPct.toFixed(0)}%</div>
-                <div style={{fontSize:10,color:C.red,...MONO}}>${topLoser.gainAbs.toFixed(0)}</div>
+                <div style={{fontSize:10,color:C.red,...MONO}}>{formatPrice(topLoser.gainAbs, cur, fx)}</div>
               </div>
             </div>
           )}
@@ -781,11 +793,11 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
                 <div style={{flex:1,minWidth:0,marginRight:12}}>
                   <div style={{fontSize:12,color:C.text,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.artist}</div>
                   <div style={{fontSize:10,color:C.dim,...MONO,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.album}</div>
-                  {paid>0&&<div style={{fontSize:9,color:C.dim,...MONO}}>{t('stats.paid', { n: paid.toFixed(0) })}</div>}
+                  {paid>0&&<div style={{fontSize:9,color:C.dim,...MONO}}>{t('stats.paid', { n: formatPrice(paid, cur, fx) })}</div>}
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
-                  <div style={{...BEBAS,fontSize:20,color:C.gold,lineHeight:1}}>${now.toFixed(0)}</div>
-                  {g!==null&&<div style={{fontSize:10,color:g>=0?C.green:C.red,...MONO}}>{g>=0?'+':''}{g.toFixed(0)} ({g>=0?'+':''}{gPct}%)</div>}
+                  <div style={{...BEBAS,fontSize:20,color:C.gold,lineHeight:1}}>{formatPrice(now, cur, fx)}</div>
+                  {g!==null&&<div style={{fontSize:10,color:g>=0?C.green:C.red,...MONO}}>{formatChange(g, cur, fx)} ({g>=0?'+':''}{gPct}%)</div>}
                 </div>
               </div>
             );
@@ -864,7 +876,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <span style={{ fontSize: 10, color: C.dim, ...MONO }}>{t(data.count === 1 ? 'stats.recordsOne' : 'stats.recordsN', { n: data.count })}</span>
                     <span style={{ fontSize: 13, color: C.gold, ...MONO, fontWeight: 'bold' }}>
-                      {data.spent > 0 ? '$' + data.spent.toFixed(0) : '—'}
+                      {data.spent > 0 ? formatPrice(data.spent, cur, fx) : '—'}
                     </span>
                   </div>
                 </div>
@@ -879,7 +891,7 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
               </div>
             ))}
             <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 4, textAlign: 'right' }}>
-              {t('stats.totalAllTime', { n: collection.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0).toFixed(0) })}
+              {t('stats.totalAllTime', { n: formatPrice(collection.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0), cur, fx) })}
             </div>
           </div>
         );

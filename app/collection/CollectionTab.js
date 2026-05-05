@@ -14,6 +14,7 @@ import { rarityFromCount } from '@/lib/rarity';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm as mvConfirm } from '@/app/components/Toast';
 import ListenButton from '@/app/components/ListenButton';
+import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 import ManualAddForm from '@/app/collection/ManualAddForm';
 import PriceModal from '@/app/collection/PriceModal';
 import dynamic from 'next/dynamic';
@@ -483,6 +484,8 @@ export function CollectionTab({
   followedArtists = [], onToggleFollow, onBatchFollow,
 }) {
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   const [view, setView]                   = useState('vinyl');
   const [vaultSearch,    setVaultSearch]   = useState('');
   const [vaultFilter,    setVaultFilter]   = useState('all');
@@ -624,15 +627,18 @@ export function CollectionTab({
             <div style={{ background: 'linear-gradient(135deg,#1a0800,#2a0a00,#1a0800)', border: '1px solid ' + C.accent, borderRadius: 14, padding: '16px', marginBottom: 10, position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', right: -8, top: -8, fontSize: 70, ...BEBAS, opacity: 0.04, userSelect: 'none' }}>$</div>
               <div style={{ fontSize: 9, color: C.accent, ...MONO, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 4 }}>💰 {t('vault.summary.value')}</div>
-              <div style={{ ...BEBAS, fontSize: 44, color: C.text, lineHeight: 1, marginBottom: 6 }}>{totalVal > 0 ? '$' + totalVal.toFixed(0) : '—'}</div>
+              <div style={{ ...BEBAS, fontSize: 44, color: C.text, lineHeight: 1, marginBottom: 6 }}>{totalVal > 0 ? formatPrice(totalVal, cur, fx) : '—'}</div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 {paid > 0 && totalVal > 0 && (
+                  // gain shown via formatChange so the prefix sign comes
+                  // from one source of truth + symbol matches user currency
+
                   <span style={{ fontSize: 14, color: gainColor, ...MONO, fontWeight: 'bold' }}>
-                    {gain >= 0 ? '▲ +$' : '▼ -$'}{Math.abs(gain).toFixed(0)}
+                    {(gain >= 0 ? '▲ ' : '▼ ') + formatChange(gain, cur, fx)}
                     <span style={{ fontSize: 10, opacity: 0.8, marginLeft: 4 }}>({gain >= 0 ? '+' : ''}{gainPct.toFixed(1)}%)</span>
                   </span>
                 )}
-                {paid > 0 && <span style={{ fontSize: 10, color: C.dim, ...MONO }}>paid ${paid.toFixed(0)}</span>}
+                {paid > 0 && <span style={{ fontSize: 10, color: C.dim, ...MONO }}>{t('stats.paid', { n: formatPrice(paid, cur, fx) })}</span>}
               </div>
               <div style={{ fontSize: 9, color: C.dim, ...MONO, marginTop: 5 }}>
                 {priceTracked > 0
@@ -667,8 +673,8 @@ export function CollectionTab({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
               {[
                 { l: t('vault.summary.records'), v: summary?.itemCount ?? collection.length, c: C.accent },
-                { l: t('stats.cards.totalPaid') || 'Paid', v: paid > 0 ? '$' + paid.toFixed(0) : '—',  c: C.muted },
-                { l: t('vault.summary.gain'),    v: gain !== 0 ? (gain > 0 ? '+$' : '-$') + Math.abs(gain).toFixed(0) : '—', c: gainColor },
+                { l: t('stats.cards.totalPaid') || 'Paid', v: paid > 0 ? formatPrice(paid, cur, fx) : '—',  c: C.muted },
+                { l: t('vault.summary.gain'),    v: gain !== 0 ? formatChange(gain, cur, fx) : '—', c: gainColor },
               ].map(s => (
                 <div key={s.l} style={{ background: C.bg2, borderRadius: 8, padding: '8px', textAlign: 'center', border: '1px solid ' + C.border }}>
                   <div style={{ ...BEBAS, fontSize: 17, color: s.c, lineHeight: 1 }}>{s.v}</div>
@@ -905,8 +911,8 @@ export function CollectionTab({
                             </span>
                           )}
                           {item.format && item.format !== 'Vinyl' && <span style={{ fontSize: 8, color: C.dim, ...MONO, padding: '1px 4px', background: C.bg3, borderRadius: 3 }}>{item.format}</span>}
-                          {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>${paid.toFixed(0)}</span>}
-                          {now > 0  && <span style={{ fontSize: 9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO }}>→${now.toFixed(0)}{gain !== null ? (gain >= 0 ? ' ▲' : ' ▼') : ''}</span>}
+                          {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>{formatPrice(paid, cur, fx)}</span>}
+                          {now > 0  && <span style={{ fontSize: 9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO }}>→{formatPrice(now, cur, fx)}{gain !== null ? (gain >= 0 ? ' ▲' : ' ▼') : ''}</span>}
                           {now === 0 && paid > 0 && <span style={{ fontSize: 8, color: '#444', ...MONO }}>⏳</span>}
                           {/* Rarity badge — uses Discogs num_for_sale */}
                           {(() => {
@@ -971,9 +977,9 @@ export function CollectionTab({
                         {/* Price + gain */}
                         {(paid > 0 || now > 0) && (
                           <div style={{ display: 'flex', gap: 12, marginBottom: 10, padding: '8px 10px', background: C.bg3, borderRadius: 8 }}>
-                            {paid > 0 && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Paid</div><div style={{ ...BEBAS, fontSize: 18, color: '#f5c842' }}>${paid.toFixed(0)}</div></div>}
-                            {now > 0  && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Market</div><div style={{ ...BEBAS, fontSize: 18, color: '#4ade80' }}>${now.toFixed(0)}</div></div>}
-                            {gain !== null && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Gain</div><div style={{ ...BEBAS, fontSize: 18, color: gain >= 0 ? '#4ade80' : '#f87171' }}>{gain >= 0 ? '+' : ''}${gain.toFixed(0)}<span style={{ fontSize: 11 }}> ({gainPct >= 0 ? '+' : ''}{gainPct?.toFixed(0)}%)</span></div></div>}
+                            {paid > 0 && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Paid</div><div style={{ ...BEBAS, fontSize: 18, color: '#f5c842' }}>{formatPrice(paid, cur, fx)}</div></div>}
+                            {now > 0  && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Market</div><div style={{ ...BEBAS, fontSize: 18, color: '#4ade80' }}>{formatPrice(now, cur, fx)}</div></div>}
+                            {gain !== null && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Gain</div><div style={{ ...BEBAS, fontSize: 18, color: gain >= 0 ? '#4ade80' : '#f87171' }}>{formatChange(gain, cur, fx)}<span style={{ fontSize: 11 }}> ({gainPct >= 0 ? '+' : ''}{gainPct?.toFixed(0)}%)</span></div></div>}
                           </div>
                         )}
                         {/* Grade */}
@@ -1143,7 +1149,9 @@ export function CollectionTab({
                             style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6,
                               color: item.purchase_price ? C.gold : C.dim,
                               padding: '8px 12px', cursor: 'pointer', ...MONO, fontSize: 11, marginBottom: 8, minHeight: 36 }}>
-                            {item.purchase_price ? t('vault.priceModal.editBtn', { n: Number(item.purchase_price).toFixed(0) }) : t('vault.priceModal.setBtn')}
+                            {item.purchase_price
+                              ? t('vault.priceModal.editBtn', { n: formatPrice(Number(item.purchase_price), cur, fx) })
+                              : t('vault.priceModal.setBtn')}
                           </button>
                         )}
                         {/* Alert + Delete */}
