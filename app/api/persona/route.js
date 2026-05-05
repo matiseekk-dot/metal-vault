@@ -30,6 +30,23 @@ const ARCHETYPES = [
 ];
 
 export async function GET() {
+  try {
+    return await buildPersona();
+  } catch (e) {
+    // Wrap the whole route in try/catch — silent 500s with no body left
+    // us guessing for hours when the PersonaCard kept hiding. Now the
+    // response carries the actual message + stack so the operator can
+    // see it in DevTools → Network → Response without redeploying.
+    console.error('[/api/persona] uncaught:', e);
+    return NextResponse.json({
+      error:   e?.message || String(e),
+      stack:   e?.stack,
+      origin:  '/api/persona',
+    }, { status: 500 });
+  }
+}
+
+async function buildPersona() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -42,7 +59,14 @@ export async function GET() {
     .from('collection')
     .select('id, artist, album, label, year, cover, purchase_price, current_price, median_price, genres, styles, genre, num_for_sale')
     .eq('user_id', user.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json({
+      error:  'supabase: ' + error.message,
+      code:   error.code,
+      hint:   error.hint,
+      origin: 'collection.select',
+    }, { status: 500 });
+  }
 
   if (!items || items.length === 0) {
     return NextResponse.json({ empty: true, message: 'Add records to see your Persona' });

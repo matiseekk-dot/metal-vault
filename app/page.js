@@ -69,24 +69,23 @@ export default function MetalVault() {
   const [feedLoading, setFeedLoading] = useState(true);
   const [feedError,   setFeedError]   = useState('');
 
-  // UI — initial tab from URL ?tab=… (manifest shortcuts use this).
-  // Only honour known tab ids; anything else falls back to feed.
-  const [tab,             setTab]             = useState(() => {
-    if (typeof window === 'undefined') return 'vault';
+  // UI — initial tab. SSR-safe: always start on 'vault' so the server-
+  // rendered HTML matches the first client render exactly (otherwise
+  // React throws hydration error #418 — server renders Vault content,
+  // client immediately tries to render Calendar content because
+  // localStorage said so). The tab-restore from URL/localStorage runs
+  // in a useEffect on mount instead.
+  const [tab, setTab] = useState('vault');
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     const valid = ['feed','vault','calendar','profile'];
-    // ?tab=foo wins over everything else (deep links from notifications)
     const fromUrl = new URLSearchParams(window.location.search).get('tab');
-    if (valid.includes(fromUrl)) return fromUrl;
-    // Otherwise restore the last tab the user was on. Vault is the
-    // default for first-run because the Feed (Discogs releases) takes
-    // 1-2s on cold start while Vault renders instantly from local
-    // collection state — gives the user something useful immediately.
+    if (valid.includes(fromUrl)) { setTab(fromUrl); return; }
     try {
       const last = localStorage.getItem('mv_last_tab');
-      if (valid.includes(last)) return last;
+      if (valid.includes(last)) setTab(last);
     } catch {}
-    return 'vault';
-  });
+  }, []);
   const [filter,          setFilter]          = useState('all');
   const [sort,            setSort]            = useState('date_desc');
   const [search,          setSearch]          = useState('');
