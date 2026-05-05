@@ -118,36 +118,59 @@ export default function MetalVault() {
   useBackButton(showScanner,     () => setShowScanner(false));
   useBackButton(showImportModal, () => setShowImportModal(false));
 
-  // Auth listener
+  // Auth listener — drives all per-user data loading.
+  //
+  // De-dupe rule: only call loadUserData / loadProfile / loadPremium when
+  // the *user identity* actually changed. Supabase fires onAuthStateChange
+  // with INITIAL_SESSION on subscribe, then TOKEN_REFRESHED periodically
+  // (and on tab visibility change in some browsers). The previous version
+  // also called getSession() and ran the full data load on every fire,
+  // which produced 6-8 redundant /api/collection + /api/portfolio +
+  // /api/artists + /api/watchlist hits per session — measurable lag,
+  // wasted Supabase quota, and middleware rate-limit pressure.
+  //
+  // Now: getSession() is gone (Supabase emits INITIAL_SESSION which gives
+  // us the same data), and we track the last loaded user.id so a
+  // TOKEN_REFRESHED event with the same user is a no-op for data
+  // fetching. Sign-out still resets, sign-in to a different account
+  // still reloads.
+  const lastUserIdRef = useRef(null);
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user || null);
-      // Initialize payments SDK once user is known. No-op for non-TWA browsers.
-      if (session?.user) initPayments(session.user.id).catch(() => {});
-      if (session?.user) { col.loadUserData(session.user); loadProfile(session.user); loadPremium(); }
-    });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextUserId = session?.user?.id || null;
       setUser(session?.user || null);
-      // Initialize payments SDK once user is known. No-op for non-TWA browsers.
-      if (session?.user) initPayments(session.user.id).catch(() => {});
-      if (session?.user) {
-        col.loadUserData(session.user);
-        loadProfile(session.user);
-        loadPremium();
-        // Show onboarding only for real first-time sign-ins
-        // TOKEN_REFRESHED also triggers SIGNED_IN — guard with seen flag
-        if (event === 'SIGNED_IN') {
-          try {
-            const seen = localStorage.getItem('mv_onboarding_done');
-            // Only show if never seen AND this isn't a tab re-focus token refresh
-            // (token refresh happens silently — check if session was just created)
-            const isNewUser = !seen && session?.user?.created_at &&
-              (Date.now() - new Date(session.user.created_at).getTime()) < 5 * 60 * 1000; // within 5 mins
-            if (isNewUser) setShowOnboarding(true);
-          } catch {}
-        }
+
+      // No user → reset and remember.
+      if (!nextUserId) {
+        col.resetUserData();
+        lastUserIdRef.current = null;
+        return;
       }
-      else col.resetUserData();
+
+      // Initialize payments SDK once user is known. No-op for non-TWA browsers.
+      initPayments(nextUserId).catch(() => {});
+
+      // Skip the heavy data load if it's the same user we already loaded.
+      // TOKEN_REFRESHED, USER_UPDATED, and tab-focus re-fires hit this
+      // path with an unchanged user.id; we don't need to re-pull
+      // collection / portfolio / watchlist for those.
+      if (nextUserId === lastUserIdRef.current) return;
+      lastUserIdRef.current = nextUserId;
+
+      col.loadUserData(session.user);
+      loadProfile(session.user);
+      loadPremium();
+
+      // Onboarding: fire only on a real first-time SIGNED_IN within the
+      // first 5 minutes of account creation. Guarded by mv_onboarding_done.
+      if (event === 'SIGNED_IN') {
+        try {
+          const seen = localStorage.getItem('mv_onboarding_done');
+          const isNewUser = !seen && session.user.created_at &&
+            (Date.now() - new Date(session.user.created_at).getTime()) < 5 * 60 * 1000;
+          if (isNewUser) setShowOnboarding(true);
+        } catch {}
+      }
     });
     return () => subscription.unsubscribe();
   }, []); // eslint-disable-line
