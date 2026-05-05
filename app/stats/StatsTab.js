@@ -412,8 +412,15 @@ function PersonaCard() {
   useEffect(() => {
     fetch('/api/persona')
       .then(r => r.json())
-      .then(d => { setPersona(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(d => {
+        // Only accept payloads we know how to render. Anything else
+        // (401/500 error envelopes, malformed body) → treat as empty
+        // so the section just hides instead of crashing the whole tab.
+        if (d && d.stats && d.title) setPersona(d);
+        else                          setPersona({ empty: true });
+        setLoading(false);
+      })
+      .catch(() => { setPersona({ empty: true }); setLoading(false); });
   }, []);
 
   // Render the persona as PNG for sharing — draws on offscreen canvas
