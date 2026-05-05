@@ -13,7 +13,7 @@
 // If you outgrow this, add a second cron at 21:00 UTC and split the work.
 
 import { NextResponse } from 'next/server';
-import { getAdminClient } from '@/lib/supabase-server';
+import { getAdminClient, supabaseAdmin } from '@/lib/supabase-server';
 
 
 export const dynamic       = 'force-dynamic';
@@ -91,12 +91,30 @@ export async function GET(request) {
     // age order. Earlier code referenced a nonexistent `updated_at`
     // column here — Postgres would 42703 the whole select, which is
     // why the cron silently no-op'd for everyone.
+    // No more auth_user:user_id(email) embed — PostgREST cross-schema
+    // embeds (public → auth) require explicit grants the project never
+    // set up, so the SELECT was returning null for everyone, alerts
+    // table was always considered empty, cron processed 0 alerts/day
+    // for every user. Fetch emails per-user via supabaseAdmin only
+    // when actually about to send.
     const { data: alerts, error: alertsErr } = await sb
       .from('price_alerts')
-      .select('*, auth_user:user_id(email)')
+      .select('*')
       .eq('is_active', true)
       .order('last_triggered', { ascending: true, nullsFirst: true });
     if (alertsErr) console.error('[cron/prices] alerts select failed:', alertsErr.message);
+
+    // Per-user email cache for the duration of this cron run.
+    const emailCache = new Map();
+    const lookupEmail = async (uid) => {
+      if (emailCache.has(uid)) return emailCache.get(uid);
+      try {
+        const { data } = await supabaseAdmin.auth.admin.getUserById(uid);
+        const e = data?.user?.email || null;
+        emailCache.set(uid, e);
+        return e;
+      } catch { emailCache.set(uid, null); return null; }
+    };
 
     const alertsToCheck = alerts || [];
     results.totalAlertsActive = alertsToCheck.length;
@@ -204,9 +222,10 @@ export async function GET(request) {
             tag:   'alert-' + alert.id,
           });
 
-          if (alert.auth_user?.email) {
+          const email = await lookupEmail(alert.user_id);
+          if (email) {
             await sendEmail(
-              alert.auth_user.email,
+              email,
               'Price alert: ' + alert.artist + ' — ' + alert.album,
               '<h2>' + alert.artist + ' — ' + alert.album + '</h2>'
               + '<p>Now <strong>$' + lowest.toFixed(0) + '</strong> on Discogs (your target: $' + target + ')</p>'

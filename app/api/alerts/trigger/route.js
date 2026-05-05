@@ -16,7 +16,7 @@
 // in a tight loop would exhaust Discogs rate limit.
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, supabaseAdmin } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,9 +69,35 @@ export async function POST() {
   const auth = discogsAuth();
   if (!auth) return NextResponse.json({ error: 'Discogs not configured' }, { status: 500 });
 
-  const { data: alerts } = await sb
-    .from('price_alerts').select('*, auth_user:user_id(email)')
+  // Pull alerts. Earlier code tried to embed auth_user:user_id(email)
+  // for the email-send path, but PostgREST embed across schemas
+  // (public → auth) requires explicit grants which weren't ever set
+  // up. The select silently returned null for everyone — `data: null`
+  // unchecked → empty alerts list → trigger pretended to run with
+  // 0 rows. User saw `{checked:0, triggered:0, skipped_no_id:0, results:[]}`
+  // even with active alerts in the DB.
+  // Fixed by dropping the embed and looking the email up separately
+  // via supabaseAdmin (service-role bypass) only at the moment we
+  // need it.
+  const { data: alerts, error: alertsErr } = await sb
+    .from('price_alerts').select('*')
     .eq('user_id', user.id).eq('is_active', true);
+  if (alertsErr) {
+    console.error('[alerts/trigger] select failed:', alertsErr.message);
+    return NextResponse.json({
+      error: 'Could not load alerts: ' + alertsErr.message,
+    }, { status: 500 });
+  }
+
+  // Resolve user email for email-on-trigger. Single auth.admin call
+  // outside the loop. Tolerate failure — push still fires regardless.
+  let userEmail = user.email || null;
+  if (!userEmail) {
+    try {
+      const { data } = await supabaseAdmin.auth.admin.getUserById(user.id);
+      userEmail = data?.user?.email || null;
+    } catch {}
+  }
 
   const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
   const out = { checked: 0, triggered: 0, skipped_no_id: 0, results: [] };
@@ -162,9 +188,9 @@ export async function POST() {
           url:   '/?tab=vault',
           tag:   'alert-' + alert.id,
         });
-        if (alert.auth_user?.email) {
+        if (userEmail) {
           await sendEmail(
-            alert.auth_user.email,
+            userEmail,
             'Price alert: ' + alert.artist + ' — ' + alert.album,
             '<h2>' + alert.artist + ' — ' + alert.album + '</h2>'
             + '<p>Now <strong>$' + lowest.toFixed(0) + '</strong> on Discogs (your target: $' + target + ')</p>'
