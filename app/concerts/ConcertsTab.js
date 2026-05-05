@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
-import { toast } from '@/app/components/Toast';
+import { toast, confirm as mvConfirm } from '@/app/components/Toast';
 import { useT, useLocale } from '@/lib/i18n';
 import { useCurrency, useFx, formatPrice } from '@/lib/currency';
 
@@ -98,8 +98,10 @@ function AttendancePrompts({ onAttendConfirm }) {
           {t(prompts.length === 1 ? 'concerts.attendedTitle.one' : 'concerts.attendedTitle.many', { n: prompts.length })}
         </div>
         <button onClick={() => setHidden(true)}
+          aria-label={t('common.close')}
           style={{ background: 'none', border: 'none', color: C.dim,
-            cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+            cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '8px 10px',
+            minWidth: 44, minHeight: 44 }}>×</button>
       </div>
 
       {prompts.slice(0, 3).map(p => (
@@ -717,9 +719,18 @@ export default function ConcertsTab() {
                            </div>
                          )}
                        </div>
-                       <button onClick={()=>del(c.id)} style={{background:'none',border:'none',color:'#333',cursor:'pointer',fontSize:20,padding:'2px 4px',flexShrink:0}}
+                       <button onClick={async () => {
+                         // Bug from audit: delete fired without confirmation;
+                         // a stray tap nuked the row. Now goes through
+                         // mvConfirm with danger styling + delete label.
+                         if (await mvConfirm(t('concerts.deleteConfirm', { band: c.band }), { kind: 'danger', confirmLabel: t('common.delete') })) {
+                           del(c.id);
+                         }
+                       }}
+                         aria-label={t('common.delete')}
+                         style={{background:'none',border:'none',color:'#666',cursor:'pointer',fontSize:22,padding:'10px 12px',minWidth:44,minHeight:44,flexShrink:0}}
                          onMouseEnter={e=>e.currentTarget.style.color=C.accent}
-                         onMouseLeave={e=>e.currentTarget.style.color='#333'}>×</button>
+                         onMouseLeave={e=>e.currentTarget.style.color='#666'}>×</button>
                      </div>
                    </div>
                  );

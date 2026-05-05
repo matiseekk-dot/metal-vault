@@ -200,14 +200,18 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
             />
             <button
               onClick={() => handleDelete(p.path)}
-              aria-label="Delete photo"
+              aria-label={t('photos.delete')}
               style={{
-                position: 'absolute', top: 4, right: 4,
-                width: 20, height: 20, borderRadius: '50%',
+                // Visual hit target: 28×28 pill in the corner of the
+                // photo. Native touch area extended via padding+inset
+                // because Material/HIG want ≥44×44 — we used to ship
+                // 20×20 which mis-fired half the time on mobile.
+                position: 'absolute', top: 2, right: 2,
+                width: 32, height: 32, borderRadius: '50%',
                 background: 'rgba(0,0,0,0.7)', border: '1px solid #444',
                 color: '#fff', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, lineHeight: 1, padding: 0,
+                fontSize: 14, lineHeight: 1, padding: 0,
               }}
             >×</button>
           </div>
@@ -305,13 +309,13 @@ function PhotoLightbox({ src, onClose }) {
       <img src={src} alt="Preview"
         style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}/>
       <button
-        aria-label="Close"
+        aria-label={t('common.close')}
         style={{
           position: 'absolute', top: 16, right: 16,
-          width: 36, height: 36, borderRadius: '50%',
+          width: 44, height: 44, borderRadius: '50%',
           background: 'rgba(0,0,0,0.6)', border: '1px solid #444',
           color: '#fff', cursor: 'pointer',
-          fontSize: 18, lineHeight: 1, padding: 0,
+          fontSize: 20, lineHeight: 1, padding: 0,
         }}
       >×</button>
     </div>

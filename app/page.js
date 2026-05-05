@@ -716,7 +716,9 @@ export default function MetalVault() {
             <div style={{ width:40, height:4, background:'#333', borderRadius:2, margin:'12px auto 0' }}/>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 16px 0' }}>
               <div style={{ ...BEBAS, fontSize:22, color:C.text, letterSpacing:'0.06em' }}>BARCODE SCANNER</div>
-              <button onClick={()=>setShowScanner(false)} style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:24, padding:'0 4px' }}>×</button>
+              <button onClick={()=>setShowScanner(false)}
+                aria-label={t('common.close')}
+                style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:24, padding:'10px 14px', minWidth:44, minHeight:44 }}>×</button>
             </div>
             <ScannerTab onAddToCollection={item=>col.addToCollection(item,()=>setShowScanner(false))} onAddToWatchlist={col.toggleWatch} collection={col.collection} watchlist={col.watchlist}/>
           </div>

@@ -92,6 +92,7 @@ export function StatsBar({releases}){
 
 // ── AlbumCard ─────────────────────────────────────────────────
 export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,onFollowToggle,user,isInCollection,onQuickAdd}){
+  const t = useT();
   const cur = useCurrency();
   const fx  = useFx();
   const today=new Date();
@@ -139,8 +140,10 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
               </button>
             )}
             <button onClick={e=>{e.stopPropagation();onWatchToggle(album);}}
+              aria-label={isWatched ? t('search.inWatchlist') : t('search.addToWatch')}
               style={{background:'#00000066',border:'none',
-                borderRadius:6,cursor:'pointer',fontSize:16,padding:'3px 5px',
+                borderRadius:6,cursor:'pointer',fontSize:18,padding:'8px 10px',
+                minWidth:36,minHeight:36,
                 color:isWatched?'#f5c842':'#ffffff88',lineHeight:1}}>
               {isWatched?'★':'☆'}
             </button>
