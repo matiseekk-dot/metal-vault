@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { realGenre } from '@/lib/genre-helper';
 import Icon from '@/app/components/Icon';
@@ -647,33 +647,51 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
     fetch('/api/portfolio').then(r=>r.json()).then(d=>{setPortfolio(d);setLoading(false);}).catch(()=>setLoading(false));
   },[collection.length]);
 
-  const totalPaid    = collection.reduce((s,i)=>s+(Number(i.purchase_price)||0),0);
-  const marketVal    = collection.reduce((s,i)=>s+(Number(i.median_price||i.current_price)||0),0);
-  const totalValue   = collection.reduce((s,i)=>{
-    const m=Number(i.median_price||i.current_price);
-    return s+(m>0?m:(Number(i.purchase_price)||0));
-  },0);
-  const priceCount   = collection.filter(i=>Number(i.median_price||i.current_price)>0).length;
-  const gain         = totalValue-totalPaid;
-  const gainPct      = totalPaid>0?Math.max(-999,Math.min(999,(gain/totalPaid)*100)):0;
+  // ── Derived stats — memoized over `collection` ────────────────
+  // Audit caught ~25 array reduce/filter/sort ops running every render
+  // (including parent-driven re-renders that don't change collection).
+  // For users with 500+ records this measurably stuttered tab switches.
+  // useMemo keys on `collection` so the work runs only when items
+  // actually change — which is rare (add/remove, price refresh).
+  const stats = useMemo(() => {
+    const totalPaid  = collection.reduce((s,i)=>s+(Number(i.purchase_price)||0),0);
+    const marketVal  = collection.reduce((s,i)=>s+(Number(i.median_price||i.current_price)||0),0);
+    const totalValue = collection.reduce((s,i)=>{
+      const m = Number(i.median_price||i.current_price);
+      return s+(m>0?m:(Number(i.purchase_price)||0));
+    },0);
+    const priceCount = collection.filter(i=>Number(i.median_price||i.current_price)>0).length;
+    const gain       = totalValue-totalPaid;
+    const gainPct    = totalPaid>0 ? Math.max(-999,Math.min(999,(gain/totalPaid)*100)) : 0;
 
-  const withGain=collection.filter(i=>Number(i.purchase_price)>0&&Number(i.median_price||i.current_price)>0)
-    .map(i=>{const paid=Number(i.purchase_price),now=Number(i.median_price||i.current_price);return{...i,gainAbs:now-paid,gainPct:(now-paid)/paid*100};});
-  const topGainer=withGain.length?[...withGain].sort((a,b)=>b.gainPct-a.gainPct)[0]:null;
-  const topLoser=withGain.length>1?[...withGain].sort((a,b)=>a.gainPct-b.gainPct)[0]:null;
+    const withGain  = collection.filter(i=>Number(i.purchase_price)>0&&Number(i.median_price||i.current_price)>0)
+      .map(i=>{const paid=Number(i.purchase_price),now=Number(i.median_price||i.current_price);return{...i,gainAbs:now-paid,gainPct:(now-paid)/paid*100};});
+    const topGainer = withGain.length ? [...withGain].sort((a,b)=>b.gainPct-a.gainPct)[0] : null;
+    const topLoser  = withGain.length>1 ? [...withGain].sort((a,b)=>a.gainPct-b.gainPct)[0] : null;
 
-  const mostValuable=[...collection].sort((a,b)=>(Number(b.median_price||b.current_price)||0)-(Number(a.median_price||a.current_price)||0))[0];
-  const recentlyAdded=[...collection].sort((a,b)=>new Date(b.added_at||0)-new Date(a.added_at||0))[0];
-  const artistMap={};collection.forEach(c=>{artistMap[c.artist]=(artistMap[c.artist]||0)+1;});
-  const topArtist=Object.entries(artistMap).sort((a,b)=>b[1]-a[1])[0];
+    const mostValuable  = [...collection].sort((a,b)=>(Number(b.median_price||b.current_price)||0)-(Number(a.median_price||a.current_price)||0))[0];
+    const recentlyAdded = [...collection].sort((a,b)=>new Date(b.added_at||0)-new Date(a.added_at||0))[0];
 
-  const genreMap={};collection.forEach(c=>{const g=realGenre(c);genreMap[g]=(genreMap[g]||0)+1;});
-  const genreData=Object.entries(genreMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([label,value])=>({label,value}));
+    const artistMap = {};
+    collection.forEach(c=>{ artistMap[c.artist] = (artistMap[c.artist]||0)+1; });
+    const topArtist = Object.entries(artistMap).sort((a,b)=>b[1]-a[1])[0];
 
-  const COLORS=['#dc2626','#f5c842','#4ade80','#60a5fa','#a78bfa','#f97316'];
+    const genreMap  = {};
+    collection.forEach(c=>{ const g=realGenre(c); genreMap[g] = (genreMap[g]||0)+1; });
+    const genreData = Object.entries(genreMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([label,value])=>({label,value}));
 
-  const topByValue=[...collection].filter(i=>Number(i.median_price||i.current_price)>0)
-    .sort((a,b)=>(Number(b.median_price||b.current_price)||0)-(Number(a.median_price||a.current_price)||0)).slice(0,5);
+    const topByValue = [...collection].filter(i=>Number(i.median_price||i.current_price)>0)
+      .sort((a,b)=>(Number(b.median_price||b.current_price)||0)-(Number(a.median_price||a.current_price)||0)).slice(0,5);
+
+    return { totalPaid, marketVal, totalValue, priceCount, gain, gainPct,
+             topGainer, topLoser, mostValuable, recentlyAdded, topArtist,
+             genreData, topByValue };
+  }, [collection]);
+  const { totalPaid, totalValue, priceCount, gain, gainPct,
+          topGainer, topLoser, mostValuable, recentlyAdded, topArtist,
+          genreData, topByValue } = stats;
+
+  const COLORS = ['#dc2626','#f5c842','#4ade80','#60a5fa','#a78bfa','#f97316'];
 
   return(
     <div style={{padding:'0 16px 16px'}}>
