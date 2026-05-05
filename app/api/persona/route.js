@@ -55,9 +55,15 @@ async function buildPersona() {
   // small for users with 500+ records. The 20 columns we don't touch
   // here (notes, grading flags, photo blobs, etc) shouldn't ride along
   // every persona request.
+  // Narrow select to fields persona actually uses. Note: the table has
+  // `genres` (plural, TEXT[] from migration 007) but NOT a singular
+  // `genre` column on the collection table — tried selecting it and
+  // Postgres returned "column collection.genre does not exist (42703)".
+  // genreTagsForItem already handles the array; the `genre` lookup
+  // inside it is a dead branch on this table.
   const { data: items, error } = await supabase
     .from('collection')
-    .select('id, artist, album, label, year, cover, purchase_price, current_price, median_price, genres, styles, genre, num_for_sale')
+    .select('id, artist, album, label, year, cover, purchase_price, current_price, median_price, genres, styles, num_for_sale')
     .eq('user_id', user.id);
   if (error) {
     return NextResponse.json({
