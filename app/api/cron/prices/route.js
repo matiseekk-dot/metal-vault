@@ -16,11 +16,15 @@ import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase-server';
 
 
-export const dynamic = 'force-dynamic';
+export const dynamic       = 'force-dynamic';
+// IMPORTANT: without this, Vercel kills the function at 10s (Hobby) /
+// 60s (Pro default), chopping off the alerts loop before it ever runs.
+// 300 = 5 minutes, the max for Pro plans on /api routes.
+export const maxDuration   = 300;
 
-const BUDGET_MS = 3 * 60 * 1000;        // 3 minutes hard ceiling per invocation
+const BUDGET_MS = 4 * 60 * 1000;        // 4 minutes hard ceiling per invocation
 const PACING_MS = 600;                  // Discogs rate-limit safe pacing
-const MAX_ITEMS = Math.floor(BUDGET_MS / PACING_MS);  // ~300
+const MAX_ITEMS = Math.floor(BUDGET_MS / PACING_MS);  // ~400
 
 function authHeader() {
   const key = process.env.DISCOGS_KEY, secret = process.env.DISCOGS_SECRET, token = process.env.DISCOGS_TOKEN;
@@ -73,67 +77,22 @@ export async function GET(request) {
     budgetMs:          BUDGET_MS,
   };
 
-  // ── 1. Refresh collection prices ─────────────────────────────
-  // Order by last_price_check ASC NULLS FIRST → stale items go first.
-  // Cap to MAX_ITEMS so we never exceed Vercel timeout.
-  const { data: items } = await sb
-    .from('collection')
-    .select('id, discogs_id, artist, album, user_id')
-    .not('discogs_id', 'is', null)
-    .or('last_price_check.is.null,last_price_check.lt.'+new Date(Date.now()-23*60*60*1000).toISOString())
-    .order('last_price_check', { ascending: true, nullsFirst: true })
-    .limit(MAX_ITEMS);
-
-  const totalCollectionPending = items?.length || 0;
-
-  for (const item of (items || [])) {
-    if (budgetExpired()) {
-      results.collectionSkippedBudget = totalCollectionPending - results.collectionUpdated;
-      break;
-    }
-    try {
-      const r = await fetch(
-        'https://api.discogs.com/marketplace/stats/'+item.discogs_id,
-        { headers: { Authorization: discogsAuth, 'User-Agent': 'MetalVault/1.0' } }
-      );
-      if (!r.ok) continue;
-      const d = await r.json();
-      const lowest = d.lowest_price?.value || null;
-      const median = d.median?.value       || null;
-      const numForSale = d.num_for_sale ?? null;
-      await sb.from('collection').update({
-        current_price:    lowest,
-        median_price:     median,
-        num_for_sale:     numForSale,
-        last_price_check: new Date().toISOString(),
-      }).eq('id', item.id);
-      if (lowest || median) {
-        await sb.from('price_history').upsert({
-          discogs_id:    item.discogs_id,
-          snapshot_date: new Date().toISOString().split('T')[0],
-          lowest_price:  lowest,
-          median_price:  median,
-        }, { onConflict: 'discogs_id,snapshot_date' });
-      }
-      results.collectionUpdated++;
-    } catch (e) {
-      results.errors.push('col:'+item.id+':'+e.message.slice(0,30));
-    }
-    await new Promise(r => setTimeout(r, PACING_MS));
-  }
-
-  // ── 2. Evaluate active price alerts (only if budget remaining) ──
-  if (!budgetExpired()) {
+  // ── 1. Evaluate active price alerts FIRST ────────────────────
+  // Alerts are user-facing and rare (a handful per active user) so we
+  // process them BEFORE the much larger collection-refresh phase. The
+  // bug this fixes: original ordering had collection refresh first,
+  // and at ~600ms per item the function would burn its entire timeout
+  // before reaching the alerts loop. With alerts first, even a 12-alert
+  // user gets them processed in ~7s — well under any timeout.
+  {
     const { data: alerts } = await sb
       .from('price_alerts')
       .select('*, auth_user:user_id(email)')
       .eq('is_active', true)
       .order('updated_at', { ascending: true, nullsFirst: true });
 
-    const remainingMs   = BUDGET_MS - (Date.now() - startedAt);
-    const alertsBudget  = Math.floor(remainingMs / PACING_MS);
-    const alertsToCheck = (alerts || []).slice(0, alertsBudget);
-    results.alertsSkippedBudget = (alerts?.length || 0) - alertsToCheck.length;
+    const alertsToCheck = alerts || [];
+    results.totalAlertsActive = alertsToCheck.length;
 
     for (const alert of alertsToCheck) {
       if (budgetExpired()) break;
@@ -231,6 +190,59 @@ export async function GET(request) {
         }
       } catch (e) {
         results.errors.push('alert:'+alert.id+':'+e.message.slice(0,30));
+      }
+      await new Promise(r => setTimeout(r, PACING_MS));
+    }
+  }
+
+  // ── 2. Refresh collection prices in remaining budget ─────────
+  // Runs AFTER alerts so a slow function never starves the user-facing
+  // notification path. Order by last_price_check ASC NULLS FIRST so
+  // stale items go first. Cap to MAX_ITEMS so we never exceed the
+  // function timeout.
+  if (!budgetExpired()) {
+    const { data: items } = await sb
+      .from('collection')
+      .select('id, discogs_id, artist, album, user_id')
+      .not('discogs_id', 'is', null)
+      .or('last_price_check.is.null,last_price_check.lt.'+new Date(Date.now()-23*60*60*1000).toISOString())
+      .order('last_price_check', { ascending: true, nullsFirst: true })
+      .limit(MAX_ITEMS);
+
+    const totalCollectionPending = items?.length || 0;
+
+    for (const item of (items || [])) {
+      if (budgetExpired()) {
+        results.collectionSkippedBudget = totalCollectionPending - results.collectionUpdated;
+        break;
+      }
+      try {
+        const r = await fetch(
+          'https://api.discogs.com/marketplace/stats/'+item.discogs_id,
+          { headers: { Authorization: discogsAuth, 'User-Agent': 'MetalVault/1.0' } }
+        );
+        if (!r.ok) continue;
+        const d = await r.json();
+        const lowest = d.lowest_price?.value || null;
+        const median = d.median?.value       || null;
+        const numForSale = d.num_for_sale ?? null;
+        await sb.from('collection').update({
+          current_price:    lowest,
+          median_price:     median,
+          num_for_sale:     numForSale,
+          last_price_check: new Date().toISOString(),
+        }).eq('id', item.id);
+        if (lowest || median) {
+          await sb.from('price_history').upsert({
+            discogs_id:    item.discogs_id,
+            snapshot_date: new Date().toISOString().split('T')[0],
+            lowest_price:  lowest,
+            median_price:  median,
+          }, { onConflict: 'discogs_id,snapshot_date' });
+        }
+        results.collectionUpdated++;
+      } catch (e) {
+        results.errors.push('col:'+item.id+':'+e.message.slice(0,30));
       }
       await new Promise(r => setTimeout(r, PACING_MS));
     }

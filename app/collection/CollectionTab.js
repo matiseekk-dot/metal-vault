@@ -225,19 +225,64 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
     </div>
   );
 
+  // ── Manual "check alerts now" — bypasses the daily cron schedule.
+  // Hits /api/alerts/trigger which re-evaluates this user's active
+  // alerts against live Discogs prices and fires push/email for any
+  // that hit the threshold. Useful for verifying setup without
+  // waiting for 09:00 UTC.
+  const checkAlertsNow = async () => {
+    try {
+      const r = await fetch('/api/alerts/trigger', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) {
+        toast.error(d.error || t('alert.checkFailed'));
+        return;
+      }
+      if (d.triggered > 0) {
+        toast.success(t('alert.checkTriggered', { n: d.triggered }));
+        // Refresh alerts state so the UI flips active→done
+        try {
+          const fresh = await fetch('/api/alerts').then(r => r.json());
+          if (fresh.alerts) {
+            const map = {};
+            for (const a of fresh.alerts) {
+              if (a.is_active !== false) {
+                map[String(a.discogs_id)] = { price: Number(a.target_price), type: a.alert_type || 'PRICE_DROP' };
+              }
+            }
+            setAlertDone(map);
+          }
+        } catch {}
+      } else {
+        toast.success(t('alert.checkClean', { n: d.checked || 0 }));
+      }
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
+
   return (
     <div style={{ padding: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
         <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
           {watchlist.length} {watchlist.length === 1 ? t('watchlist.album') : t('watchlist.albums')}
           {user && <span style={{ color: '#4ade80' }}> {t('watchlist.synced')}</span>}
         </div>
-        <select value={sort} onChange={e => setSort(e.target.value)}
-          style={{ background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.muted, padding: '5px 8px', fontSize: 11, ...MONO, cursor: 'pointer', outline: 'none' }}>
-          <option value="added">{t('vault.sort.added')}</option>
-          <option value="artist">{t('vault.sort.artist')}</option>
-          <option value="year">{t('vault.sort.year')}</option>
-        </select>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          {user && Object.keys(alertDone).length > 0 && (
+            <button onClick={checkAlertsNow}
+              title={t('alert.checkNowTitle')}
+              style={{ background: C.gold + '22', border: '1px solid ' + C.gold + '66', borderRadius: 6, color: C.gold, padding: '5px 9px', fontSize: 10, ...MONO, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              🔔 {t('alert.checkNow')}
+            </button>
+          )}
+          <select value={sort} onChange={e => setSort(e.target.value)}
+            style={{ background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, color: C.muted, padding: '5px 8px', fontSize: 11, ...MONO, cursor: 'pointer', outline: 'none' }}>
+            <option value="added">{t('vault.sort.added')}</option>
+            <option value="artist">{t('vault.sort.artist')}</option>
+            <option value="year">{t('vault.sort.year')}</option>
+          </select>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
