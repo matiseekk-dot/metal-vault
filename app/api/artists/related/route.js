@@ -55,7 +55,7 @@ export async function GET(req) {
     mbid ? getArtistRelations(mbid) : Promise.resolve(null),
     getArtistInfo(name, lang),
     getSimilarArtists(name, 12),
-    findArtistImage(name),
+    findArtistImage(name, lang),
   ]);
 
   // Split MB members into current vs ex- for cleaner UI sections.

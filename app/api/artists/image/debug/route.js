@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server';
 import { isSpotifyConfigured } from '@/lib/spotify';
 import { isLastfmConfigured } from '@/lib/lastfm';
 import { findArtistImage as findFromDeezer } from '@/lib/deezer';
+import { findArtistImage as findFromWikipedia } from '@/lib/wikipedia';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,8 +109,8 @@ export async function GET(req) {
         );
       }
 
-      // ── Always try Deezer as fallback so the operator can confirm
-      //    the user-facing experience will work
+      // ── Always try Deezer + Wikipedia as fallbacks so the operator
+      //    can confirm the user-facing experience will work
       try {
         const dz = await findFromDeezer(name);
         out.deezer = {
@@ -118,14 +119,29 @@ export async function GET(req) {
           image_url:    dz?.image || null,
           deezer_url:   dz?.deezerUrl || null,
         };
-        if (dz?.image) {
-          out.diagnosis += ' ✅ Deezer fallback successfully returned an image — the live UI will use this.';
-        } else {
-          out.diagnosis += ' ❌ Deezer also returned nothing for this artist — try /api/artists/image/debug?name=Metallica to see if Deezer works at all.';
-        }
       } catch (e) {
         out.deezer = { tried: true, error: e.message };
       }
+      try {
+        const wp = await findFromWikipedia(name, 'en');
+        out.wikipedia = {
+          tried:         true,
+          image_found:   !!wp?.image,
+          image_url:     wp?.image || null,
+          wikipedia_url: wp?.wikipediaUrl || null,
+        };
+      } catch (e) {
+        out.wikipedia = { tried: true, error: e.message };
+      }
+
+      // Compose diagnosis from whichever provider succeeded.
+      const dzOk = out.deezer?.image_found;
+      const wpOk = out.wikipedia?.image_found;
+      out.diagnosis += dzOk
+        ? ' ✅ Deezer fallback returned an image — the live UI will use this.'
+        : wpOk
+        ? ' ✅ Wikipedia fallback returned an image — the live UI will use this.'
+        : ' ❌ Neither Deezer nor Wikipedia have a photo for this artist. The UI will show a letter circle.';
       return NextResponse.json(out, { headers: NO_CACHE });
     }
     let json; try { json = JSON.parse(text); } catch { json = {}; }
