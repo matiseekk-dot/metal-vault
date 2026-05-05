@@ -339,7 +339,7 @@ export default function ProfileTab({
               toast.error(result.error || 'Restore failed');
             }
           }} style={{ background: 'transparent', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 14px', fontSize: 10, ...MONO, cursor: 'pointer' }}>
-            ↻ Restore previous purchase
+            ↻ {t('profile.restorePurchase')}
           </button>
         </div>
       )}
@@ -347,16 +347,21 @@ export default function ProfileTab({
         <div style={{ background: 'linear-gradient(135deg,#0a0a0a,#1a0a00)', border: '1px solid #3f3f3f', borderRadius: 12, padding: '16px', marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
             <div>
-              <div style={{ ...BEBAS, fontSize: 20, color: C.text, letterSpacing: '0.06em', lineHeight: 1 }}>FREE PLAN</div>
-              <div style={{ fontSize: 10, color: C.dim, ...MONO, marginTop: 3 }}>Unlimited vinyl awaits</div>
+              <div style={{ ...BEBAS, fontSize: 20, color: C.text, letterSpacing: '0.06em', lineHeight: 1 }}>{t('profile.free.title')}</div>
+              <div style={{ fontSize: 10, color: C.dim, ...MONO, marginTop: 3 }}>{t('profile.free.tagline')}</div>
             </div>
             <button onClick={onUpgrade}
               style={{ background: 'linear-gradient(135deg,#dc2626,#991b1b)', border: 'none', borderRadius: 8, color: '#fff', padding: '9px 16px', cursor: 'pointer', ...BEBAS, fontSize: 15, letterSpacing: '0.06em', flexShrink: 0 }}>
-              UPGRADE →
+              {t('profile.free.upgradeCta')}
             </button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {[['pkg','Unlimited records'],['bell','3 price alerts free'],['insurance','Pro: Insurance Report'],['priceHistory','Pro: Price history']].map(([iconName, text]) => (
+            {[
+              ['pkg',          t('profile.free.feat.records')],
+              ['bell',         t('profile.free.feat.alerts')],
+              ['insurance',    t('profile.free.feat.insurance')],
+              ['priceHistory', t('profile.free.feat.priceHistory')],
+            ].map(([iconName, text]) => (
               <div key={text} style={{ fontSize: 10, color: C.dim, ...MONO, display: 'flex', gap: 5, alignItems: 'center' }}>
                 <Icon name={iconName} size={14} color={C.accent}/><span>{text}</span>
               </div>
@@ -369,12 +374,12 @@ export default function ProfileTab({
       {!profile?.is_public && (
         <div style={{ background: 'linear-gradient(135deg,#0d1a2e,#1a0a2e)', border: '1px solid #1e40af', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 11, color: '#60a5fa', ...MONO, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="globe" size={12} color="#60a5fa"/> Share your collection</div>
-            <div style={{ fontSize: 10, color: '#4a7ab5', ...MONO, lineHeight: 1.5 }}>Enable public profile to show off your vault</div>
+            <div style={{ fontSize: 11, color: '#60a5fa', ...MONO, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="globe" size={12} color="#60a5fa"/> {t('profile.public.ctaTitle')}</div>
+            <div style={{ fontSize: 10, color: '#4a7ab5', ...MONO, lineHeight: 1.5 }}>{t('profile.public.ctaDesc')}</div>
           </div>
           <button onClick={async () => {
               if (!username?.trim()) {
-                toast.error('Set a username first in the profile settings below');
+                toast.error(t('profile.public.needUsername'));
                 return;
               }
               setIsPublic(true);
@@ -382,7 +387,7 @@ export default function ProfileTab({
               onUpdateProfile({ ...profile, is_public: true, username });
             }}
             style={{ background: '#1e40af', border: 'none', borderRadius: 8, color: '#fff', padding: '8px 14px', cursor: 'pointer', ...MONO, fontSize: 11, flexShrink: 0, whiteSpace: 'nowrap' }}>
-            Go public →
+            {t('profile.public.goPublic')}
           </button>
         </div>
       )}
@@ -499,7 +504,7 @@ export default function ProfileTab({
               ...BEBAS, fontSize: 15, letterSpacing: '0.1em', marginTop: 4,
               opacity: collection.length > 0 ? 1 : 0.5,
             }}>
-            {collection.length === 0 ? 'ADD RECORDS FIRST' : 'GENERATE REPORT (' + collection.length + ' ITEMS)'}
+            {collection.length === 0 ? t('profile.insurance.addFirst') : t('profile.insurance.generate', { n: collection.length })}
           </button>
         ) : (
           <button onClick={() => window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'INSURANCE_REQUIRED' } }))}
@@ -508,7 +513,7 @@ export default function ProfileTab({
               color: '#fff', padding: '12px', cursor: 'pointer',
               ...BEBAS, fontSize: 14, letterSpacing: '0.08em', marginTop: 4,
             }}>
-            UPGRADE TO PRO →
+            {t('profile.insurance.upgrade')}
           </button>
         )}
       </div>
@@ -522,13 +527,13 @@ export default function ProfileTab({
             <div style={{ fontSize: 10, color: '#f5c842', letterSpacing: '0.2em', ...MONO, marginBottom: 4 }}>INSURANCE REPORT</div>
             <div style={{ ...BEBAS, fontSize: 22, color: C.text, letterSpacing: '0.04em', marginBottom: 4 }}>{t('profile.insurance.modal.title')}</div>
             <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 16, lineHeight: 1.5 }}>
-              This info appears on the appraisal cover page. Insurers typically require owner name + address.
+              {t('profile.insurance.modal.desc')}
             </div>
 
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, color: C.muted, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Full name</div>
+              <div style={{ fontSize: 9, color: C.muted, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{t('profile.fullName')}</div>
               <input value={ownerName} onChange={e => setOwnerName(e.target.value)}
-                placeholder="John Smith"
+                placeholder={t('profile.fullNamePlaceholder')}
                 style={{ width: '100%', background: C.bg3, border: '1px solid ' + C.border, borderRadius: 6, padding: '10px', color: C.text, ...MONO, fontSize: 13, boxSizing: 'border-box' }}/>
             </div>
             <div style={{ marginBottom: 10 }}>
