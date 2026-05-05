@@ -17,8 +17,12 @@ import ListenButton from '@/app/components/ListenButton';
 import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 import ManualAddForm from '@/app/collection/ManualAddForm';
 import PriceModal from '@/app/collection/PriceModal';
-import dynamic from 'next/dynamic';
-const BandsTab = dynamic(() => import('@/app/artists/BandsTab'), { ssr: false });
+// (Previously had a dynamic-import for BandsTab here — dead code, never
+// referenced inside this file, and BandsTab is also statically imported
+// by VaultTab.js. Mixing static + dynamic imports of the same module
+// across the parent/child tree creates a webpack tree-shake collision
+// that surfaces at runtime as ReferenceError; same root cause as the
+// page.js revert. Removed.)
 
 // ── PortfolioChart ────────────────────────────────────────────────
 function PortfolioChart({ snapshots }) {
