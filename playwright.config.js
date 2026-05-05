@@ -55,6 +55,24 @@ export default defineConfig({
     // Match the touch-friendly viewport the app is designed for.
     viewport: { width: 414, height: 896 },
     locale: 'en-US',
+    // Vercel Deployment Protection bypass header. Only set when the
+    // env var is present (i.e. in CI on PRs against a Preview deploy
+    // that has Vercel Authentication enabled). The header is harmless
+    // when hitting unprotected URLs (production alias, localhost), so
+    // we don't need to gate it per-project. Vercel accepts both the
+    // header and the matching query param; header is cleaner because
+    // page.goto() URL stays readable in failure traces.
+    //
+    // x-vercel-set-bypass-cookie=samesitenone tells Vercel to set a
+    // long-lived cookie so subsequent requests in the same browser
+    // context (including service-worker fetches) inherit the bypass
+    // without needing the header re-sent on every request.
+    ...(process.env.VERCEL_AUTOMATION_BYPASS_TOKEN ? {
+      extraHTTPHeaders: {
+        'x-vercel-protection-bypass':  process.env.VERCEL_AUTOMATION_BYPASS_TOKEN,
+        'x-vercel-set-bypass-cookie':  'samesitenone',
+      },
+    } : {}),
   },
 
   projects: [

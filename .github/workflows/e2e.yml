@@ -155,6 +155,12 @@ jobs:
           TEST_AUTH_SECRET: ${{ github.event_name == 'pull_request' && secrets.TEST_AUTH_SECRET || '' }}
           MV_TEST_EMAIL:    ${{ github.event_name == 'pull_request' && secrets.MV_TEST_EMAIL    || '' }}
           MV_TEST_PASSWORD: ${{ github.event_name == 'pull_request' && secrets.MV_TEST_PASSWORD || '' }}
+          # Vercel Deployment Protection bypass — needed for PR runs
+          # which target the SSO-locked Preview URL. Production alias
+          # is public so this is unused on push-to-main, but passing
+          # it unconditionally is harmless (playwright.config.js only
+          # adds the header if this is set anyway).
+          VERCEL_AUTOMATION_BYPASS_TOKEN: ${{ secrets.VERCEL_AUTOMATION_BYPASS_TOKEN }}
           CI: '1'
 
       # Upload trace + screenshot artifacts on failure so we can
