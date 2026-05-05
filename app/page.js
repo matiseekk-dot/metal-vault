@@ -17,27 +17,29 @@ import WhatsNew from '@/app/components/WhatsNew';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm } from '@/app/components/Toast';
 import { useT } from '@/lib/i18n';
+import VaultTab from '@/app/vault/VaultTab';
+import WhensOnTab from '@/app/whens-on/WhensOnTab';
+import ProfileTab from '@/app/profile/ProfileTab';
 import nextDynamic from 'next/dynamic';
 export const dynamic = 'force-dynamic';
 
-// Dynamic imports — only for components actually used directly in this file.
-// VaultTab, WhensOnTab, ProfileTab are gated behind tab clicks; lazy-loading
-// them shaves ~200kB from the initial bundle (Stats charts + concert table
-// + insurance PDF code don't need to ship until the user navigates there).
-// CollectionTab/WatchlistTab stay static because the default tab on first
-// open is now `vault`, so they're on the critical render path.
+// Why VaultTab/WhensOnTab/ProfileTab are STATIC imports (not next/dynamic):
+// They each statically import their own children — VaultTab pulls in
+// CollectionTab, SearchTab, StatsTab, BandsTab, ConcertsTab, CalendarTab.
+// We tried dynamic-importing these parents to shave ~200kB off the initial
+// bundle but it caused a tree-shake collision: Webpack ended up with two
+// copies of the same module graph (one through page.js's dynamic import,
+// one through VaultTab's static imports), the prod build threw
+// "VaultTab is not defined" runtime errors, and Calendar/Stats/Live/Dziennik
+// stopped rendering for the user. The bundle-size win is not worth a
+// broken app — keep them static. If we want lazy-loading later, the right
+// place to do it is INSIDE VaultTab/WhensOnTab (per-sub-tab dynamic imports
+// of CollectionTab, StatsTab, etc.), not at the page.js level.
 //
-// Why ScannerTab + DiscogsImport stay dynamic: Scanner pulls @zxing/browser
-// (~80kB only needed when the user actually scans); DiscogsImport hits an
-// admin-only flow.
-//
-// SearchTab/StatsTab/ConcertsTab/CalendarTab were tried dynamic in both
-// page.js and VaultTab — that doubled the chunk and triggered a
-// "VaultTab is not defined" tree-shake bug. They live in VaultTab's static
-// imports now and get pulled in transitively when VaultTab itself loads.
-const VaultTab      = nextDynamic(() => import('@/app/vault/VaultTab'),       { ssr: false });
-const WhensOnTab    = nextDynamic(() => import('@/app/whens-on/WhensOnTab'),  { ssr: false });
-const ProfileTab    = nextDynamic(() => import('@/app/profile/ProfileTab'),   { ssr: false });
+// ScannerTab + DiscogsImport stay dynamic because they're behind explicit
+// modal triggers (not tab navigation), so there's no parent-child static
+// import chain to collide with. Scanner pulls @zxing/browser (~80kB only
+// needed when the user scans); DiscogsImport hits an admin-only flow.
 const ScannerTab    = nextDynamic(() => import('@/app/scanner/ScannerTab'),   { ssr: false });
 const DiscogsImport = nextDynamic(() => import('@/app/import/DiscogsImport'), { ssr: false });
 
@@ -262,8 +264,15 @@ export default function MetalVault() {
     } catch {}
   }, [user]); // eslint-disable-line
 
-  // Feed
+  // Feed — progressive render
+  // Discogs is the primary source (has cover images), MusicBrainz is a
+  // secondary fallback for releases Discogs misses. We render Discogs as
+  // soon as it arrives (typically <300ms warm) and merge MB results in
+  // when they show up. Promise.all was the previous approach but it
+  // gated the entire feed on the slowest of the two — a cold-cache MB
+  // call (~1-2s) made the whole feed feel sluggish.
   useEffect(() => {
+    let cancelled = false;
     setFeedLoading(true); setFeedError('');
     // Pass followed artists so Discogs API can include their upcoming releases
     const artists = col.followedArtists.map(a => a.artist_name).filter(Boolean);
@@ -271,53 +280,75 @@ export default function MetalVault() {
       ? '/api/releases?artists=' + encodeURIComponent(artists.join(','))
       : '/api/releases';
 
-    // Fetch Discogs + Metal Archives in parallel; merge + dedupe by (artist+album)
-    Promise.all([
-      fetch(discogsUrl).then(r => r.ok ? r.json() : { releases: [] }).catch(() => ({ releases: [] })),
-      fetch('/api/releases/metal-archives').then(r => r.ok ? r.json() : { items: [] }).catch(() => ({ items: [] })),
-    ]).then(([discogs, ma]) => {
-      const dRel = discogs.releases || [];
-      const maRel = (ma.items || []).map(i => ({
-        id:           i.id,
-        source:       'metal_archives',
-        artist:       i.artist,
-        album:        i.album,
-        cover:        i.cover,
-        releaseDate:  i.releaseDate,
-        genre:        i.genre,
-        preorder:     i.preorder,
-        limited:      false,
-        type:         i.type,
-        discogs_url:  i.albumUrl,
-      }));
-
-      // Dedupe: prefer Discogs (has cover images). Key = lowercase "artist::album"
+    // Helper: dedupe by (artist::album), preserving order.
+    const dedupe = (lists) => {
       const seen = new Set();
-      const merged = [];
-      for (const r of dRel) {
-        const k = ((r.artist || '') + '::' + (r.album || '')).toLowerCase();
-        if (seen.has(k)) continue;
-        seen.add(k);
-        merged.push(r);
+      const out = [];
+      for (const list of lists) {
+        for (const r of list) {
+          const k = ((r.artist || '') + '::' + (r.album || '')).toLowerCase();
+          if (seen.has(k)) continue;
+          seen.add(k);
+          out.push(r);
+        }
       }
-      for (const r of maRel) {
-        const k = ((r.artist || '') + '::' + (r.album || '')).toLowerCase();
-        if (seen.has(k)) continue;
-        seen.add(k);
-        merged.push(r);
-      }
-
-      // Sort by release date ascending (soonest first for upcoming)
-      merged.sort((a, b) => {
+      // Sort by release date descending (most recent first; future dates
+      // sort to the top because their timestamp is largest).
+      out.sort((a, b) => {
         const da = a.releaseDate ? new Date(a.releaseDate).getTime() : 0;
         const db = b.releaseDate ? new Date(b.releaseDate).getTime() : 0;
         return db - da;
       });
+      return out;
+    };
 
-      setReleases(merged);
-      setSource(discogs.source || 'mixed');
-      setFeedLoading(false);
-    }).catch(e => { setFeedError(e.message); setFeedLoading(false); });
+    let dRel = [];
+    let maRel = [];
+
+    // Fire both in parallel, but render whichever arrives first.
+    const discogsP = fetch(discogsUrl)
+      .then(r => r.ok ? r.json() : { releases: [] })
+      .catch(() => ({ releases: [] }))
+      .then(d => {
+        if (cancelled) return;
+        dRel = d.releases || [];
+        setReleases(dedupe([dRel, maRel]));
+        setSource(d.source || 'discogs');
+        // Hide the loader as soon as Discogs returns — that's the
+        // primary source and what the user came here to see.
+        setFeedLoading(false);
+      });
+
+    const maP = fetch('/api/releases/metal-archives')
+      .then(r => r.ok ? r.json() : { items: [] })
+      .catch(() => ({ items: [] }))
+      .then(ma => {
+        if (cancelled) return;
+        maRel = (ma.items || []).map(i => ({
+          id:           i.id,
+          source:       'metal_archives',
+          artist:       i.artist,
+          album:        i.album,
+          cover:        i.cover,
+          releaseDate:  i.releaseDate,
+          genre:        i.genre,
+          preorder:     i.preorder,
+          limited:      false,
+          type:         i.type,
+          discogs_url:  i.albumUrl,
+        }));
+        setReleases(dedupe([dRel, maRel]));
+      });
+
+    // Safety net: if BOTH end up rejecting at the network layer (offline,
+    // DNS fail), we still need to clear the spinner. .catch on each
+    // already turns rejections into empty results, so this is mostly to
+    // surface a friendly error if Discogs returns a non-empty error.
+    Promise.allSettled([discogsP, maP]).then(() => {
+      if (!cancelled) setFeedLoading(false);
+    });
+
+    return () => { cancelled = true; };
     // Re-fetch only when the *count* of followed artists changes; the
     // followedArtists array itself gets a new reference on every collection
     // mutation, which would cause unnecessary feed reloads.
