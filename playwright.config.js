@@ -10,8 +10,11 @@
 //   npm run test:e2e:ci      — headless, junit reporter, single browser
 //   PWPLAYWRIGHT_BASE_URL=https://… npm run test:e2e   — against deploy
 //
-// Setup once:
-//   npm i -D @playwright/test
+// Setup once (NOT in package.json devDependencies on purpose — Next
+// 15.5.15 has a peerOptional on @playwright/test ^1.51.1 and pinning
+// it in deps blocks `npm install` on Vercel. Install locally only):
+//
+//   npm i -D @playwright/test@latest
 //   npx playwright install chromium
 
 import { defineConfig, devices } from '@playwright/test';
