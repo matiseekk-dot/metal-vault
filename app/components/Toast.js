@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import { t } from '@/lib/i18n';
+import { useBackButton } from '@/lib/hooks/useBackButton';
 
 // ── Public API — module-level singletons backed by a CustomEvent bus.
 // We use events instead of a React context so non-component code (e.g.
@@ -100,23 +101,42 @@ export default function ToastProvider() {
 
       {/* Confirm dialog */}
       {pending && (
-        <div style={confirmBackdrop} onClick={() => decide(false)}>
-          <div style={confirmCardStyle} onClick={e => e.stopPropagation()} role="alertdialog">
-            <div style={{ fontSize: 14, color: '#f0f0f0', lineHeight: 1.5, marginBottom: 18 }}>
-              {pending.message}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => decide(false)} style={btnSecondaryStyle}>
-                {pending.cancelLabel}
-              </button>
-              <button onClick={() => decide(true)} style={pending.kind === 'danger' ? btnDangerStyle : btnPrimaryStyle}>
-                {pending.confirmLabel}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          pending={pending}
+          onCancel={() => decide(false)}
+          onConfirm={() => decide(true)}
+        />
       )}
     </>
+  );
+}
+
+// ── ConfirmDialog — dedicated component so we can hook Android back ──
+// Mounted only while a confirm is pending. useBackButton intercepts the
+// hardware back button on TWA so the dialog dismisses instead of the
+// app exiting (default android behaviour). aria-modal + aria-labelledby
+// give screen readers the right context — previously absent.
+function ConfirmDialog({ pending, onCancel, onConfirm }) {
+  useBackButton(true, onCancel);
+  return (
+    <div style={confirmBackdrop} onClick={onCancel}>
+      <div style={confirmCardStyle} onClick={e => e.stopPropagation()}
+        role="alertdialog" aria-modal="true" aria-labelledby="mv-confirm-msg">
+        <div id="mv-confirm-msg"
+          style={{ fontSize: 14, color: '#f0f0f0', lineHeight: 1.5, marginBottom: 18 }}>
+          {pending.message}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onCancel} style={btnSecondaryStyle} autoFocus>
+            {pending.cancelLabel}
+          </button>
+          <button onClick={onConfirm}
+            style={pending.kind === 'danger' ? btnDangerStyle : btnPrimaryStyle}>
+            {pending.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

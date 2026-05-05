@@ -109,7 +109,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
   }
 
   async function handleDelete(path) {
-    if (!(await mvConfirm('Delete this photo?', { kind: 'danger', confirmLabel: 'Delete' }))) return;
+    if (!(await mvConfirm(t('photos.deleteConfirm'), { kind: 'danger', confirmLabel: t('photos.delete') }))) return;
     try {
       const r = await fetch('/api/photos/delete', {
         method: 'POST',

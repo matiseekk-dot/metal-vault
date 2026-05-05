@@ -8,7 +8,10 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 
-export const dynamic = 'force-dynamic';
+export const dynamic     = 'force-dynamic';
+// Vercel default kills /api at 10s/60s; the 4-minute internal budget
+// below requires an explicit maxDuration override.
+export const maxDuration = 300;
 const BUDGET_MS_WEEKLY = 4 * 60 * 1000;  // 4min — leaves buffer below Vercel 5min cap
 
 let _weeklyStartedAt = 0;

@@ -414,7 +414,12 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                   ) : t('alert.set')}
                 </button>
                 {hasAlert && (
-                  <button onClick={(e) => { e.stopPropagation(); if (confirm(t('alert.confirmRemove'))) removeAlert(album); }}
+                  <button onClick={async (e) => {
+                    e.stopPropagation();
+                    if (await mvConfirm(t('alert.confirmRemove'), { kind: 'danger', confirmLabel: t('common.delete') })) {
+                      removeAlert(album);
+                    }
+                  }}
                     title={t('alert.removeTitle')}
                     style={{ padding: '8px 14px', background: 'transparent', border: 'none', borderLeft: '1px solid ' + C.border, color: '#f87171', cursor: 'pointer', fontSize: 14, lineHeight: 1, flexShrink: 0 }}>
                     🗑

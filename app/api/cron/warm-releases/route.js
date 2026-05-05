@@ -12,7 +12,10 @@
 import { NextResponse } from 'next/server';
 
 
-export const dynamic = 'force-dynamic';
+export const dynamic     = 'force-dynamic';
+// Without maxDuration Vercel kills /api at 10s/60s. Warming the
+// release feed touches Discogs ~paginated, easily exceeding 60s.
+export const maxDuration = 300;
 
 export async function GET(request) {
   // Fail-closed: missing CRON_SECRET in env means the endpoint is misconfigured,

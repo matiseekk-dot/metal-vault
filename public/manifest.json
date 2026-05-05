@@ -10,6 +10,8 @@
   "orientation": "portrait-primary",
   "scope": "/",
   "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -66,11 +68,11 @@
       "label": "Concerts near you"
     },
     {
-      "src": "/screenshots/05-vinyl-modal.png",
+      "src": "/screenshots/05-login.png",
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Variants and price comparison"
+      "label": "Sign in"
     },
     {
       "src": "/screenshots/06-stats-persona.png",

@@ -11,7 +11,11 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 
-export const dynamic = 'force-dynamic';
+export const dynamic     = 'force-dynamic';
+// Vercel default kills /api at 10s (Hobby) / 60s (Pro). The 4-minute
+// internal budget below relies on this explicit override; without it
+// the cron is chopped before ever reaching its work loop.
+export const maxDuration = 300;
 const BUDGET_MS_DIGEST = 4 * 60 * 1000;
 
 // Vercel kills cron jobs at the 5-minute hard limit. We track our own

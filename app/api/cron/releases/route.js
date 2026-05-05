@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 
 
-export const dynamic = 'force-dynamic';
+export const dynamic     = 'force-dynamic';
+// Without maxDuration Vercel kills /api at 10s/60s, well before the
+// internal cron budget of several minutes.
+export const maxDuration = 300;
 
 // Send push notification to all user's devices
 async function sendPushToUser(userId, payload) {

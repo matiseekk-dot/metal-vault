@@ -46,6 +46,10 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
+    // lang stays "en" at SSR (we don't know the user's choice until JS
+    // loads localStorage). Client-side we patch <html lang> below to
+    // match the active app locale so screen readers + Chrome translate
+    // pick the right language.
     <html lang="en" className={`${bebasNeue.variable} ${spaceMono.variable}`}>
       <head>
         <link rel="manifest" href="/manifest.json" />
@@ -60,6 +64,18 @@ export default function RootLayout({ children }) {
         <ToastProvider />
         <script dangerouslySetInnerHTML={{
           __html: `
+            // Mirror the user's app-locale choice onto <html lang> so
+            // accessibility tools and browser translate behave correctly.
+            (function syncLang() {
+              try {
+                const apply = (l) => {
+                  if (l && /^(en|pl|de)$/.test(l)) document.documentElement.lang = l;
+                };
+                apply(localStorage.getItem('mv_locale'));
+                window.addEventListener('mv:locale-changed', e => apply(e.detail?.locale));
+              } catch {}
+            })();
+
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').then(reg => {
