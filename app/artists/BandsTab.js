@@ -819,13 +819,14 @@ export default function BandsTab({ collection, watchlist, onAddToWatchlist, foll
     };
   }, [collection, watchlist, pushCompletion]);
 
-  // Sort: complete artists first (as a special category), then by record count
-  let artists = Object.entries(artistMap).sort((a, b) => {
-    const aComplete = completion[a[0]] === 100;
-    const bComplete = completion[b[0]] === 100;
-    if (aComplete !== bComplete) return aComplete ? -1 : 1;
-    return b[1].length - a[1].length;
-  });
+  // Sort by record count, descending. The COMPLETE badge / crown
+  // visual marker stays on each row but it no longer pushes complete
+  // artists to the top — most users prefer "biggest collections
+  // first" as the primary mental order, with the badge as a secondary
+  // signal you scan for. Earlier this code lifted complete artists
+  // above everyone else which buried high-record-count incomplete
+  // artists (Opeth at 18 records ranked below a 1-record COMPLETE).
+  let artists = Object.entries(artistMap).sort((a, b) => b[1].length - a[1].length);
 
   if (search.trim()) {
     const q = search.toLowerCase();
