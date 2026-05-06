@@ -47,20 +47,48 @@ Outputs:
 
 ## Get fingerprints for assetlinks.json
 
+There's a helper script that pulls the SHA-256 out of the keystore
+and writes it into `public/.well-known/assetlinks.json` directly,
+preserving the existing structure and de-duping:
+
+```bash
+# After bubblewrap build, pointing at the keystore Bubblewrap created:
+KEYSTORE_PASS='your-keystore-password' \
+  node scripts/update-assetlinks.mjs --keystore ../metal-vault-android/android.keystore
+
+# After first Play Console upload (Setup → App integrity), add the
+# two extra fingerprints in one go. Copy them as raw colon-hex from
+# Play Console:
+KEYSTORE_PASS='your-keystore-password' \
+  node scripts/update-assetlinks.mjs \
+    --keystore ../metal-vault-android/android.keystore \
+    --play-app-signing AB:CD:...64-byte-hex... \
+    --play-upload-key  12:34:...64-byte-hex...
+```
+
+The script accepts either colon-separated or contiguous hex and
+normalises both. Existing real fingerprints are kept; only the
+`REPLACE_ME_*` placeholders get displaced.
+
+If you'd rather do it by hand:
+
 ```bash
 keytool -list -v -keystore android.keystore -alias android
 ```
 
-Look for `SHA256:` and copy the colon-separated hex. Paste into
-`public/.well-known/assetlinks.json` (replacing `REPLACE_ME_LOCAL_KEYSTORE_SHA256`).
-
+Look for `SHA256:` and copy the colon-separated hex into
+`public/.well-known/assetlinks.json`, replacing `REPLACE_ME_LOCAL_KEYSTORE_SHA256`.
 After your first Play Console upload, also grab the **Play App Signing**
 SHA-256 from Play Console → Setup → App integrity, and add it as a
 second entry in the `sha256_cert_fingerprints` array. The Upload Key
 fingerprint goes there as a third entry.
 
-Deploy the updated `assetlinks.json` to production — without all relevant
-fingerprints, Chrome will show the URL bar inside the TWA.
+Either way, deploy the updated `assetlinks.json` to production — without
+all relevant fingerprints, Chrome will show the URL bar inside the TWA.
+
+The `tests/e2e/play-store-preflight.spec.js` test logs a warning to CI
+output whenever placeholder fingerprints are still present; the
+pre-launch checklist isn't done until that warning's gone.
 
 ## Local sideload test
 

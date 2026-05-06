@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase-server';
 
 
@@ -254,17 +255,27 @@ export async function POST(request) {
     if (i + BATCH < items.length) await new Promise(r => setTimeout(r, 500));
   }
 
-  // Update portfolio snapshot
+  // Update portfolio snapshot. Failure here doesn't break the user-
+  // visible refresh response — they got their prices — but it does
+  // mean the Pro 30-day chart misses a data point. Capture so we can
+  // see in Sentry if the upsert is consistently failing (e.g. RLS
+  // change, schema drift) instead of silently losing days of data.
   const { data: all } = await supabase
     .from('collection').select('purchase_price, current_price, median_price').eq('user_id', user.id);
   if (all?.length) {
     const totalValue = all.reduce((s, i) => s + (Number(i.median_price || i.current_price || i.purchase_price) || 0), 0);
     const totalPaid  = all.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0);
-    await supabase.from('portfolio_snapshots').upsert({
+    const { error: snapErr } = await supabase.from('portfolio_snapshots').upsert({
       user_id: user.id,
       snapshot_date: new Date().toISOString().split('T')[0],
       total_value: totalValue, total_paid: totalPaid, item_count: all.length,
     }, { onConflict: 'user_id,snapshot_date' });
+    if (snapErr) {
+      Sentry.captureException(new Error('portfolio_snapshots upsert failed: ' + snapErr.message), {
+        tags: { route: '/api/collection/refresh-prices', step: 'snapshot' },
+        extra: { userId: user.id, code: snapErr.code },
+      });
+    }
   }
 
   return NextResponse.json({

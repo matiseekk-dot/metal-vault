@@ -10,7 +10,12 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
   import('@sentry/nextjs').then((Sentry) => {
     Sentry.init({
       dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-      environment: process.env.NODE_ENV,
+      environment: process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.NODE_ENV,
+      // Tag every event with the deployed commit SHA so Sentry can
+      // correlate errors with a specific Vercel deployment. Falls
+      // back to the build-time NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
+      // local dev (no Vercel env) reports as 'dev'.
+      release: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || 'dev',
       // No browser tracing (BrowserTracing integration would add ~80KB
       // gzipped on its own and we only need error capture for now).
       tracesSampleRate: 0,

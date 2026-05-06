@@ -3,7 +3,11 @@ import * as Sentry from '@sentry/nextjs';
 if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV,
+    environment: process.env.VERCEL_ENV || process.env.NODE_ENV,
+    // Tag every server event with the deployed commit SHA so we can
+    // group errors by deploy in the Sentry UI. Vercel sets
+    // VERCEL_GIT_COMMIT_SHA on every build automatically.
+    release: process.env.VERCEL_GIT_COMMIT_SHA || 'dev',
     tracesSampleRate: 0.1,
     beforeSend(event) {
       // Strip request headers/cookies that may carry credentials before
