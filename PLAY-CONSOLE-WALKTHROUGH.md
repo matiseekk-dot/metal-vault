@@ -1,206 +1,213 @@
-# Play Console submission — step-by-step
+# Play Console — przewodnik po pierwszej publikacji
 
-Step-by-step walkthrough for the first Play Console submission of
-Metal Vault. All form answers are pre-filled — you can copy-paste
-without having to make decisions on the spot.
+Walkthrough dla pierwszego uploadu Metal Vault do Play Console.
+**Etykiety pól po polsku** (UI Play Console w języku polskim), ale
+**dane wpisywane do aplikacji zostają po angielsku** (App name,
+descriptions, URLs) — bo Default language listingu to en-US.
 
-Prerequisites (already done):
-- ✅ Bubblewrap project built: `app-release-bundle.aab`, `app-release-signed.apk`
-- ✅ assetlinks.json published with local keystore fingerprint
-- ✅ Privacy policy at `/legal/privacy.html`
-- ✅ App listing copy in `launch-marketing/04-play-store-listing.md`
-- ✅ Feature graphic at `launch-marketing/assets/feature-1024x500.png`
-- ✅ 6 phone screenshots at `public/screenshots/0{1..6}-*.png`
-- ✅ App icon 512×512 at `public/icons/icon-512.png`
+Wymagania (już spełnione):
+- ✅ Bubblewrap zbudowany: `app-release-bundle.aab`, `app-release-signed.apk`
+- ✅ assetlinks.json z fingerprintem lokalnego keystore'a (deployed)
+- ✅ Polityka prywatności: `/legal/privacy.html`
+- ✅ Tekst listingu: `launch-marketing/04-play-store-listing.md`
+- ✅ Feature graphic: `launch-marketing/assets/feature-1024x500.png`
+- ✅ 6 zrzutów ekranu telefonu: `public/screenshots/0{1..6}-*.png`
+- ✅ Ikona 512×512: `public/icons/icon-512.png`
 
-You'll need:
-- Google Play Console account ($25 one-time fee, paid via Stripe in
-  Play Console signup if you don't have one yet)
-- Approximate time: 2-3 hours for the first listing
+Czego potrzebujesz:
+- Konto Google Play Console ($25 jednorazowo)
+- ~2-3h na pierwszy listing
 
 ---
 
-## 1. Create the app
+## 1. Utwórz aplikację
 
-Play Console → "Create app" (top right).
+Play Console → **„Utwórz aplikację"** (prawy górny róg).
 
-| Field | Answer |
+| Pole (PL) | Wartość |
 |---|---|
-| App name | `Metal Vault` |
-| Default language | `English (US) – en-US` |
-| App or game | App |
-| Free or paid | **Free** (in-app purchases for Pro) |
-| Declarations: developer rules | Tick all four |
+| Nazwa aplikacji | `Metal Vault` |
+| Nazwa pakietu | `pl.skudev.metalvault` ⚠️ **NIE da się zmienić później** |
+| Język domyślny | `angielski (Stany Zjednoczone) – en-US` |
+| Aplikacja czy gra | **Aplikacja** |
+| Bezpłatna czy płatna | **Bezpłatne** ← (Pro to in-app purchase, nie paid install) |
+| Deklaracje dewelopera (4 pola wyboru) | Zaznacz wszystkie cztery |
 
-→ Create app.
+→ **Utwórz aplikację**.
 
 ---
 
-## 2. App content (left sidebar)
+## 2. Zawartość aplikacji (lewy panel)
 
-A checklist of policy declarations. Knock them out top-to-bottom:
+Lista wymaganych deklaracji. Po kolei od góry:
 
-### 2.1 Privacy policy
+### 2.1 Polityka prywatności
 
 - URL: `https://metal-vault-six.vercel.app/legal/privacy.html`
-- Save.
+- **Zapisz**.
 
-### 2.2 App access
+### 2.2 Dostęp do aplikacji
 
-- "All or some functionality is restricted" → tick.
-- Add credentials Google can use to test:
-  - Username: `e2e@metal-vault.test` (the test user you created in
-    Supabase) OR create a dedicated reviewer account
-  - Password: same as Supabase test user
-  - Sign-in instructions:
+- Zaznacz: **„Cała lub niektóre funkcje są ograniczone"**
+- Dodaj dane logowania dla recenzentów Google:
+  - Login (email): `e2e@metal-vault.test` (test user który stworzyłeś
+    w Supabase) ALBO osobne konto-recenzent
+  - Hasło: hasło tego konta
+  - Instrukcje logowania (skopiuj do textarea):
     ```
     Open the app → tap "Open App" → use the credentials below to
     log in. Magic-link via email is also supported but the test
-    account is configured with a password.
+    account has a password configured.
     ```
-- Save.
+- **Zapisz**.
 
-### 2.3 Ads
+### 2.3 Reklamy
 
-- "No, my app does not contain ads." → save.
+- **Nie, moja aplikacja nie zawiera reklam.** → **Zapisz**.
 
-### 2.4 Content ratings
+### 2.4 Klasyfikacja treści
 
-Click "Start questionnaire". Category: **Reference, News or Educational**.
+Kliknij **„Rozpocznij kwestionariusz"**. Kategoria:
+**Materiały referencyjne, wiadomości lub edukacyjne**.
 
-| Question | Answer |
+| Pytanie | Odpowiedź |
 |---|---|
-| Violence | None |
-| Sexuality | None |
-| Profanity | None |
-| Drugs/Alcohol/Tobacco | None |
-| Gambling | None |
-| User-generated content | **Yes** (users can add their own collection notes) |
-| Social features | None (no chat, no feed, no DMs) |
-| Personal info | **Yes** (collects email, prices, photos of records) |
-| Internet | Yes |
-| Sensitive content | None |
+| Przemoc | Brak |
+| Seksualność | Brak |
+| Wulgaryzmy | Brak |
+| Narkotyki / alkohol / tytoń | Brak |
+| Hazard | Brak |
+| Treści tworzone przez użytkowników | **Tak** (notatki użytkowników w kolekcji) |
+| Funkcje społecznościowe | Brak (nie ma czatu, feedu, DM) |
+| Dane osobowe | **Tak** (email, ceny, zdjęcia płyt) |
+| Internet | Tak |
+| Treści wrażliwe | Brak |
 
-Expected outcome: **Everyone** rating across all regions.
+Oczekiwany wynik: **Dla każdego** (Everyone) we wszystkich regionach.
 
-### 2.5 Target audience
+### 2.5 Grupa docelowa
 
-- Age: 13+ (collectors are typically adult, but 13+ keeps families
-  policies less strict)
-- Apps for children: **No**
-- Save.
+- Wiek: **13+**
+- Aplikacje dla dzieci: **Nie**
+- **Zapisz**.
 
-### 2.6 News app
+### 2.6 Aplikacja informacyjna
 
-- This is **not** a news app. Save.
+- To **nie** jest aplikacja informacyjna. **Zapisz**.
 
-### 2.7 COVID-19 / contact tracing
+### 2.7 COVID-19 / aplikacja śledząca kontakty
 
-- Skip — not a tracing app.
+- Pomiń — to nie jest aplikacja contact-tracing.
 
-### 2.8 Data safety
+### 2.8 Bezpieczeństwo danych
 
-This is the biggest form. Below is the exact set of answers for
-Metal Vault.
+Najdłuższy formularz. Dokładne odpowiedzi dla Metal Vault:
 
-**Data collection / sharing**
+**Zbieranie i udostępnianie danych:**
 
-| Question | Answer |
+| Pytanie | Odpowiedź |
 |---|---|
-| Does your app collect or share any of the required user data types? | **Yes** |
-| Is all the user data collected by your app encrypted in transit? | **Yes** (HTTPS everywhere via Vercel) |
-| Do you provide a way for users to request that their data be deleted? | **Yes** (Profile → Delete account; route exists at `/api/profile/delete`) |
+| Czy aplikacja zbiera lub udostępnia jakiekolwiek wymagane dane użytkownika? | **Tak** |
+| Czy wszystkie dane zbierane przez aplikację są szyfrowane podczas przesyłania? | **Tak** (HTTPS przez Vercel) |
+| Czy zapewniasz użytkownikom sposób na żądanie usunięcia ich danych? | **Tak** (Profil → Usuń konto; endpoint `/api/profile/delete` istnieje) |
 
-**Data types**
+**Typy danych:**
 
-Tick these and only these:
+Zaznacz tylko te (po polsku Play Console):
 
-- **Personal info → Email address** — Collected, NOT shared, "Account management" + "App functionality"
-- **Photos and videos → Photos** — Collected, NOT shared, "App functionality" (record condition photos)
-- **Files and docs** — Collected, NOT shared, "App functionality" (insurance PDFs)
-- **App activity → App interactions** — Collected, NOT shared, "Analytics" (Sentry crash reports)
-- **App info and performance → Crash logs** — Collected, NOT shared, "Analytics"
-- **App info and performance → Diagnostics** — Collected, NOT shared, "Analytics"
-- **Device or other IDs → Device or other IDs** — Collected, NOT shared, "Analytics" (Sentry session)
+- **Dane osobowe → Adres e-mail** — Zbierane, NIE udostępniane,
+  cel: „Zarządzanie kontem" + „Funkcjonalność aplikacji"
+- **Zdjęcia i filmy → Zdjęcia** — Zbierane, NIE udostępniane,
+  cel: „Funkcjonalność aplikacji" (zdjęcia stanu płyt)
+- **Pliki i dokumenty** — Zbierane, NIE udostępniane,
+  cel: „Funkcjonalność aplikacji" (PDF do ubezpieczenia)
+- **Aktywność w aplikacji → Interakcje z aplikacją** — Zbierane,
+  NIE udostępniane, cel: „Analityka" (Sentry telemetry)
+- **Informacje o aplikacji i jej działaniu → Dzienniki awarii** —
+  Zbierane, NIE udostępniane, cel: „Analityka"
+- **Informacje o aplikacji i jej działaniu → Diagnostyka** —
+  Zbierane, NIE udostępniane, cel: „Analityka"
+- **Identyfikatory urządzenia lub inne** — Zbierane, NIE
+  udostępniane, cel: „Analityka" (Sentry session)
 
-For each: tick "Required" (user can't opt out, except crash reports
-where you can be honest and say Optional if Sentry has a kill-switch
-in your code).
+Dla każdego: zaznacz **„Wymagane"** (user nie może zrezygnować —
+oprócz crash logs, jeśli chcesz być purystą zaznacz tam „Opcjonalne").
 
-Do **not** tick: Location, Financial info (Stripe tokenises card
-data, you never see it), Health, Messages, Contacts, Web history,
-Audio, Calendar, Sensitive content.
+**NIE zaznaczaj:** Lokalizacji, Informacji finansowych (Stripe
+tokenizuje karty, nigdy ich nie widzimy), Zdrowia, Wiadomości,
+Kontaktów, Historii internetu, Audio, Kalendarza, Treści wrażliwych.
 
-### 2.9 Government apps
+### 2.9 Aplikacja rządowa
 
-- **No** — this is not a government app. Save.
+- **Nie** — to nie jest aplikacja rządowa. **Zapisz**.
 
-### 2.10 Financial features
+### 2.10 Funkcje finansowe
 
-- **No** — Stripe processes payments off-app, you don't store cards.
+- **Nie** — Stripe przetwarza płatności poza aplikacją, my nie
+  przechowujemy danych kart.
 
-### 2.11 Health
+### 2.11 Zdrowie
 
-- **No**.
+- **Nie**.
 
 ---
 
-## 3. Main store listing
+## 3. Główna strona aplikacji w sklepie
 
-Left sidebar → "Main store listing".
+Lewy panel → **„Główna strona aplikacji w sklepie"**.
 
-### 3.1 App details
+### 3.1 Szczegóły aplikacji (zostają po angielsku — Default language to en-US)
 
-| Field | Value |
+| Pole | Wartość |
 |---|---|
-| App name | `Metal Vault` |
-| Short description (80 chars) | `Track, value, and document your metal vinyl collection. Insurance-ready PDFs.` |
-| Full description (4000 chars) | Copy from `launch-marketing/04-play-store-listing.md` (the section under "Full Description") |
+| Nazwa aplikacji | `Metal Vault` |
+| Krótki opis (80 znaków) | `Track, value, and document your metal vinyl collection. Insurance-ready PDFs.` |
+| Pełny opis (4000 znaków) | Skopiuj z `launch-marketing/04-play-store-listing.md` (sekcja „Full Description") |
 
-### 3.2 Graphics
+### 3.2 Grafika
 
-| Asset | Source |
+| Element | Plik |
 |---|---|
-| App icon (512×512) | `public/icons/icon-512.png` |
-| Feature graphic (1024×500) | `launch-marketing/assets/feature-1024x500.png` |
-| Phone screenshots (1080×1920, ≥2 needed) | All 6 from `public/screenshots/` |
+| Ikona aplikacji (512×512) | `public/icons/icon-512.png` |
+| Grafika promocyjna / Feature graphic (1024×500) | `launch-marketing/assets/feature-1024x500.png` |
+| Zrzuty ekranu telefonu (1080×1920, min 2) | Wszystkie 6 z `public/screenshots/` |
 
-Tablet + Chromebook screenshots: optional, skip for first launch.
+Zrzuty z tabletu i Chromebooka — opcjonalne, **pomiń** dla pierwszego launchu.
 
-### 3.3 Categorization
+### 3.3 Kategoryzacja
 
-| Field | Value |
+| Pole (PL) | Wartość |
 |---|---|
-| App category | **Music & Audio** (primary), **Lifestyle** (secondary if asked) |
-| Tags | `music`, `vinyl`, `collector`, `metal`, `discogs` |
-| Email | (your contact email) |
-| Phone | (optional, leave blank) |
-| Website | `https://metal-vault-six.vercel.app` |
-| Privacy policy | `https://metal-vault-six.vercel.app/legal/privacy.html` |
+| Kategoria aplikacji | **Muzyka i dźwięk** (główna), **Styl życia** (drugorzędna jeśli pyta) |
+| Tagi | `music`, `vinyl`, `collector`, `metal`, `discogs` |
+| E-mail kontaktowy | (Twój email dla kontaktu) |
+| Telefon | (opcjonalne, zostaw puste) |
+| Witryna | `https://metal-vault-six.vercel.app` |
+| Polityka prywatności | `https://metal-vault-six.vercel.app/legal/privacy.html` |
 
-Save.
+**Zapisz**.
 
 ---
 
-## 4. Internal testing → upload first AAB
+## 4. Testy wewnętrzne → upload pierwszego AAB
 
-**Strongly recommended path**: Internal testing → Closed testing →
-Open testing → Production. Each step has fewer reviewers + faster
-turnaround. Publishing straight to Production is allowed but reviews
-are slower and rejection rolls back the whole listing.
+**Zalecana ścieżka**: Testy wewnętrzne → Testy zamknięte → Testy
+otwarte → Produkcja. Każdy etap ma mniej recenzentów + szybszy
+turnaround. Można od razu na produkcję, ale recenzje są wolniejsze
+i odrzucenie cofa cały listing.
 
-Left sidebar → "Testing" → "Internal testing".
+Lewy panel → **„Testowanie"** → **„Testy wewnętrzne"**.
 
-### 4.1 Create release
+### 4.1 Utwórz wersję
 
-- "Create new release" (top right)
-- Sign with: **Use Google-generated key** ← TICK THIS
-  (Google's "Play App Signing" stores the actual signing key for you;
-  your local keystore is now only the *upload* key. This is the
-  modern recommended path.)
-- Upload `metal-vault-android/app-release-bundle.aab` (drag-drop)
-- Release name: leave default (will read "1 (1.0.0)")
-- Release notes:
+- **„Utwórz nową wersję"** (prawy górny róg)
+- Podpisywanie: **„Użyj klucza wygenerowanego przez Google"** ← ZAZNACZ
+  (Google's „Play App Signing" przechowuje ostateczny klucz; Twój
+  lokalny keystore staje się wtedy *kluczem przesyłania*. To
+  współczesna zalecana ścieżka.)
+- Prześlij `metal-vault-android/app-release-bundle.aab` (drag-drop)
+- Nazwa wersji: zostaw domyślną (będzie „1 (1.0.0)")
+- Informacje o wersji (release notes, w textarea):
   ```
   Initial release.
   - Discogs sync, barcode scanner, Discogs price tracking
@@ -209,20 +216,21 @@ Left sidebar → "Testing" → "Internal testing".
   - Currency: USD / EUR / PLN
   ```
 
-Save → "Review release" → "Start rollout to internal testing".
+**Zapisz** → **„Sprawdź wersję"** → **„Rozpocznij wdrażanie do testów wewnętrznych"**.
 
-### 4.2 GET YOUR PLAY APP SIGNING + UPLOAD KEY FINGERPRINTS
+### 4.2 ⚠️ POBIERZ FINGERPRINT'Y Z PLAY CONSOLE
 
-Left sidebar → "Setup" → "App integrity".
+Lewy panel → **„Konfiguracja"** → **„Integralność aplikacji"**.
 
-You'll see two SHA-256s:
+Zobaczysz dwa SHA-256:
 
-- **App signing key certificate** → SHA-256 (this is what Play
-  Store uses to sign all final APKs)
-- **Upload key certificate** → SHA-256 (your `android.keystore`
-  fingerprint that Play Console expects on uploads)
+- **Certyfikat klucza podpisywania aplikacji** → SHA-256
+  (to czym Play Store podpisuje końcowe APKi)
+- **Certyfikat klucza przesyłania** → SHA-256
+  (Twój `android.keystore` fingerprint, z którym Play Console
+  oczekuje uploadów)
 
-Copy both colon-hex values. Then locally:
+Skopiuj oba (colon-hex). Następnie lokalnie:
 
 ```bash
 cd /c/Users/kinga/Documents/GitHub/metal-vault
@@ -236,91 +244,95 @@ git commit -m "chore(twa): add Play Console fingerprints to assetlinks"
 git push origin main
 ```
 
-The script de-dupes. After redeploy, your TWA will pass digital asset
-link verification for all three signing identities.
+Albo wklej mi te dwa SHA tutaj — uruchomię script za Ciebie.
 
-### 4.3 Add yourself as internal tester
+Po redeployu Vercel TWA przejdzie weryfikację digital asset link
+dla wszystkich trzech tożsamości podpisywania.
 
-Left sidebar (under Internal testing) → "Testers" → "Create email
-list" → name it "Internal testers" → add your Gmail.
+### 4.3 Dodaj siebie jako tester wewnętrzny
 
-Then: copy the "Join URL" from "How testers join your test" → open
-it on phone (signed in to the same Gmail) → "Become a tester".
+Lewy panel (pod „Testy wewnętrzne") → **„Testerzy"** →
+**„Utwórz listę adresów e-mail"** → nazwij ją „Testerzy wewnętrzni"
+→ dodaj swój Gmail.
 
-Once you've joined, the app appears in Play Store with a "(Beta)"
-suffix. You can install it like a normal app — this version is
-signed by Play, opens from the launcher, and benefits from Play
-Store auto-updates.
+Następnie: skopiuj **„Adres URL dołączenia"** z sekcji „Jak testerzy
+dołączają do testu" → otwórz na phone (zalogowany na ten sam Gmail)
+→ **„Zostań testerem"**.
 
-### 4.4 Test on phone
+Po dołączeniu app pokaże się w Play Store z dopiskiem „(Beta)".
+Możesz ją zainstalować jak normalną apkę — ta wersja podpisana
+przez Play, otwiera się z launchera, dostaje Play Store auto-update.
 
-Install the Play-signed version. Verify:
+### 4.4 Testowanie na phone
 
-| Check | Expected |
+Zainstaluj wersję podpisaną przez Play. Sprawdź:
+
+| Test | Oczekiwane |
 |---|---|
-| Cold launch — splash + no URL bar | ✅ |
-| Login (your test account or Discogs OAuth) | ✅ |
-| Vault tab loads collection | ✅ |
-| Push notifications (Profile → enable) work | ✅ |
-| Barcode scan opens camera | ✅ |
-| Pull-to-refresh works | (if implemented) |
-| Hardware back closes overlays, not the app | ✅ |
+| Cold launch — splash + brak URL bara | ✅ |
+| Login (Twoje konto albo Discogs OAuth) | ✅ |
+| Vault tab ładuje kolekcję | ✅ |
+| Push notifications (Profil → włącz) działają | ✅ |
+| Skaner kodów kreskowych otwiera kamerę | ✅ |
+| Pull-to-refresh działa | (jeśli zaimplementowane) |
+| Hardware back zamyka overlay'e, nie aplikację | ✅ |
 
-If URL bar persists: usually means assetlinks fingerprint mismatch.
-Make sure the file you pushed in 4.2 has all 3 fingerprints, and
-that you opened the Play Store version (not your sideloaded APK from
-earlier — that uses your local key).
-
----
-
-## 5. After internal testing succeeds
-
-Promote internal → closed → open → production (each is a button in
-the same sidebar). Closed testing requires you specify tester emails.
-Open testing is publicly joinable but lower priority for review.
-
-For first launch I'd recommend:
-1. **Internal** for 1-2 days (verify TWA works on Play-signed APK)
-2. **Closed alpha** with 5-10 friends for 3-7 days (real-world bugs)
-3. **Production** once feedback is incorporated
+Jeśli URL bar dalej widoczny: zazwyczaj fingerprint mismatch.
+Sprawdź że plik z 4.2 ma wszystkie 3 fingerprint'y, i otwierasz
+wersję ZE SKLEPU (nie sideload z wcześniej — tamta używa Twojego
+lokalnego klucza).
 
 ---
 
-## 6. In-app billing (optional, for Pro tier)
+## 5. Po sukcesie testów wewnętrznych
 
-Only matters if you want Pro purchasable from inside the TWA. Skip
-for first launch if you only sell Pro via Stripe (web).
+Promuj wewnętrzne → zamknięte → otwarte → produkcja (każda to
+przycisk w tym samym sidebarze). Testy zamknięte wymagają podania
+emaili testerów. Testy otwarte są publicznie joinable ale niski
+priorytet recenzji.
 
-Required if you DO sell from TWA: Play Console → Monetisation →
-Subscriptions → create products matching `lib/payments.js` SKUs:
+Dla pierwszego launchu polecam:
+1. **Wewnętrzne** przez 1-2 dni (sprawdź TWA na Play-signed APK)
+2. **Zamknięte alpha** z 5-10 znajomymi przez 3-7 dni (real-world bugi)
+3. **Produkcja** po inkorporowaniu feedbacku
+
+---
+
+## 6. In-app billing (opcjonalne, dla tier Pro)
+
+Ważne tylko jeśli chcesz Pro kupowalne **z TWA**. Pomiń dla
+pierwszego launchu jeśli sprzedajesz Pro tylko przez Stripe (web).
+
+Wymagane jeśli sprzedajesz z TWA: Play Console → **„Monetyzacja"** →
+**„Subskrypcje"** → utwórz produkty pasujące do SKU w `lib/payments.js`:
 - `mv_pro_monthly`
-- `mv_pro_yearly` (if you have one)
+- `mv_pro_yearly` (jeśli masz)
 
-Then RevenueCat dashboard → link Play product → copy public API key
-to `NEXT_PUBLIC_REVENUECAT_API_KEY` in Vercel env.
+Następnie RevenueCat dashboard → linkuj produkt Play → skopiuj
+public API key do `NEXT_PUBLIC_REVENUECAT_API_KEY` w Vercel env.
 
-Test path documented in `BUBBLEWRAP.md` ("In-app billing test").
+Ścieżka testowa udokumentowana w `BUBBLEWRAP.md` („In-app billing test").
 
 ---
 
-## Cheatsheet — common rejection reasons
+## Cheatsheet — typowe powody odrzucenia
 
-| Symptom | Cause | Fix |
+| Symptom | Przyczyna | Naprawa |
 |---|---|---|
-| "Your app is not designed primarily for content from the web" | Play sometimes rejects TWAs that look too thin | Add 1+ Android-native feature OR appeal with link to Bubblewrap docs |
-| "Your privacy policy doesn't cover all data" | Data Safety form ticks ≠ what privacy policy says | Make sure `/legal/privacy.html` mentions every data type ticked in 2.8 |
-| "App contains misleading content" | Screenshots don't match what's in the app | Use only `public/screenshots/*.png` (canonical) |
-| URL bar visible | Wrong fingerprint in assetlinks | Re-run `update-assetlinks.mjs` with all 3 keys, redeploy, clear Chrome cache on phone |
-| Sign-in test failed (review team can't log in) | Test account credentials in App access section are wrong / blocked | Verify the account you registered exists in Supabase + can password-login |
+| „Twoja aplikacja nie jest zaprojektowana głównie dla treści z internetu" | Play czasem odrzuca TWA jako „za cienkie" | Dodaj 1+ natywną funkcję Android LUB odwołaj się z linkiem do dokumentacji Bubblewrap |
+| „Polityka prywatności nie obejmuje wszystkich danych" | Tiki w Bezpieczeństwie danych ≠ co mówi privacy policy | Upewnij się że `/legal/privacy.html` wymienia każdy typ danych zaznaczony w 2.8 |
+| „Aplikacja zawiera mylące treści" | Zrzuty ekranu nie pasują do tego co jest w aplikacji | Używaj tylko `public/screenshots/*.png` (kanoniczne) |
+| URL bar widoczny | Zły fingerprint w assetlinks | Uruchom ponownie `update-assetlinks.mjs` z wszystkimi 3 kluczami, redeploy, wyczyść cache Chrome na phone |
+| Test logowania nieudany (recenzent nie może się zalogować) | Konto testowe w sekcji Dostęp do aplikacji jest złe / zablokowane | Sprawdź że konto które wpisałeś istnieje w Supabase + można zalogować się hasłem |
 
 ---
 
-## After launch
+## Po launchu
 
-- Add Sentry env vars (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`,
-  `SENTRY_AUTH_TOKEN`) to Vercel for error monitoring
-- Add Resend env var for email digests (`RESEND_API_KEY`)
-- Set up Play Console release notes for every future deploy
-- Bump `appVersion` in `metal-vault-android/twa-manifest.json` and
-  re-run `bubblewrap update --skipVersionUpgrade && bubblewrap build`
-  to produce a new AAB
+- Dodaj Sentry env vars (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`,
+  `SENTRY_AUTH_TOKEN`) do Vercel — monitoring błędów
+- Dodaj `RESEND_API_KEY` do Vercel — emailowe digesty
+- Ustaw release notes w Play Console dla każdego kolejnego deployu
+- Bumpnij `appVersion` w `metal-vault-android/twa-manifest.json` i
+  uruchom `bubblewrap update --skipVersionUpgrade && bubblewrap build`
+  żeby wyprodukować nowy AAB
