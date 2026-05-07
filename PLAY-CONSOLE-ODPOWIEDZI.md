@@ -221,15 +221,191 @@ Try it without an account — tap "Try without account" on the landing page to e
 🤘 Stay heavy.
 ```
 
+### 3.1.PL Polska wersja listingu (po dodaniu „Polski (Polska) – pl-PL")
+
+**Nazwa aplikacji:**
+```
+Metal Vault
+```
+
+**Krótki opis (max 80 znaków):**
+```
+Śledź, wyceniaj i dokumentuj swoją kolekcję metalowych winyli. PDF do ubezpieczenia.
+```
+
+**Pełny opis (max 4000 znaków):**
+```
+🤘 Stworzona przez kolekcjonera metalu — dla kolekcjonerów metalu.
+
+Metal Vault to aplikacja do śledzenia winyli, której zawsze szukałem i nigdy nie znalazłem. Czy masz 50 płyt czy 5 000, Metal Vault pomaga monitorować to co masz, obserwować to czego pragniesz, dokumentować to co cenne — i nigdy nie przegapić wznowienia.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ FUNKCJE BEZPŁATNE
+
+📀 Śledzenie kolekcji
+• Dodawaj płyty przez sync z Discogs, skanowanie kodu kreskowego lub ręcznie
+• Zapisuj stan, cenę zakupu i osobiste notatki
+• Filtruj po gatunku, dekadzie, formacie, posiadane / pożądane
+
+🎯 Sprytna watchlista
+• Zapisuj płyty które chcesz kupić
+• Otrzymuj powiadomienia gdy ceny spadną na Discogs
+• Sprawdzaj aktualną wartość płyt z Twojej kolekcji
+
+📸 Skaner kodów kreskowych
+• Zeskanuj kod kreskowy z winyla i dodaj go natychmiast
+• Działa offline na giełdach płytowych (po pierwszej synchronizacji)
+• Lookup Discogs z fallbackiem na MusicBrainz
+
+📅 Kalendarz premier
+• Przeglądaj nadchodzące metalowe premiery (Discogs + MusicBrainz)
+• Obserwuj artystów, żeby filtrować feed
+• Otrzymuj push notifications w dniu premiery
+
+🎫 Tracker koncertów (Live)
+• Sprawdzaj nadchodzące koncerty obserwowanych artystów (Ticketmaster)
+• Loguj koncerty, na których byłeś (osobisty dziennik gigów)
+• Filtruj po odległości od Twojej lokalizacji
+
+📊 Statystyki + Persona
+• Wartość kolekcji, zysk/strata, completionist score
+• Auto-generowana „metalowa persona" — udostępnij jako Instagram Story
+• Rozkład gatunków, dekady, top wytwórnie
+
+🌍 3 języki: English / Polski / Deutsch
+💱 3 waluty: PLN / EUR / USD (kursy live z ECB)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⭐ FUNKCJE PRO (opcjonalne)
+
+• Nielimitowane alerty cenowe (free tier: 1 alert)
+• Wykresy historii cen z 30 dni
+• Raporty PDF do ubezpieczenia kolekcji
+• Scoring bliskości koncertów (festiwale + trasy)
+• Wsparcie priorytetowe
+
+7-dniowy bezpłatny okres próbny, później 19,99 zł/miesiąc lub 199 zł/rok. Możesz anulować w każdej chwili.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔒 Prywatność na pierwszym miejscu
+• Zero reklam stron trzecich, nigdy
+• Email + dane kolekcji na serwerach Supabase (UE)
+• Twoje zdjęcia są Twoje — nigdy ich nie udostępniamy
+• Pełne usunięcie konta w każdej chwili
+• Polityka prywatności: metal-vault-six.vercel.app/legal/privacy.html
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Stworzone z ❤️ w Polsce przez kolegę metalowca.
+Wypróbuj bez konta — kliknij „Wypróbuj bez konta" na ekranie startowym, żeby zobaczyć aplikację z przykładową kolekcją.
+
+🤘 Stay heavy.
+```
+
+### 3.1.DE Deutsche Listing-Version (nach Hinzufügen von „Deutsch – de-DE")
+
+**App-Name:**
+```
+Metal Vault
+```
+
+**Kurzbeschreibung (max. 80 Zeichen):**
+```
+Verwalte, bewerte und dokumentiere deine Metal-Vinyl-Sammlung. PDFs für Versicherung.
+```
+
+**Vollständige Beschreibung (max. 4000 Zeichen):**
+```
+🤘 Von einem Metal-Sammler — für Metal-Sammler.
+
+Metal Vault ist die Vinyl-Tracking-App, die ich immer wollte, aber nie gefunden habe. Egal ob deine Sammlung 50 oder 5.000 Platten umfasst — Metal Vault hilft dir nachzuhalten, was du besitzt, zu beobachten, was du willst, zu dokumentieren, was wertvoll ist, und nie wieder einen Repress zu verpassen.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ KOSTENLOSE FUNKTIONEN
+
+📀 Sammlung verwalten
+• Platten per Discogs-Sync, Barcode-Scan oder manuell hinzufügen
+• Zustand, Kaufpreis und persönliche Notizen erfassen
+• Nach Genre, Dekade, Format, eigen/gewünscht filtern
+
+🎯 Intelligente Watchlist
+• Platten speichern, die du kaufen willst
+• Benachrichtigung bei Preissenkungen auf Discogs
+• Aktuellen Wert deiner Sammlung jederzeit sehen
+
+📸 Barcode-Scanner
+• Vinyl-Barcodes scannen und sofort hinzufügen
+• Funktioniert offline auf Plattenbörsen (nach einmaliger Sync)
+• Discogs-Lookup mit MusicBrainz-Fallback
+
+📅 Release-Kalender
+• Kommende Metal-Releases durchstöbern (Discogs + MusicBrainz)
+• Künstlern folgen, um den Feed zu filtern
+• Push-Benachrichtigungen am Release-Tag
+
+🎫 Konzert-Tracker (Live)
+• Kommende Shows deiner gefolgten Künstler sehen (Ticketmaster)
+• Besuchte Konzerte protokollieren (persönliches Gig-Tagebuch)
+• Nach Entfernung von deinem Standort filtern
+
+📊 Stats + Persona
+• Sammlungswert, Gewinn/Verlust, Completionist-Score
+• Automatisch generierte „Metal-Persona" — als Instagram-Story teilen
+• Genre-Verteilung, Dekaden, Top-Labels
+
+🌍 3 Sprachen: English / Polski / Deutsch
+💱 3 Währungen: EUR / USD / PLN (Live-Kurse von der EZB)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⭐ PRO-FUNKTIONEN (optional)
+
+• Unbegrenzte Preisalarme (Free-Tier: 1 Alarm)
+• 30-Tage-Preisverlaufsdiagramme
+• Versicherungs-PDFs für deine Sammlung
+• Konzert-Nähe-Scoring (Festivals + Touren)
+• Bevorzugter Support
+
+7 Tage kostenlos testen, danach 4,99 €/Monat oder 49 €/Jahr. Jederzeit kündbar.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔒 Privatsphäre zuerst
+• Keine Drittanbieter-Werbung, niemals
+• E-Mail + Sammlungsdaten auf Supabase (EU-Server)
+• Deine Fotos gehören dir — wir teilen sie nie
+• Vollständige Konto-Löschung jederzeit möglich
+• Datenschutzrichtlinie: metal-vault-six.vercel.app/legal/privacy.html
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Mit ❤️ in Polen von einem Metalhead gebaut.
+Probiere es ohne Konto — tippe auf „Try without account" auf der Landing-Page, um die App mit Beispiel-Sammlung zu erkunden.
+
+🤘 Stay heavy.
+```
+
 ### 3.2 Grafika
 
 | Element | Plik (od Twojego repo) |
 |---|---|
 | Ikona aplikacji 512×512 | `public/icons/icon-512.png` |
 | Grafika promocyjna 1024×500 | `launch-marketing/assets/feature-1024x500.png` |
-| Zrzuty ekranu telefonu (6 sztuk) | `public/screenshots/01-feed.png` … `06-stats-persona.png` |
+| Zrzuty ekranu EN (6 sztuk) | `public/screenshots/en/01-feed.png` … `06-stats-persona.png` |
+| Zrzuty ekranu PL (6 sztuk, dla pl-PL) | `public/screenshots/pl/01-feed.png` … `06-stats-persona.png` |
+| Zrzuty ekranu DE (6 sztuk, dla de-DE) | `public/screenshots/de/01-feed.png` … `06-stats-persona.png` |
 
 Zrzuty z tabletu / Chromebooka — pomiń.
+
+⚠️ **Ważne:** w Play Console zrzuty ekranów uploadujesz osobno per
+locale. Default (en-US) używa zrzutów z folderu `en/`, a po
+dodaniu polskiej / niemieckiej wersji listingu (Settings →
+Manage translations) odpowiednio z `pl/` i `de/`. To gwarantuje,
+że użytkownik widzi UI w swoim języku już w sklepie.
 
 ### 3.3 Kategoryzacja
 

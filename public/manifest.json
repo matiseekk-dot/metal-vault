@@ -65,14 +65,14 @@
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Concerts near you"
+      "label": "Concerts and tour calendar"
     },
     {
-      "src": "/screenshots/05-login.png",
+      "src": "/screenshots/05-bands.png",
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Sign in"
+      "label": "Track artists you collect"
     },
     {
       "src": "/screenshots/06-stats-persona.png",
