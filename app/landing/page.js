@@ -41,9 +41,27 @@ export default function LandingPage() {
         <p style={{fontSize:13,color:C.muted,lineHeight:1.8,maxWidth:400,margin:'0 auto 28px'}}>
           {t('landing.heroDesc')}
         </p>
-        <Link href="/" style={{display:'inline-block',background:'linear-gradient(135deg,#dc2626,#991b1b)',color:'#fff',padding:'14px 36px',borderRadius:12,textDecoration:'none',fontFamily:"var(--font-bebas-neue), sans-serif",fontSize:22,letterSpacing:'0.1em',boxShadow:'0 4px 24px #dc262644'}}>
-          🤘 {t('landing.heroCta')}
-        </Link>
+        <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+          <Link href="/" style={{display:'inline-block',background:'linear-gradient(135deg,#dc2626,#991b1b)',color:'#fff',padding:'14px 36px',borderRadius:12,textDecoration:'none',fontFamily:"var(--font-bebas-neue), sans-serif",fontSize:22,letterSpacing:'0.1em',boxShadow:'0 4px 24px #dc262644'}}>
+            🤘 {t('landing.heroCta')}
+          </Link>
+          {/* Demo mode CTA — sets the LS flag and lands on the app
+              shell. useCollection picks it up, seeds the demo
+              dataset, DemoBanner renders sticky-top. The reviewer /
+              first-time visitor never has to type a credential
+              before seeing the value of the app. */}
+          <button
+            onClick={() => {
+              try {
+                localStorage.setItem('mv_demo_active', '1');
+                window.dispatchEvent(new CustomEvent('mv:demo-changed'));
+              } catch {}
+              window.location.href = '/';
+            }}
+            style={{display:'inline-block',background:'transparent',border:'1px solid '+C.accent,color:C.accent,padding:'14px 28px',borderRadius:12,fontFamily:"var(--font-bebas-neue), sans-serif",fontSize:22,letterSpacing:'0.1em',cursor:'pointer'}}>
+            👀 {t('landing.tryAsGuest') || 'Try without account'}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

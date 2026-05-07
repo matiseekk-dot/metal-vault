@@ -975,12 +975,13 @@ export function CollectionTab({
     }
   };
 
-  if (!user) return (
-    <div style={{ textAlign: 'center', padding: '60px 24px', color: C.dim, ...MONO }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
-      <div style={{ fontSize: 13, lineHeight: 1.7 }}>{t('home.signedOut.desc')}</div>
-    </div>
-  );
+  // No `if (!user) return …` guard here. When the user is a guest,
+  // useCollection seeds the demo dataset and the rest of this
+  // component renders normally against `collection` (which holds the
+  // demo records). The signed-out empty-state is only ever reached
+  // now if a user has explicitly signed out without enabling demo
+  // mode — in that case `collection` is `[]` and the `length === 0`
+  // branch below shows the empty-vault illustration.
 
   const summary = portfolio?.summary;
 

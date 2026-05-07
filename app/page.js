@@ -14,6 +14,7 @@ import UpgradeModal from '@/app/components/UpgradeModal';
 import ArtistInfoModal from '@/app/components/ArtistInfoModal';
 import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 import WhatsNew from '@/app/components/WhatsNew';
+import DemoBanner from '@/app/components/DemoBanner';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm } from '@/app/components/Toast';
 import { useT } from '@/lib/i18n';
@@ -557,24 +558,49 @@ export default function MetalVault() {
                 <span style={{ ...BEBAS, fontSize:13, color:'#f5c842', lineHeight:1, letterSpacing:'0.02em' }}>{streak}</span>
               </div>
             )}
-          {user && col.collectionSummary && col.collectionSummary.totalCurrent > 0 ? (
-            <button onClick={()=>setTab('stats')} style={{ background:'none', border:'none', cursor:'pointer', textAlign:'right', padding:0 }}>
-              <div style={{ ...BEBAS, fontSize:22, color:C.gold, lineHeight:1, letterSpacing:'0.04em' }}>
-                {formatPrice(col.collectionSummary.totalCurrent, cur, fx)}
-              </div>
-              {col.collectionSummary.gain !== 0 && (
-                <div style={{ fontSize:9, color: col.collectionSummary.gain >= 0 ? '#4ade80' : '#f87171', ...MONO, textAlign:'right' }}>
-                  {formatChange(col.collectionSummary.gain, cur, fx)}
+          {(() => {
+            // For signed-in users we use the server-provided summary;
+            // for demo guests we compute the same totals client-side
+            // from the LS-backed collection so the header still shows
+            // a meaningful value chip. Without this, demo users got
+            // an empty header and the value-prop wasn't visible
+            // until they tapped Vault.
+            const signedTotal = col.collectionSummary?.totalCurrent;
+            const signedGain  = col.collectionSummary?.gain;
+            const demoTotal = (col.collection || []).reduce(
+              (s, i) => s + (Number(i.median_price || i.current_price || i.purchase_price) || 0), 0);
+            const demoPaid  = (col.collection || []).reduce(
+              (s, i) => s + (Number(i.purchase_price) || 0), 0);
+            const total = user ? signedTotal : demoTotal;
+            const gain  = user ? signedGain  : (demoTotal - demoPaid);
+            const showChip = total > 0;
+            if (!showChip) return null;
+            return (
+              <button onClick={()=>setTab('stats')} style={{ background:'none', border:'none', cursor:'pointer', textAlign:'right', padding:0 }}>
+                <div style={{ ...BEBAS, fontSize:22, color:C.gold, lineHeight:1, letterSpacing:'0.04em' }}>
+                  {formatPrice(total, cur, fx)}
                 </div>
-              )}
-            </button>
-          ) : user ? (
+                {gain !== 0 && (
+                  <div style={{ fontSize:9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO, textAlign:'right' }}>
+                    {formatChange(gain, cur, fx)}
+                  </div>
+                )}
+              </button>
+            );
+          })()}
+          {user && (col.collectionSummary?.totalCurrent ?? 0) === 0 ? (
             <div style={{ fontSize:10, color:'#4ade80', ...MONO }}>✓ {user.email?.split('@')[0]}</div>
           ) : null}
           </div>
         </div>
         {source==='mock' && <div style={{ fontSize:9, color:'#555', ...MONO, marginTop:2 }}>{t('header.demoMode')}</div>}
       </div>
+
+      {/* Sticky strip below the header reminding the guest they're
+          looking at sample data + offering a one-tap path to sign in.
+          Hidden once the user authenticates (DemoBanner reads the
+          mv_demo_active LS flag and gates on `user`). */}
+      <DemoBanner user={user}/>
 
       <div style={{ paddingBottom:100 }}>
         {tab==='feed' && (
