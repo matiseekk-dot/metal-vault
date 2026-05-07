@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delete your Metal Vault account</title>
+  <meta name="robots" content="noindex">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+      color: #1a1a1a;
+      background: #fff;
+      line-height: 1.55;
+    }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    h2 { font-size: 18px; margin: 28px 0 8px; color: #333; }
+    p, li { font-size: 15px; }
+    ol li { margin-bottom: 8px; }
+    code {
+      background: #f0f0f0;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 14px;
+    }
+    .lang-toggle { font-size: 13px; color: #666; margin-bottom: 24px; }
+    .lang-toggle a { color: #c00; text-decoration: none; }
+    .lang-toggle a:hover { text-decoration: underline; }
+    .box {
+      background: #fafafa;
+      border-left: 3px solid #c00;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    a { color: #c00; }
+    section[lang="pl"] { display: none; }
+    section[lang="pl"]:target { display: block; }
+    section[lang="pl"]:target ~ section[lang="en"] { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="lang-toggle">
+  <a href="#en">English</a> ·
+  <a href="#pl">Polski</a>
+</div>
+
+<section lang="en" id="en">
+  <h1>Delete your Metal Vault account</h1>
+  <p>This page describes how to permanently delete your Metal Vault
+  account and the data associated with it. You can also self-serve
+  deletion from inside the app — both paths produce the same outcome.</p>
+
+  <h2>From inside the app</h2>
+  <ol>
+    <li>Open Metal Vault and sign in to the account you want to delete.</li>
+    <li>Tap <strong>Profile</strong> in the bottom navigation.</li>
+    <li>Scroll to the <strong>Settings</strong> section.</li>
+    <li>Tap <strong>Delete account</strong>. Confirm the destructive
+    action prompt — this cannot be undone.</li>
+  </ol>
+
+  <h2>Email request</h2>
+  <p>If you can't sign in (forgot the magic link, lost device access),
+  email <a href="mailto:hello@skudev.pl?subject=Metal%20Vault%20account%20deletion">hello@skudev.pl</a>
+  from the address tied to the account. Subject line:
+  <code>Metal Vault account deletion</code>. We will verify ownership
+  and delete the account within 30 days.</p>
+
+  <h2>What gets deleted</h2>
+  <ul>
+    <li>Your account record + email address</li>
+    <li>Your collection, watchlist, followed artists, concert log</li>
+    <li>Photos you uploaded for individual records</li>
+    <li>Price history snapshots tied to your account</li>
+    <li>Push notification subscriptions + device IDs</li>
+    <li>Linked Discogs OAuth tokens</li>
+  </ul>
+
+  <h2>Retention windows</h2>
+  <ul>
+    <li><strong>Live data:</strong> deleted from production within
+    30 days of the request</li>
+    <li><strong>Backups:</strong> rolling encrypted database backups
+    may retain a copy for up to 90 days, after which they are
+    overwritten</li>
+    <li><strong>Anonymised analytics</strong> (Sentry crash logs,
+    aggregated app-usage metrics) may persist longer but never
+    contain your email or personally identifying info</li>
+  </ul>
+
+  <div class="box">
+    <strong>Subscription note:</strong> if you have an active Pro
+    subscription, deleting the account does <em>not</em> cancel
+    Stripe / Play Store billing. Cancel the subscription first via
+    your Google Play / Stripe portal, then delete the account.
+  </div>
+
+  <p>For other privacy questions see the
+  <a href="/legal/privacy.html">privacy policy</a>.</p>
+</section>
+
+<section lang="pl" id="pl">
+  <h1>Usuń konto Metal Vault</h1>
+  <p>Ta strona opisuje jak trwale usunąć konto Metal Vault i powiązane
+  z nim dane. Możesz też usunąć konto z poziomu aplikacji — obie
+  ścieżki dają ten sam efekt.</p>
+
+  <h2>Z poziomu aplikacji</h2>
+  <ol>
+    <li>Otwórz Metal Vault i zaloguj się do konta które chcesz usunąć.</li>
+    <li>Stuknij <strong>Profil</strong> w dolnej nawigacji.</li>
+    <li>Przewiń do sekcji <strong>Ustawienia</strong>.</li>
+    <li>Stuknij <strong>Usuń konto</strong>. Potwierdź na potwierdzeniu —
+    operacji nie da się cofnąć.</li>
+  </ol>
+
+  <h2>Wniosek e-mailowy</h2>
+  <p>Jeśli nie możesz się zalogować (zgubiłeś magic link, brak dostępu
+  do urządzenia), wyślij maila na <a href="mailto:hello@skudev.pl?subject=Metal%20Vault%20account%20deletion">hello@skudev.pl</a>
+  z adresu powiązanego z kontem. Temat: <code>Metal Vault account deletion</code>.
+  Zweryfikujemy własność i usuniemy konto w ciągu 30 dni.</p>
+
+  <h2>Co zostanie usunięte</h2>
+  <ul>
+    <li>Twoje konto + adres e-mail</li>
+    <li>Twoja kolekcja, watchlista, śledzeni artyści, dziennik koncertów</li>
+    <li>Zdjęcia które wgrałeś do poszczególnych płyt</li>
+    <li>Zapisy historii cen powiązane z Twoim kontem</li>
+    <li>Subskrypcje push notifications + identyfikatory urządzeń</li>
+    <li>Powiązane tokeny OAuth Discogs</li>
+  </ul>
+
+  <h2>Okresy przechowywania</h2>
+  <ul>
+    <li><strong>Dane produkcyjne:</strong> usuwane z produkcji w ciągu
+    30 dni od żądania</li>
+    <li><strong>Kopie zapasowe:</strong> zaszyfrowane rolling backupy
+    bazy danych mogą zachować kopię do 90 dni, po czym są nadpisywane</li>
+    <li><strong>Zanonimizowane analityki</strong> (Sentry crash logs,
+    zagregowane metryki używania) mogą być przechowywane dłużej, ale
+    nigdy nie zawierają e-maila ani danych osobowych</li>
+  </ul>
+
+  <div class="box">
+    <strong>Subskrypcja:</strong> jeśli masz aktywną subskrypcję Pro,
+    usunięcie konta <em>nie</em> anuluje rozliczenia Stripe / Play Store.
+    Anuluj subskrypcję najpierw przez portal Google Play / Stripe,
+    następnie usuń konto.
+  </div>
+
+  <p>W innych pytaniach dotyczących prywatności zobacz
+  <a href="/legal/privacy.html">politykę prywatności</a>.</p>
+</section>
+
+</body>
+</html>
