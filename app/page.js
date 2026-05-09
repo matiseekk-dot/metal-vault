@@ -15,6 +15,8 @@ import ArtistInfoModal from '@/app/components/ArtistInfoModal';
 import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 import WhatsNew from '@/app/components/WhatsNew';
 import DemoBanner from '@/app/components/DemoBanner';
+import RepressBanner from '@/app/components/RepressBanner';
+import ThisDayModal from '@/app/components/ThisDayModal';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm } from '@/app/components/Toast';
 import { useT } from '@/lib/i18n';
@@ -648,6 +650,7 @@ export default function MetalVault() {
           Hidden once the user authenticates (DemoBanner reads the
           mv_demo_active LS flag and gates on `user`). */}
       <DemoBanner user={user}/>
+      <RepressBanner user={user}/>
 
       <div style={{ paddingBottom:100 }}>
         {tab==='feed' && (
@@ -824,6 +827,11 @@ export default function MetalVault() {
           anywhere (Search, Bands, related-artist clicks). Mounted always
           so events fire regardless of active tab. */}
       <ArtistInfoModal />
+
+      {/* Daily "this day in metal" surfaced when user opens the app
+          from the daily push (which appends ?day=YYYY-MM-DD to the
+          URL). Renders nothing on a normal cold-start. */}
+      <ThisDayModal user={user}/>
 
 
       {showOnboarding && (

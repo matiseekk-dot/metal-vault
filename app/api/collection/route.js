@@ -12,6 +12,11 @@ const COLLECTION_WRITABLE = [
   'notes', 'catalog_number',
   // Detailed grading (Pro feature, but field writes allowed for all to avoid data loss)
   'sleeve_grade', 'vinyl_grade', 'inner_sleeve_grade', 'hype_sticker', 'playback_notes',
+  // "Want to sell" (Pro feature — gating happens at the UI layer + a
+  // server-side premium check below for activation). Storing the
+  // fields without premium is fine; the *generation* of listings is
+  // what's gated.
+  'for_sale', 'asking_price', 'for_sale_note',
 ];
 
 function filterWritable(body) {
@@ -24,6 +29,13 @@ function validateCollectionItem(body) {
   if (body.purchase_price !== undefined && body.purchase_price !== null) {
     const p = Number(body.purchase_price);
     if (isNaN(p) || p < 0 || p > 1000000) return 'purchase_price out of range';
+  }
+  if (body.asking_price !== undefined && body.asking_price !== null) {
+    const p = Number(body.asking_price);
+    if (isNaN(p) || p < 0 || p > 1000000) return 'asking_price out of range';
+  }
+  if (body.for_sale_note && String(body.for_sale_note).length > 500) {
+    return 'for_sale_note max 500 chars';
   }
   if (body.playback_notes && String(body.playback_notes).length > 2000) {
     return 'playback_notes max 2000 chars';

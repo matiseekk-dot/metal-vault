@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { C, MONO, BEBAS, BADGE_STYLES, GENRE_COLOR } from '@/lib/theme';
 import MarketComparison from '@/app/components/MarketComparison';
 import PhotoUploader from '@/app/components/PhotoUploader';
+import ForSaleToggle from '@/app/components/ForSaleToggle';
+import VariantTracker from '@/app/components/VariantTracker';
 import Icon from '@/app/components/Icon';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { useT, getLocale } from '@/lib/i18n';
@@ -260,6 +262,16 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
               onPhotosChange={(photos) => onPhotosChange?.(collectionItem.id, photos)}
             />
             <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
+            {/* "Want to sell" — Pro feature, gated inside the component.
+                Only shown for owned items; pre-fills asking price with
+                Discogs median if available. */}
+            <ForSaleToggle
+              item={collectionItem}
+              premium={premium}
+              onUpgrade={onUpgrade}
+              onUpdated={(updated) => onPhotosChange && updated && onPhotosChange(updated.id, updated.user_photos || collectionItem.user_photos || [])}
+            />
+            <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
           </>
         )}
 
@@ -272,6 +284,16 @@ export function VinylModal({album,onClose,onWatchToggle,isWatched,onAddToCollect
         />
 
         <div style={{margin:'14px 16px 0',borderTop:'1px solid '+C.border}}/>
+
+        {/* Variant tracker — full Discogs versions list with owned/missing
+            + rarity scoring. Killer feature for metal collectors:
+            "Powerslave has 23 variants, you own 1, the LTD red splatter
+            is rare and $340 right now". */}
+        <VariantTracker
+          album={album}
+          onWatchToggle={onWatchToggle}
+          isWatched={isWatched ? (id) => false : null}
+        />
         <div style={{padding:'14px 16px 16px'}}>
           <div style={{fontSize:10,color:C.accent,letterSpacing:'0.2em',textTransform:'uppercase',...MONO,marginBottom:12}}>
             {t('vinyl.releases.title')}

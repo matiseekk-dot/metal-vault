@@ -19,6 +19,14 @@
     {
       "path": "/api/cron/warm-releases",
       "schedule": "30 7 * * *"
+    },
+    {
+      "path": "/api/cron/repress",
+      "schedule": "30 9 * * *"
+    },
+    {
+      "path": "/api/cron/this-day",
+      "schedule": "0 17 * * *"
     }
   ]
 }

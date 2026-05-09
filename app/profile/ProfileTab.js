@@ -8,6 +8,7 @@ import { toast, confirm as mvConfirm } from '@/app/components/Toast';
 import { useT, useLocale, setLocale, SUPPORTED_LOCALES } from '@/lib/i18n';
 import { useCurrency, setCurrency, SUPPORTED_CURRENCIES } from '@/lib/currency';
 import { FREE_TRIAL_DAYS } from '@/lib/pricing';
+import SpotifySyncCard from '@/app/components/SpotifySyncCard';
 
 
 // ── ConcertLocationCard ──
@@ -770,6 +771,11 @@ export default function ProfileTab({
           </button>
         )}
       </div>
+
+      {/* Spotify auto-listen sync — connect once, then "Sync now" pulls
+          recently-played and matches against the collection. Hidden
+          if SPOTIFY_CLIENT_ID env var unset (component server-checks). */}
+      <SpotifySyncCard/>
 
       {/* Language picker — every locale defined in lib/i18n.js shows up */}
       <LanguagePicker/>
