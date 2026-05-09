@@ -220,9 +220,15 @@ export default function ListeningTab({ user, onAlbumClick }) {
                       background: badge.color + '22', padding: '1px 5px', borderRadius: 3,
                       border: '1px solid ' + badge.color + '44', letterSpacing: '0.05em',
                     }}>{badge.label}</span>
-                    <span style={{ fontSize: 9, color: C.dim, ...MONO }}>
-                      <FormatPlayedAt iso={it.played_at} kind={it.kind} count={it.play_count}/>
-                    </span>
+                    {/* Vinyl: show timestamp ("yesterday", "14:23"). Streaming
+                        aggregates: skip the timestamp here — the play_count
+                        on the right edge IS the primary metric, and Last.fm's
+                        played_at is synthetic anyway. */}
+                    {it.kind === 'vinyl' && (
+                      <span style={{ fontSize: 9, color: C.dim, ...MONO }}>
+                        <FormatPlayedAt iso={it.played_at} kind={it.kind} count={it.play_count}/>
+                      </span>
+                    )}
                     {it.in_collection && (
                       <span style={{ fontSize: 8, color: '#4ade80', ...MONO,
                         background: '#1a3d1a', padding: '1px 5px', borderRadius: 3,
@@ -233,31 +239,54 @@ export default function ListeningTab({ user, onAlbumClick }) {
                   </div>
                 </div>
 
-                {/* Right: action — wishlist if NOT owned + streaming source */}
-                {!it.in_collection && it.kind !== 'vinyl' && !it.watched && (
-                  <button onClick={e => { e.stopPropagation(); wishlist(it, key); }}
-                    disabled={busy}
-                    aria-label={t('listening.action.wishlist') || 'Add to watchlist'}
-                    style={{
-                      flexShrink: 0,
-                      background: '#1a3d1a',
-                      border: '1px solid #4ade80',
-                      borderRadius: 8, color: '#4ade80',
-                      cursor: busy ? 'wait' : 'pointer',
-                      fontSize: 11, ...MONO, fontWeight: 600,
-                      padding: '8px 12px',
-                      minHeight: 44, minWidth: 44,
-                      opacity: busy ? 0.5 : 1,
+                {/* Right column — stack: play count (prominent), then action */}
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+                  gap: 6, flexShrink: 0,
+                }}>
+                  {/* Big play count for streaming aggregates — the "what's
+                      best" signal. Color-graded so 50+ pops harder than a
+                      one-time scrobble. */}
+                  {(it.kind === 'lastfm' || it.kind === 'spotify') && (it.play_count || 0) > 0 && (
+                    <span style={{
+                      ...BEBAS,
+                      fontSize:    (it.play_count >= 50) ? 24
+                                 : (it.play_count >= 10) ? 20
+                                 : 16,
+                      color:       (it.play_count >= 50) ? '#f97316'
+                                 : (it.play_count >= 10) ? C.accent
+                                 : C.muted,
+                      lineHeight:  1,
+                      letterSpacing: '0.02em',
                     }}>
-                    ☆+
-                  </button>
-                )}
-                {!it.in_collection && it.watched && (
-                  <span style={{ flexShrink: 0, fontSize: 10, color: '#f5c842', ...MONO,
-                    padding: '6px 10px' }}>
-                    ★ {t('listening.badge.watched') || 'WATCHED'}
-                  </span>
-                )}
+                      {it.play_count}×
+                    </span>
+                  )}
+
+                  {/* Wishlist if NOT owned + streaming source */}
+                  {!it.in_collection && it.kind !== 'vinyl' && !it.watched && (
+                    <button onClick={e => { e.stopPropagation(); wishlist(it, key); }}
+                      disabled={busy}
+                      aria-label={t('listening.action.wishlist') || 'Add to watchlist'}
+                      style={{
+                        background: '#1a3d1a',
+                        border: '1px solid #4ade80',
+                        borderRadius: 8, color: '#4ade80',
+                        cursor: busy ? 'wait' : 'pointer',
+                        fontSize: 11, ...MONO, fontWeight: 600,
+                        padding: '6px 10px',
+                        minHeight: 36, minWidth: 36,
+                        opacity: busy ? 0.5 : 1,
+                      }}>
+                      ☆+
+                    </button>
+                  )}
+                  {!it.in_collection && it.watched && (
+                    <span style={{ fontSize: 10, color: '#f5c842', ...MONO }}>
+                      ★ {t('listening.badge.watched') || 'WATCHED'}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
