@@ -426,17 +426,44 @@ Manage translations) odpowiednio z `pl/` i `de/`. To gwarantuje,
 
 - Plik AAB: `C:/Users/kinga/Documents/GitHub/metal-vault-android/app-release-bundle.aab`
 - Podpisywanie: **Użyj klucza wygenerowanego przez Google** ← zaznacz
-- Nazwa wersji: zostaw domyślną (`1 (1.0.0)`)
+- Nazwa wersji: `1.0.2`
 
-**Informacje o wersji (release notes — max 500 znaków):**
+**Informacje o wersji (release notes — max 500 znaków per locale):**
 
 ```
-Initial release.
-- Discogs sync, barcode scanner, real-time price tracking
-- Vinyl listening tracker, collector persona, market alerts
-- Concert tracker with Ticketmaster integration
-- 3 languages (EN/PL/DE), 3 currencies (USD/EUR/PLN)
-- Try without account — tap "Try without account" on the landing page
+<en-US>
+v1.0.2 — quality + onboarding pass
+- Onboarding rebuilt as 3 steps with a "pick your path" picker
+  (Discogs sync, barcode scan, or browse). Push permission moved
+  to ask-on-first-alert.
+- 7-day free trial (was 14) — matches the listing.
+- Live cache cleanup (no more storage bloat over time).
+- Haptic feedback on add / scan / alert.
+- Locale-aware date formatting.
+- Restore Purchases now works after reinstall.
+</en-US>
+<pl-PL>
+v1.0.2 — jakość + nowe wprowadzenie
+- Wprowadzenie przebudowane do 3 ekranów z wyborem ścieżki
+  (sync Discogs, skan kodu, lub przeglądanie). Pytanie o
+  powiadomienia push przeniesione do momentu pierwszego alertu.
+- 7-dniowy okres próbny (było 14) — zgodne z opisem w sklepie.
+- Sprzątanie lokalnego cache (kolekcja nie spuchnie po miesiącach).
+- Wibracja przy dodawaniu / skanowaniu / alercie.
+- Daty formatowane wg języka aplikacji.
+- "Przywróć zakupy" działa poprawnie po reinstalu.
+</pl-PL>
+<de-DE>
+v1.0.2 — Qualität + neues Onboarding
+- Onboarding zu 3 Schritten umgebaut mit "wähle deinen Weg"
+  (Discogs-Sync, Barcode-Scan, oder Stöbern). Push-Berechtigung
+  wird jetzt erst beim ersten Preisalarm abgefragt.
+- 7-Tage-Testversion (statt 14) — passt zur Store-Beschreibung.
+- Lokaler Cache-Aufräumen (kein Speicher-Aufblähen mehr).
+- Haptisches Feedback beim Hinzufügen / Scannen / Alarm.
+- Datumsformat folgt der App-Sprache.
+- "Käufe wiederherstellen" funktioniert nach Reinstall.
+</de-DE>
 ```
 
 ### Po uploadzie — pobierz fingerprint'y
