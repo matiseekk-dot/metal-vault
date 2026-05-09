@@ -44,32 +44,43 @@ export default function VariantTracker({ album, onWatchToggle, isWatched }) {
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
-    if (!album?.id) return;
+    if (!album) return;
     let cancelled = false;
     setLoading(true); setError(null); setData(null); setShowAll(false);
     (async () => {
       try {
-        // album.id might be a release id (Discogs) or a slug. /api/variants
-        // accepts either via release_id param.
-        const param = /^\d+$/.test(String(album.id))
-          ? 'release_id=' + album.id
-          : 'master_id=' + (album.master_id || '');
-        if (!param.endsWith('=')) {
-          const r = await fetch('/api/variants?' + param);
-          const d = await r.json();
-          if (cancelled) return;
-          if (!r.ok) {
-            setError(d.error || 'Variants unavailable');
-          } else {
-            setData(d);
-            track('variants_viewed', {
-              master_id: d.master_id,
-              total:     d.total,
-              owned:     d.owned_count,
-            });
-          }
+        // Resolve the Discogs reference. Two callsites:
+        //   1. Feed → album.id IS the Discogs release id (numeric).
+        //   2. Collection → album.id is a Supabase UUID (string).
+        //      The Discogs reference lives on album.discogs_id.
+        // Master_id is also acceptable (skips one Discogs roundtrip)
+        // and the cron sets it on collection rows.
+        const discogsRelease =
+          (album.discogs_id && /^\d+$/.test(String(album.discogs_id))) ? album.discogs_id
+          : (/^\d+$/.test(String(album.id)) ? album.id : null);
+        const masterId = album.master_id && /^\d+$/.test(String(album.master_id)) ? album.master_id : null;
+
+        if (!discogsRelease && !masterId) {
+          // Manually-added record without a Discogs link — no master to query.
+          setError('no_discogs');
+          if (!cancelled) setLoading(false);
+          return;
+        }
+        const param = masterId
+          ? 'master_id=' + masterId
+          : 'release_id=' + discogsRelease;
+        const r = await fetch('/api/variants?' + param);
+        const d = await r.json();
+        if (cancelled) return;
+        if (!r.ok) {
+          setError(d.error || 'Variants unavailable');
         } else {
-          setError('No Discogs reference');
+          setData(d);
+          track('variants_viewed', {
+            master_id: d.master_id,
+            total:     d.total,
+            owned:     d.owned_count,
+          });
         }
       } catch (e) {
         if (!cancelled) setError(e.message);
@@ -77,7 +88,7 @@ export default function VariantTracker({ album, onWatchToggle, isWatched }) {
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [album?.id]);
+  }, [album?.id, album?.discogs_id, album?.master_id]);
 
   if (loading) {
     return (

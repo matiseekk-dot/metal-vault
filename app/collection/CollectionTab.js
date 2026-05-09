@@ -1385,6 +1385,33 @@ export function CollectionTab({
                     {/* ── Expanded detail ── */}
                     {isExpanded && (
                       <div style={{ borderTop: '1px solid ' + C.border, padding: '10px 12px' }}>
+                        {/* Open full album modal (variants + photos + sell + market).
+                            Without this CTA, collection users never reach the
+                            VariantTracker / ForSaleToggle / PhotoUploader because
+                            the row stays inline-expanded instead of opening the
+                            sheet. discogs_id required — manually-added items
+                            without it have nothing extra to show. */}
+                        {item.discogs_id && onAlbumClick && (
+                          <button
+                            onClick={() => onAlbumClick({
+                              ...item,
+                              // VinylModal uses album.id; for Collection items
+                              // pass the Discogs release id so VariantTracker
+                              // resolves the master.
+                              id:           item.discogs_id,
+                              releaseDate:  item.year ? String(item.year) : null,
+                            })}
+                            style={{
+                              width: '100%', marginBottom: 10, padding: '10px',
+                              background: 'linear-gradient(135deg,#1a0a0a,#2a0a0a)',
+                              border: '1px solid ' + C.accent + '66',
+                              borderRadius: 8, color: C.accent, cursor: 'pointer',
+                              ...MONO, fontSize: 11, letterSpacing: '0.06em',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                            }}>
+                            🔍 {t('collection.openAllVariants') || 'View all variants + market'}
+                          </button>
+                        )}
                         {/* Price + gain */}
                         {(paid > 0 || now > 0) && (
                           <div style={{ display: 'flex', gap: 12, marginBottom: 10, padding: '8px 10px', background: C.bg3, borderRadius: 8 }}>

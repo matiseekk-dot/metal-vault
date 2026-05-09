@@ -9,6 +9,7 @@ import { useT, useLocale, setLocale, SUPPORTED_LOCALES } from '@/lib/i18n';
 import { useCurrency, setCurrency, SUPPORTED_CURRENCIES } from '@/lib/currency';
 import { FREE_TRIAL_DAYS } from '@/lib/pricing';
 import SpotifySyncCard from '@/app/components/SpotifySyncCard';
+import LastfmSyncCard  from '@/app/components/LastfmSyncCard';
 
 
 // ── ConcertLocationCard ──
@@ -776,6 +777,13 @@ export default function ProfileTab({
           recently-played and matches against the collection. Hidden
           if SPOTIFY_CLIENT_ID env var unset (component server-checks). */}
       <SpotifySyncCard/>
+
+      {/* Last.fm auto-listen sync — same shape as Spotify but covers a
+          much wider service surface via free third-party scrobblers
+          (Apple Music, Tidal, YT Music, Plex, iTunes all bridge to
+          Last.fm). Cheaper to maintain than 5 separate integrations.
+          Requires LASTFM_API_KEY + LASTFM_SECRET env vars. */}
+      <LastfmSyncCard/>
 
       {/* Language picker — every locale defined in lib/i18n.js shows up */}
       <LanguagePicker/>
