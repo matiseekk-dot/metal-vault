@@ -113,7 +113,34 @@ export async function POST() {
     if (!index.has(k)) index.set(k, c.id);
   }
 
-  // 3) Build per-album rows. play_count = aggregate from Last.fm.
+  // 3) Dedupe by (artist_norm, album_norm) — Last.fm sometimes returns
+  // the same album under multiple MBIDs (live vs studio metadata, locale
+  // variants, capitalisation drift), or duplicates across pagination
+  // pages when the user has < 1000 unique albums. Without this collapse
+  // we'd insert N near-identical rows per album, each with playcount=1
+  // — and the user sees "Ulver · Flowers Of Evil · 1 play" four times
+  // in the feed.
+  const merged = new Map();   // key = artistNorm::albumNorm
+  for (const a of albums) {
+    const artistNorm = normaliseArtist(a.artist);
+    const albumNorm  = normaliseAlbumTitle(a.album);
+    if (!artistNorm || !albumNorm) continue;
+    const key = artistNorm + '::' + albumNorm;
+    const existing = merged.get(key);
+    if (existing) {
+      existing.playcount += Number(a.playcount) || 0;
+    } else {
+      merged.set(key, {
+        artist:     a.artist,
+        album:      a.album,
+        artistNorm,
+        albumNorm,
+        playcount:  Number(a.playcount) || 0,
+      });
+    }
+  }
+
+  // Build per-album rows. play_count = aggregate from Last.fm (post-dedupe).
   // played_at is synthetic (now() − i*1s) so the unique index
   // (user, source, played_at, artist_norm, album_norm) doesn't collide.
   // Listen UI's FormatPlayedAt swaps timestamp for "{N} plays" when
@@ -123,13 +150,9 @@ export async function POST() {
   let unmatched = 0;
   const errors  = [];
   const rows    = [];
-
-  albums.forEach((a, i) => {
-    const artistNorm = normaliseArtist(a.artist);
-    const albumNorm  = normaliseAlbumTitle(a.album);
-    if (!artistNorm || !albumNorm) return;
-
-    const collectionItemId = index.get(artistNorm + '::' + albumNorm) || null;
+  let i = 0;
+  for (const a of merged.values()) {
+    const collectionItemId = index.get(a.artistNorm + '::' + a.albumNorm) || null;
     if (collectionItemId) matched++;
     else                  unmatched++;
 
@@ -138,13 +161,14 @@ export async function POST() {
       source:                'lastfm',
       artist:                a.artist,
       album:                 a.album,
-      artist_norm:           artistNorm,
-      album_norm:            albumNorm,
+      artist_norm:           a.artistNorm,
+      album_norm:            a.albumNorm,
       played_at:             new Date(nowMs - i * 1000).toISOString(),
       matched_collection_id: collectionItemId,
       play_count:            a.playcount,
     });
-  });
+    i++;
+  }
 
   // 4) Bulk insert in chunks. 30k rows × ~250 bytes = ~7.5 MB total —
   //    easily fits chunked at 500/insert.

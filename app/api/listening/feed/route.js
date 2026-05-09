@@ -137,13 +137,19 @@ export async function GET(request) {
   // Only when filter allows lastfm/streaming. Each row = one album
   // with play_count = N. matched_collection_id tells us if user owns it.
   if (source === 'all' || source === 'lastfm' || source === 'streaming') {
+    // Pull a wider window than the requested limit so the dedupe pass
+    // below has enough source rows to merge — old syncs (pre-dedup fix)
+    // may have inserted the same album 3-5x, so without padding we'd
+    // return fewer unique albums than the user asked for.
+    const RAW_LIMIT = Math.max(limit * 5, 500);
+
     let r2 = await sb
       .from('streaming_history')
       .select('artist, album, artist_norm, album_norm, played_at, source, matched_collection_id, play_count')
       .eq('user_id', user.id)
       .eq('source', 'lastfm')
       .order('play_count', { ascending: false })
-      .limit(limit);
+      .limit(RAW_LIMIT);
     if (r2.error && /column.*play_count|does not exist/i.test(r2.error.message || '')) {
       r2 = await sb
         .from('streaming_history')
@@ -151,14 +157,41 @@ export async function GET(request) {
         .eq('user_id', user.id)
         .eq('source', 'lastfm')
         .order('played_at', { ascending: false })
-        .limit(limit);
+        .limit(RAW_LIMIT);
     }
 
     if (r2.error && /relation.*streaming_history|does not exist/i.test(r2.error.message || '')) {
       // Migration 034 not applied yet — silent skip, vinyl items still flow.
     } else if (r2.data) {
+      // Dedupe by (artist_norm, album_norm) — old sync runs (pre-dedup
+      // fix) may have inserted the same album multiple times. We sum
+      // their play_counts and keep the row with a matched_collection_id
+      // (so the OWNED badge survives the merge).
+      const lastfmBuckets = new Map();
+      for (const row of r2.data) {
+        const key = (row.artist_norm || normaliseArtist(row.artist)) + '::' +
+                    (row.album_norm  || normaliseAlbumTitle(row.album));
+        const existing = lastfmBuckets.get(key);
+        if (existing) {
+          existing.play_count += Number(row.play_count) || 1;
+          existing.matched_collection_id = existing.matched_collection_id || row.matched_collection_id;
+          if (row.played_at > existing.played_at) existing.played_at = row.played_at;
+        } else {
+          lastfmBuckets.set(key, {
+            artist:                row.artist,
+            album:                 row.album,
+            artist_norm:           row.artist_norm,
+            album_norm:            row.album_norm,
+            played_at:             row.played_at,
+            matched_collection_id: row.matched_collection_id,
+            play_count:            Number(row.play_count) || 1,
+          });
+        }
+      }
+      const deduped = [...lastfmBuckets.values()];
+
       // Resolve cover for matched ones in one batch.
-      const matchedIds = r2.data
+      const matchedIds = deduped
         .map(r => r.matched_collection_id)
         .filter(Boolean);
       const coversByCollectionId = new Map();
@@ -178,7 +211,7 @@ export async function GET(request) {
         (watchlist || []).map(w => normaliseArtist(w.artist) + '::' + normaliseAlbumTitle(w.album))
       );
 
-      for (const row of r2.data) {
+      for (const row of deduped) {
         items.push({
           kind:          'lastfm',
           played_at:     row.played_at,
@@ -190,7 +223,7 @@ export async function GET(request) {
           in_collection: !!row.matched_collection_id,
           collection_id: row.matched_collection_id || null,
           play_count:    Number(row.play_count) || 1,
-          watched:       watchKeys.has(row.artist_norm + '::' + row.album_norm),
+          watched:       watchKeys.has((row.artist_norm || normaliseArtist(row.artist)) + '::' + (row.album_norm || normaliseAlbumTitle(row.album))),
         });
       }
     }
