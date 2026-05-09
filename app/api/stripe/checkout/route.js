@@ -13,10 +13,7 @@ export async function POST(request) {
 
   const { plan = 'monthly' } = await request.json().catch(() => ({}));
 
-  // Whitelist plan values — defense in depth.
-  // Collector tier is disabled at launch (lib/pricing.js TIERS.collector.available=false)
-  // but we keep mapping here for future enablement. UI doesn't expose collector_*
-  // currently, so any request with that plan is suspect.
+  // Whitelist plan values — defense in depth. Single Pro tier at launch.
   const ALLOWED_PLANS = ['monthly', 'yearly'];
   if (!ALLOWED_PLANS.includes(plan)) {
     return NextResponse.json({ error: 'Invalid plan: must be monthly or yearly' }, { status: 400 });
@@ -24,12 +21,9 @@ export async function POST(request) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
 
-  // Tier mapping — Pro (standard) vs Collector (arbitrage + AI + unlimited everything)
   const PRICE_IDS = {
-    monthly:            process.env.STRIPE_PRICE_MONTHLY,
-    yearly:             process.env.STRIPE_PRICE_YEARLY,
-    collector_monthly:  process.env.STRIPE_PRICE_COLLECTOR_MONTHLY,
-    collector_yearly:   process.env.STRIPE_PRICE_COLLECTOR_YEARLY,
+    monthly: process.env.STRIPE_PRICE_MONTHLY,
+    yearly:  process.env.STRIPE_PRICE_YEARLY,
   };
   const priceId = PRICE_IDS[plan] || PRICE_IDS.monthly;
 

@@ -1,10 +1,27 @@
 'use client';
+// ── UpgradeModal — Pro paywall ────────────────────────────────────
+//
+// Single-tier (Pro) paywall. The Collector tier was scoped earlier as
+// a power-user upsell (market intelligence + AI recommendations + bulk
+// ops) but never wired through Stripe — TIERS.collector.available is
+// false, the env vars STRIPE_PRICE_COLLECTOR_* are unset, and the
+// /api/stripe/checkout handler returns 503 "Stripe price IDs not
+// configured" for any collector_* plan. Showing a tier toggle that
+// dead-ends in an error is worse than not offering it.
+//
+// If/when Collector ships:
+//   1. Set STRIPE_PRICE_COLLECTOR_MONTHLY/YEARLY in Vercel env
+//   2. Flip TIERS.collector.available = true in lib/pricing.js
+//   3. Re-introduce the tier toggle + COLLECTOR_FEATURES list here
+//      (preserved in git history at 73dd38a~1).
+
 import { useState } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
-import { TIERS } from '@/lib/stripe';
+import { TIERS, FREE_TRIAL_DAYS } from '@/lib/pricing';
 import { useBackButton } from '@/lib/hooks/useBackButton';
+import { trackPaywallCTA } from '@/lib/analytics';
 
 const FEATURES = [
   { iconName: 'pkg',             free: 'Unlimited',      pro: 'Unlimited'           },
@@ -19,27 +36,16 @@ const FEATURES = [
   { iconName: 'bellOn',          free: 'Weekly digest',  pro: 'Daily + pre-orders'  },
 ];
 
-// Feature matrix — tier unlocks
-const COLLECTOR_FEATURES = [
-  { iconName: 'marketIntel', label: 'Market Intelligence (eBay + Discogs arbitrage)' },
-  { iconName: 'sparkles',    label: 'AI recommendations & similar bands' },
-  { iconName: 'priority',    label: 'Priority support' },
-  { iconName: 'bulkOps',     label: 'Bulk operations' },
-  { iconName: 'earlyAccess', label: 'Early access to new features' },
-];
-
 export default function UpgradeModal({ onClose, onCheckout, reason }) {
   const t = useT();
-  const [tier,    setTier]    = useState('pro');           // 'pro' | 'collector'
   const [plan,    setPlan]    = useState('monthly');
   const [loading, setLoading] = useState(false);
   useBackButton(true, onClose);
 
   const handleUpgrade = async () => {
     setLoading(true);
-    // Collector plans use prefix 'collector_' for Stripe price lookup
-    const planKey = tier === 'collector' ? ('collector_' + plan) : plan;
-    await onCheckout(planKey);
+    trackPaywallCTA(reason, plan);
+    await onCheckout(plan);
     setLoading(false);
   };
 
@@ -82,33 +88,8 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
             METAL VAULT PRO
           </div>
           <div style={{ fontSize: 12, color: C.muted, ...MONO, marginTop: 6, marginBottom: 20 }}>
-            {t('paywall.trial')}
+            {t('paywall.trial', { n: FREE_TRIAL_DAYS })}
           </div>
-        </div>
-
-        {/* Tier toggle — Pro vs Collector */}
-        <div style={{ display: 'flex', margin: '0 20px 10px', background: C.bg3, borderRadius: 12, padding: 4, border: '1px solid ' + C.border }}>
-          {[
-            { id: 'pro',       label: 'PRO',       sub: 'Essentials' },
-            { id: 'collector', label: 'COLLECTOR', sub: 'Power user' },
-          ].map(tr => (
-            <button key={tr.id} onClick={() => setTier(tr.id)} style={{
-              flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', cursor: 'pointer',
-              background: tier === tr.id
-                ? (tr.id === 'collector' ? 'linear-gradient(135deg,#f5c842,#b8860b)' : C.accent)
-                : 'transparent',
-              transition: 'all 0.2s',
-            }}>
-              <div style={{ ...BEBAS, fontSize: 14, letterSpacing: '0.08em',
-                color: tier === tr.id ? (tr.id === 'collector' ? '#1a0800' : '#fff') : C.dim }}>
-                {tr.label}
-              </div>
-              <div style={{ fontSize: 9, ...MONO,
-                color: tier === tr.id ? (tr.id === 'collector' ? '#3a2000' : '#ffffffaa') : C.muted }}>
-                {tr.sub}
-              </div>
-            </button>
-          ))}
         </div>
 
         {/* Plan toggle (monthly vs yearly) */}
@@ -116,9 +97,9 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
           borderRadius: 12, padding: 4, border: '1px solid ' + C.border }}>
           {[
             { id: 'monthly', label: t('paywall.monthly'),
-              price: '$' + TIERS[tier === 'collector' ? 'collector' : 'pro'].monthly },
+              price: '$' + TIERS.pro.monthly },
             { id: 'yearly',  label: t('paywall.yearly'),
-              price: '$' + TIERS[tier === 'collector' ? 'collector' : 'pro'].yearly,
+              price: '$' + TIERS.pro.yearly,
               badge: t('paywall.yearlyBadge') },
           ].map(p => (
             <button key={p.id} onClick={() => setPlan(p.id)} style={{
@@ -166,35 +147,16 @@ export default function UpgradeModal({ onClose, onCheckout, reason }) {
           ))}
         </div>
 
-        {/* Collector extras — shown only when Collector tier selected */}
-        {tier === 'collector' && (
-          <div style={{ margin: '0 20px 20px', background: 'linear-gradient(135deg, #1a1000, #0a0700)',
-            border: '1px solid #b8860b', borderRadius: 12, padding: 14 }}>
-            <div style={{ ...BEBAS, fontSize: 14, color: '#f5c842', letterSpacing: '0.1em', marginBottom: 10 }}>
-              COLLECTOR EXTRAS
-            </div>
-            {COLLECTOR_FEATURES.map((f, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
-                <Icon name={f.iconName} size={18} color="#f5c842"/>
-                <span style={{ fontSize: 11, color: '#f5c842', ...MONO }}>{f.label}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* CTA */}
         <div style={{ padding: '0 20px 12px' }}>
           <button onClick={handleUpgrade} disabled={loading} style={{
             width: '100%', padding: '16px',
-            background: loading ? C.bg3
-              : (tier === 'collector'
-                ? 'linear-gradient(135deg, #f5c842, #b8860b)'
-                : 'linear-gradient(135deg, #dc2626, #991b1b)'),
+            background: loading ? C.bg3 : 'linear-gradient(135deg, #dc2626, #991b1b)',
             border: 'none', borderRadius: 14,
-            color: tier === 'collector' ? '#1a0800' : '#fff',
+            color: '#fff',
             cursor: loading ? 'default' : 'pointer',
             ...BEBAS, fontSize: 22, letterSpacing: '0.08em',
-            boxShadow: loading ? 'none' : (tier === 'collector' ? '0 4px 24px #f5c84244' : '0 4px 24px #dc262644'),
+            boxShadow: loading ? 'none' : '0 4px 24px #dc262644',
             transition: 'all 0.2s',
           }}>
             {loading ? t('paywall.cta.loading') : t('paywall.cta')}

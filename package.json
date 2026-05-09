@@ -8,22 +8,23 @@
     "start": "next start",
     "lint": "next lint",
     "analyze": "ANALYZE=true node scripts/stamp-sw.mjs && ANALYZE=true next build",
-    "test:e2e":     "playwright test",
-    "test:e2e:ci":  "CI=1 playwright test --project=chromium-desktop"
+    "test:e2e": "playwright test",
+    "test:e2e:ci": "CI=1 playwright test --project=chromium-desktop"
   },
   "dependencies": {
-    "next": "15.5.15",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "@supabase/supabase-js": "2.105.1",
+    "@sentry/nextjs": "10.51.0",
     "@supabase/ssr": "0.5.2",
+    "@supabase/supabase-js": "2.105.1",
     "@zxing/browser": "0.1.5",
-    "web-push": "3.6.7",
-    "stripe": "14.25.0",
     "jspdf": "3.0.4",
     "jspdf-autotable": "5.0.7",
-    "@sentry/nextjs": "10.51.0",
-    "lucide-react": "0.468.0"
+    "lucide-react": "0.468.0",
+    "next": "15.5.15",
+    "posthog-js": "1.372.10",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "stripe": "14.25.0",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "eslint": "8.57.1",

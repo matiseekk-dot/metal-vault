@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
 import Icon from '@/app/components/Icon';
 import { useBackButton } from '@/lib/hooks/useBackButton';
+import { trackOnboardingStep } from '@/lib/analytics';
 
 // Steps are built inside component so translations react to locale changes
 
@@ -55,7 +56,13 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
   const current = steps[step];
   const isLast  = step === steps.length - 1;
 
+  // Fire 'view' event whenever the active step changes — gives us the
+  // funnel "% of users who saw step N at all". Skip vs Next attribution
+  // happens at the click handlers below.
+  useEffect(() => { trackOnboardingStep(step, 'view'); }, [step]);
+
   const next = () => {
+    trackOnboardingStep(step, isLast ? 'complete' : 'next');
     if (isLast) { onDone(); return; }
     setStep(s => s + 1);
   };
@@ -215,7 +222,7 @@ export default function OnboardingScreen({ onDone, onConnectDiscogs, isConnected
 
       {/* Skip button for skippable steps OR skip-all from first */}
       {(step === 0 || current.skippable) && (
-        <button onClick={onDone} style={{
+        <button onClick={() => { trackOnboardingStep(step, 'skip'); onDone(); }} style={{
           position: 'absolute', bottom: 40,
           background: 'none', border: 'none',
           color: C.dim, ...MONO, fontSize: 11,

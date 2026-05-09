@@ -104,7 +104,7 @@ Core features (free):
 - Concert + release notifications for followed artists
 - Persona widget showing collection makeup (decade, genre, format)
 
-Pro features ($4.99/mo, $39.99/yr, 14-day trial):
+Pro features ($4.99/mo, $39.99/yr, 7-day trial):
 - Insurance PDF reports — full inventory with photos and values for your policy
 - Photo upload for condition documentation (front/back/inside)
 - Smart alerts — repress detection, sold-out warnings, price spikes

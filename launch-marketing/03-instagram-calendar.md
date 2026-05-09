@@ -26,7 +26,7 @@ Instagram is the **lowest-conversion** of the three channels (Reddit/FB/IG) for 
 - **Type**: Carousel post (3 slides)
 - **Slide 1**: App logo + "Now live on Play Store"
 - **Slide 2**: 3 key features as bullets (insurance / alerts / photos)
-- **Slide 3**: "$4.99/mo · 14-day free trial" + CTA
+- **Slide 3**: "$4.99/mo · 7-day free trial" + CTA
 - **Caption**:
 ```
 After 6 months of building, Metal Vault is live 🤘

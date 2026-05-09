@@ -108,8 +108,9 @@ export async function POST(request) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 
-  // Mark event processed — insert AFTER switch handler succeeds so retries work on failure
-  await admin.from('stripe_events').insert({ id: event.id, type: event.type }).select().maybeSingle();
-
+  // Idempotency was already locked by the INSERT at the top of the
+  // handler (race-safe via primary-key unique violation). The previous
+  // version had a second INSERT here, which always returned a duplicate
+  // (23505) on the second pass — confusing and a wasted write. Removed.
   return NextResponse.json({ received: true });
 }

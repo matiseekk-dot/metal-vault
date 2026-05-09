@@ -18,6 +18,12 @@ import DemoBanner from '@/app/components/DemoBanner';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm } from '@/app/components/Toast';
 import { useT } from '@/lib/i18n';
+import {
+  identify as analyticsIdentify,
+  reset    as analyticsReset,
+  track,
+  trackPurchaseCompleted,
+} from '@/lib/analytics';
 import VaultTab from '@/app/vault/VaultTab';
 import WhensOnTab from '@/app/whens-on/WhensOnTab';
 import ProfileTab from '@/app/profile/ProfileTab';
@@ -145,11 +151,15 @@ export default function MetalVault() {
       if (!nextUserId) {
         col.resetUserData();
         lastUserIdRef.current = null;
+        analyticsReset();
         return;
       }
 
       // Initialize payments SDK once user is known. No-op for non-TWA browsers.
       initPayments(nextUserId).catch(() => {});
+
+      // Tie analytics events to this user from now on.
+      analyticsIdentify(nextUserId, { email: session.user.email });
 
       // Skip the heavy data load if it's the same user we already loaded.
       // TOKEN_REFRESHED, USER_UPDATED, and tab-focus re-fires hit this
@@ -197,6 +207,9 @@ export default function MetalVault() {
         setPremium(true);
         window.history.replaceState({}, '', '/');
         setTab('profile');
+        // Track conversion — provider & plan unknown here (Stripe redirected
+        // back without metadata), webhook reconciliation happens server-side.
+        trackPurchaseCompleted(null, 'stripe');
       }
     } catch { setPremium(false); }
   }
@@ -479,6 +492,7 @@ export default function MetalVault() {
   const triggerUpgrade = (reason = '') => {
     setUpgradeReason(reason);
     setShowUpgrade(true);
+    track('paywall_viewed', { reason: reason || 'manual' });
   };
 
   const signOut = async () => {

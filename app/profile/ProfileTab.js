@@ -7,6 +7,7 @@ import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm as mvConfirm } from '@/app/components/Toast';
 import { useT, useLocale, setLocale, SUPPORTED_LOCALES } from '@/lib/i18n';
 import { useCurrency, setCurrency, SUPPORTED_CURRENCIES } from '@/lib/currency';
+import { FREE_TRIAL_DAYS } from '@/lib/pricing';
 
 
 // ── ConcertLocationCard ──
@@ -312,7 +313,7 @@ export default function ProfileTab({
             <div>
               <div style={{ ...BEBAS, fontSize: 18, color: '#f5c842', letterSpacing: '0.08em', lineHeight: 1 }}>⭐ METAL VAULT PRO</div>
               <div style={{ fontSize: 10, color: '#a16207', ...MONO, marginTop: 3 }}>
-                {profile?.subscription_status === 'trialing' ? '14-day free trial active' : 'Active subscription'}
+                {profile?.subscription_status === 'trialing' ? FREE_TRIAL_DAYS + '-day free trial active' : 'Active subscription'}
                 {profile?.subscription_end && (
                   <span> · renews {new Date(profile.subscription_end).toLocaleDateString()}</span>
                 )}
@@ -325,20 +326,31 @@ export default function ProfileTab({
           </div>
         </div>
       )}
-      {/* Restore Purchases — required for Play Store listings to surface this option */}
-      {premium === false && typeof window !== 'undefined' && window.document?.referrer?.startsWith('android-app://') && (
+      {/* Restore Purchases — required by Play Store listings + visible to
+          ALL Play-installed users regardless of premium status (after a
+          reinstall the local `premium` flag is false until restore lands;
+          gating on premium===false hides the button right when the user
+          needs it). Web (Stripe) installs hide the button — Stripe doesn't
+          have a restore concept; the user re-signs and the customer ID
+          maps the subscription back automatically. */}
+      {typeof window !== 'undefined' && window.document?.referrer?.startsWith('android-app://') && (
         <div style={{ marginBottom: 12, textAlign: 'center' }}>
           <button onClick={async () => {
             const result = await import('@/lib/payments').then(m => m.restorePurchases());
-            if (result.success && result.hasPro) {
-              toast.success('Pro restored! Please refresh the app.');
-              window.location.reload();
+            // restorePurchases returns { success, restored } where
+            // `restored` = count of receipts forwarded to RC. >0 means
+            // we found purchases on this device — RC webhook (or the
+            // optimistic profile update inside record-purchase) flips
+            // subscription_status; reload picks up the new state.
+            if (result.success && (result.restored || 0) > 0) {
+              toast.success(t('profile.restorePurchase.success') || 'Pro restored — refreshing…');
+              setTimeout(() => window.location.reload(), 800);
             } else if (result.success) {
-              toast('No previous Pro subscription found on this account.');
+              toast(t('profile.restorePurchase.none') || 'No previous Pro subscription found on this account.');
             } else {
-              toast.error(result.error || 'Restore failed');
+              toast.error(result.error || (t('profile.restorePurchase.failed') || 'Restore failed'));
             }
-          }} style={{ background: 'transparent', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '6px 14px', fontSize: 10, ...MONO, cursor: 'pointer' }}>
+          }} style={{ background: 'transparent', border: '1px solid ' + C.border, borderRadius: 6, color: C.dim, padding: '8px 16px', fontSize: 11, ...MONO, cursor: 'pointer' }}>
             ↻ {t('profile.restorePurchase')}
           </button>
         </div>

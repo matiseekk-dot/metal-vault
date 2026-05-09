@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { PRO_MONTHLY_USD, PRO_YEARLY_USD, FREE_TRIAL_DAYS, YEARLY_SAVINGS_PCT } from '@/lib/pricing';
 import { useT } from '@/lib/i18n';
+import { trackDemoStarted } from '@/lib/analytics';
 
 const C = { bg:'#0a0a0a',bg2:'#141414',border:'#1e1e1e',accent:'#dc2626',gold:'#f5c842',text:'#f0f0f0',muted:'#888' };
 
@@ -56,6 +57,7 @@ export default function LandingPage() {
                 localStorage.setItem('mv_demo_active', '1');
                 window.dispatchEvent(new CustomEvent('mv:demo-changed'));
               } catch {}
+              trackDemoStarted();
               window.location.href = '/';
             }}
             style={{display:'inline-block',background:'transparent',border:'1px solid '+C.accent,color:C.accent,padding:'14px 28px',borderRadius:12,fontFamily:"var(--font-bebas-neue), sans-serif",fontSize:22,letterSpacing:'0.1em',cursor:'pointer'}}>

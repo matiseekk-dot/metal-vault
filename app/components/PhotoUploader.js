@@ -47,7 +47,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
     e.target.value = '';
 
     if (file.size > MAX_INPUT_MB * 1024 * 1024) {
-      setError(`File too large (max ${MAX_INPUT_MB}MB before compression)`);
+      setError(t('photos.tooLarge', { n: MAX_INPUT_MB }));
       return;
     }
 
@@ -74,7 +74,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
         if (signData.error === 'PHOTO_LIMIT_REACHED' && !premium && onUpgrade) {
           onUpgrade('PHOTO_LIMIT_REACHED');
         }
-        throw new Error(signData.message || signData.error || 'Upload signing failed');
+        throw new Error(signData.message || signData.error || t('photos.errSigningFailed'));
       }
 
       // 3) PUT to Supabase Storage
@@ -83,7 +83,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
         headers: { 'Content-Type': compressed.mime },
         body: blob,
       });
-      if (!uploadRes.ok) throw new Error('Storage upload failed: HTTP ' + uploadRes.status);
+      if (!uploadRes.ok) throw new Error(t('photos.errStorage') + ': HTTP ' + uploadRes.status);
 
       // 4) Confirm — appends photo to collection.user_photos
       const confirmRes = await fetch('/api/photos/confirm', {
@@ -95,7 +95,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
         }),
       });
       const confirmData = await confirmRes.json();
-      if (!confirmRes.ok) throw new Error(confirmData.error || 'Confirm failed');
+      if (!confirmRes.ok) throw new Error(confirmData.error || t('photos.errConfirm'));
 
       // 5) Update local state + parent
       const newPhotos = [...photos, confirmData.photo];
@@ -117,7 +117,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
         body: JSON.stringify({ collection_item_id: collectionId, path }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Delete failed');
+      if (!r.ok) throw new Error(d.error || t('photos.errDelete'));
       const newPhotos = photos.filter(p => p.path !== path);
       setPhotos(newPhotos);
       onPhotosChange?.(newPhotos);
@@ -136,7 +136,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
           letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8,
           display: 'flex', alignItems: 'center', gap: 6 }}>
           <Icon name="camera" size={11} color={C.accent}/>
-          Your photos · PRO
+          {t('photos.headingPro')}
         </div>
         <button
           onClick={() => onUpgrade?.('PHOTO_LIMIT_REACHED')}
@@ -154,7 +154,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
             {t('photos.add').replace(/^[＋+]\s*/, '')}
           </div>
           <div style={{ fontSize: 10, color: C.dim, ...MONO, lineHeight: 1.5, maxWidth: 240 }}>
-            Document sleeve condition, capture numbered variants, embed in insurance reports.
+            {t('photos.proPitch')}
           </div>
           <div style={{
             marginTop: 4, padding: '6px 14px',
@@ -162,7 +162,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
             borderRadius: 6, color: C.accent, fontSize: 10, ...MONO,
             letterSpacing: '0.05em',
           }}>
-            UPGRADE TO PRO →
+            {t('photos.upgradeCta')}
           </div>
         </button>
       </div>
@@ -177,10 +177,10 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <div style={{ fontSize: 10, color: C.accent, ...MONO,
           letterSpacing: '0.2em', textTransform: 'uppercase' }}>
-          Your photos
+          {t('photos.heading')}
         </div>
         <div style={{ fontSize: 9, color: C.dim, ...MONO }}>
-          {photos.length} / {limit}{!premium && ' · Free'}
+          {photos.length} / {limit}{!premium && ' · ' + t('photos.freeBadge')}
         </div>
       </div>
 
@@ -239,7 +239,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
                   borderTopColor: C.accent, borderRadius: '50%',
                   animation: 'mvspin 0.8s linear infinite',
                 }}/>
-                <span>Uploading…</span>
+                <span>{t('photos.uploadShort')}</span>
               </>
             ) : (
               <>
@@ -261,7 +261,7 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
             fontSize: 11, ...MONO, width: '100%',
           }}
         >
-          Upgrade to Pro for {PRO_LIMIT - photos.length} more slots →
+          {t('photos.upgradeMore', { n: PRO_LIMIT - photos.length })}
         </button>
       )}
 
