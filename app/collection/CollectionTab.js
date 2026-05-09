@@ -890,6 +890,23 @@ export function CollectionTab({
       // are a different signal (user changing their mind about target).
       if (!editing) trackAlertCreated(alertType);
       haptic.success();
+      // Permission-on-context: now that the user just declared they
+      // care about a price, this is the correct moment to ask for
+      // push permission. Fire a global event app/page.js listens
+      // for; we don't await — letting the success toast land first
+      // makes the prompt feel less like a hijack. Self-throttled to
+      // once per device (mv_push_prompt_seen).
+      if (!editing && typeof window !== 'undefined') {
+        try {
+          if (localStorage.getItem('mv_push_prompt_seen') !== '1') {
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('mv:request-push', {
+                detail: { reason: 'first_alert' },
+              }));
+            }, 600);
+          }
+        } catch {}
+      }
       setShowAlertForm(null); setTargetPrice(''); setAlertType('PRICE_DROP');
       setEditingAlertId(null);
     } catch (e) {

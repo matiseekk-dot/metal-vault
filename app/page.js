@@ -242,6 +242,39 @@ export default function MetalVault() {
     return () => window.removeEventListener('mv:open-scanner', handler);
   }, []);
 
+  // Permission-on-context — push notifications.
+  //
+  // Onboarding no longer asks for push (was rejected ~30% of the time
+  // upfront and once denied the only fix is teaching the user to flip
+  // browser site settings). Instead, we wait until the user does
+  // something that's only useful with push — currently: creates their
+  // first price alert. CollectionTab fires `mv:request-push` after
+  // success, we ask once via a friendly confirm dialog, and we record
+  // `mv_push_prompt_seen` regardless of answer so we never re-prompt
+  // for the same flow.
+  //
+  // Fired-once guard is on the dispatch side too, but a duplicate
+  // listener tick is cheap and the LS flag set here covers any other
+  // future trigger we wire (e.g. follow-artist).
+  useEffect(() => {
+    const handler = async () => {
+      if (pushEnabled) return;
+      try {
+        if (localStorage.getItem('mv_push_prompt_seen') === '1') return;
+        localStorage.setItem('mv_push_prompt_seen', '1');
+      } catch {}
+      const ok = await confirm(
+        t('push.contextPrompt.title') ||
+        'Want a push notification when this alert fires? You can always toggle this in Profile.',
+        { confirmLabel: t('push.contextPrompt.enable') || 'Enable', cancelLabel: t('push.contextPrompt.later') || 'Later' }
+      );
+      if (ok) await togglePush();
+    };
+    window.addEventListener('mv:request-push', handler);
+    return () => window.removeEventListener('mv:request-push', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pushEnabled]);
+
   // Daily streak — ping server once per session (idempotent), display current count
   useEffect(() => {
     if (!user) { setStreak(0); return; }
@@ -805,9 +838,6 @@ export default function MetalVault() {
             await connectDiscogs();
           }}
           isConnected={discogsConnected}
-          onTogglePush={togglePush}
-          pushEnabled={pushEnabled}
-          pushLoading={pushLoading}
         />
       )}
 
