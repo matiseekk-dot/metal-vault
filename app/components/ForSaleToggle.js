@@ -46,7 +46,7 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
       <div style={{ padding: '12px 16px' }}>
         <div style={{ fontSize: 10, color: C.accent, ...MONO,
           letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8 }}>
-          {t('forSale.heading.pro') || 'List for sale · PRO'}
+          {t('forSale.heading.pro')}
         </div>
         <button
           onClick={() => { trackPaywallView('FOR_SALE'); onUpgrade?.('FOR_SALE'); }}
@@ -58,7 +58,7 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
             color: C.text, ...MONO, fontSize: 12,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
           }}>
-          <span style={{ flex: 1, textAlign: 'left' }}>{t('forSale.proPitch') || 'Mark records for sale + push to Discogs Marketplace.'}</span>
+          <span style={{ flex: 1, textAlign: 'left' }}>{t('forSale.proPitch')}</span>
           <span style={{ color: C.accent, ...BEBAS, letterSpacing: '0.06em' }}>UPGRADE →</span>
         </button>
       </div>
@@ -66,9 +66,13 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
   }
 
   const save = async () => {
-    const p = Number(price);
+    // Accept both comma and dot decimals (PL/DE users type "11,03",
+    // US users type "11.03"). Number() doesn't parse comma, parseFloat
+    // stops at the comma — easier to normalise upfront.
+    const normalised = String(price).replace(/\s/g, '').replace(',', '.');
+    const p = Number(normalised);
     if (!Number.isFinite(p) || p <= 0) {
-      toast.error(t('forSale.invalidPrice') || 'Enter a valid asking price');
+      toast.error(t('forSale.invalidPrice'));
       return;
     }
     setBusy(true);
@@ -85,7 +89,7 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Save failed');
       haptic.success();
-      toast.success(t('forSale.listed') || 'Listed for sale ✓');
+      toast.success(t('forSale.listed'));
       onUpdated?.(d.item);
       setEditing(false);
     } catch (e) {
@@ -95,8 +99,8 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
   };
 
   const remove = async () => {
-    const ok = await mvConfirm(t('forSale.removeConfirm') || 'Remove this record from sale?', {
-      confirmLabel: t('common.remove') || 'Remove',
+    const ok = await mvConfirm(t('forSale.removeConfirm'), {
+      confirmLabel: t('common.remove'),
     });
     if (!ok) return;
     setBusy(true);
@@ -113,7 +117,7 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Remove failed');
       haptic.tap();
-      toast.success(t('forSale.removed') || 'Removed from sale');
+      toast.success(t('forSale.removed'));
       onUpdated?.(d.item);
     } catch (e) {
       toast.error(e.message);
@@ -123,7 +127,7 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
 
   const openDiscogsListing = () => {
     if (!item.discogs_id) {
-      toast.error(t('forSale.noDiscogs') || 'This record has no Discogs link — list it manually on discogs.com');
+      toast.error(t('forSale.noDiscogs'));
       return;
     }
     // Discogs "list for sale" deep-link. Pre-fills the release ID and
@@ -141,12 +145,12 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
           letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8,
           display: 'flex', alignItems: 'center', gap: 6 }}>
           <Icon name="tag" size={11} color="#4ade80"/>
-          {t('forSale.headingActive') || 'Listed for sale'}
+          {t('forSale.headingActive')}
         </div>
         <div style={{ background: '#0a1a0a', border: '1px solid #1a3d1a', borderRadius: 10, padding: '12px 14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: item.for_sale_note ? 8 : 0 }}>
             <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.1em' }}>
-              {t('forSale.askingPrice') || 'Asking'}
+              {t('forSale.askingPrice')}
             </div>
             <div style={{ ...BEBAS, fontSize: 22, color: '#4ade80', lineHeight: 1 }}>
               ${Number(item.asking_price).toFixed(2)}
@@ -169,7 +173,7 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
                 fontSize: 11, ...MONO,
                 opacity: busy ? 0.6 : 1,
               }}>
-              ↗ {t('forSale.openDiscogs') || 'List on Discogs'}
+              ↗ {t('forSale.openDiscogs')}
             </button>
             <button onClick={() => setEditing(true)} disabled={busy}
               style={{
@@ -204,16 +208,22 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
         letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8,
         display: 'flex', alignItems: 'center', gap: 6 }}>
         <Icon name="tag" size={11} color={C.accent}/>
-        {editing ? (t('forSale.editTitle') || 'Edit listing') : (t('forSale.heading') || 'List for sale')}
+        {editing ? t('forSale.editTitle') : t('forSale.heading')}
       </div>
       <div style={{ background: C.bg3, border: '1px solid ' + C.border, borderRadius: 10, padding: '12px 14px' }}>
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 4 }}>
-            {t('forSale.askingPrice') || 'Asking price (USD)'}
+            {t('forSale.askingPrice')}
           </div>
           <input
-            type="number" inputMode="decimal" step="0.01" min="0"
-            value={price} onChange={e => setPrice(e.target.value)}
+            // text + inputmode=decimal so iOS / Android both show
+            // numeric keypad WITH a decimal separator key. type=number
+            // strips the comma in PL keyboard layouts before our handler
+            // sees it ("11,03" → "11" silently), so we use text + a
+            // permissive pattern instead.
+            type="text" inputMode="decimal" pattern="[0-9.,]*"
+            value={price}
+            onChange={e => setPrice(e.target.value.replace(/[^0-9.,]/g, ''))}
             placeholder={item?.median_price ? `Median ~$${Number(item.median_price).toFixed(0)}` : '0.00'}
             style={{
               width: '100%', background: C.bg, border: '1px solid ' + C.border,
@@ -224,11 +234,11 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
         </div>
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 4 }}>
-            {t('forSale.note') || 'Note (optional)'}
+            {t('forSale.note')}
           </div>
           <textarea
             value={note} onChange={e => setNote(e.target.value.slice(0, 500))}
-            placeholder={t('forSale.notePlaceholder') || 'Plays clean, sleeve has light shelf wear, includes hype sticker…'}
+            placeholder={t('forSale.notePlaceholder')}
             rows={2}
             style={{
               width: '100%', background: C.bg, border: '1px solid ' + C.border,
@@ -247,7 +257,7 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
               ...BEBAS, fontSize: 14, letterSpacing: '0.06em',
               opacity: busy ? 0.6 : 1,
             }}>
-            {busy ? '⏳' : (editing ? (t('common.save') || 'SAVE') : (t('forSale.cta') || 'LIST IT'))}
+            {busy ? '⏳' : (editing ? t('common.save') : t('forSale.cta'))}
           </button>
           {editing && (
             <button onClick={() => setEditing(false)} disabled={busy}
@@ -258,7 +268,7 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
                 color: C.dim, cursor: 'pointer',
                 ...MONO, fontSize: 11,
               }}>
-              {t('common.cancel') || 'Cancel'}
+              {t('common.cancel')}
             </button>
           )}
         </div>
