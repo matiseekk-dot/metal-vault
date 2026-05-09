@@ -50,23 +50,51 @@ export async function GET() {
   // `.is('matched_collection_id', null)` — index streaming_history_discovery
   // is partial on this exact predicate so it stays fast even for
   // power scrobblers (10k+ plays in 90 days).
-  const { data: rows, error } = await sb
-    .from('streaming_history')
-    .select('artist, album, artist_norm, album_norm, played_at')
-    .eq('user_id', user.id)
-    .is('matched_collection_id', null)
-    .gte('played_at', cutoff);
+  // Try with play_count column (added by migration 035 — Last.fm rows
+  // synced via getTopAlbums carry an aggregate count instead of one
+  // row per scrobble). Fall back to legacy "1 row = 1 play" shape if
+  // the column doesn't exist yet.
+  let rows  = null;
+  let error = null;
+  {
+    const r1 = await sb
+      .from('streaming_history')
+      .select('artist, album, artist_norm, album_norm, played_at, play_count')
+      .eq('user_id', user.id)
+      .is('matched_collection_id', null)
+      .gte('played_at', cutoff);
+    if (r1.error && /column.*play_count|does not exist/i.test(r1.error.message || '')) {
+      const r2 = await sb
+        .from('streaming_history')
+        .select('artist, album, artist_norm, album_norm, played_at')
+        .eq('user_id', user.id)
+        .is('matched_collection_id', null)
+        .gte('played_at', cutoff);
+      rows  = (r2.data || []).map(r => ({ ...r, play_count: 1 }));
+      error = r2.error;
+    } else {
+      rows  = r1.data;
+      error = r1.error;
+    }
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (/relation.*streaming_history|does not exist/i.test(error.message || '')) {
+      return NextResponse.json({ items: [], window_days: WINDOW_DAYS, migration_pending: true });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  // Aggregate in JS by (artist_norm, album_norm).
+  // Aggregate in JS by (artist_norm, album_norm). play_count > 1
+  // happens for Last.fm rows synced via getTopAlbums (one row = N
+  // plays); Spotify rows always have play_count = 1.
   const buckets = new Map();
   for (const r of (rows || [])) {
     const key = r.artist_norm + '::' + r.album_norm;
     let b = buckets.get(key);
     if (!b) {
       b = {
-        artist:      r.artist,        // pretty form (first seen)
+        artist:      r.artist,
         album:       r.album,
         artist_norm: r.artist_norm,
         album_norm:  r.album_norm,
@@ -75,7 +103,7 @@ export async function GET() {
       };
       buckets.set(key, b);
     }
-    b.plays++;
+    b.plays += Number(r.play_count) || 1;
     if (!b.last_played || r.played_at > b.last_played) {
       b.last_played = r.played_at;
     }
