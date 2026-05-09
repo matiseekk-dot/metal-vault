@@ -14,10 +14,12 @@
 
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
-import { lastfmRecentTracks } from '@/lib/lastfm';
+import { lastfmRecentTracks, lastfmRecentTracksAll } from '@/lib/lastfm';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+// 5 minutes — needed for the first-sync backfill on accounts with
+// thousands of scrobbles. Incremental syncs finish in <5s.
+export const maxDuration = 300;
 
 function normaliseAlbumTitle(s) {
   return String(s || '')
@@ -67,19 +69,46 @@ export async function POST() {
   }
 
   // `from` parameter is unix seconds. Last.fm returns plays *after*
-  // (inclusive) that timestamp. On first run last_synced_at is NULL
-  // → we pull the whole 200-track window (Last.fm cap).
+  // (inclusive) that timestamp. On first run we paginate as far back
+  // as we can (capped) so a 2008-era Last.fm account doesn't get
+  // truncated to "last 200 tracks" — that's barely 1 day for a heavy
+  // listener and gives Discovery zero useful aggregation data.
+  const isFirstSync = !tokenRow.last_synced_at;
   const fromSec = tokenRow.last_synced_at
     ? Math.floor(new Date(tokenRow.last_synced_at).getTime() / 1000)
     : null;
 
+  // Discovery window is 90 days — there's no point pulling older
+  // scrobbles for that feature. Pulling the last year still gives us
+  // enough headroom for "yearly stats" that we can add later without
+  // re-syncing.
+  const oneYearAgoSec = Math.floor((Date.now() - 365 * 24 * 60 * 60 * 1000) / 1000);
+
   let tracks;
   try {
-    tracks = await lastfmRecentTracks({
-      user:    tokenRow.username,
-      fromSec,
-      limit:   200,
-    });
+    if (isFirstSync) {
+      tracks = await lastfmRecentTracksAll({
+        user:              tokenRow.username,
+        // No fromSec → start from page 1 of /recent-tracks (newest).
+        // We early-exit when the page's OLDEST track crosses the
+        // 1-year boundary, so a power-scrobbler still finishes in
+        // budget.
+        fromSec:           null,
+        maxPages:          60,
+        pacingMs:          220,
+        oldestAllowedSec:  oneYearAgoSec,
+      });
+    } else {
+      // Incremental — one page of up to 200 since last_synced_at.
+      // If the user listened to >200 since last sync (rare, would
+      // need >200 plays in less than a day for typical sync cadence)
+      // they'll lose the oldest few; acceptable trade-off.
+      tracks = await lastfmRecentTracks({
+        user:  tokenRow.username,
+        fromSec,
+        limit: 200,
+      });
+    }
   } catch (e) {
     return NextResponse.json({ error: 'Last.fm fetch failed: ' + e.message }, { status: 502 });
   }

@@ -65,6 +65,13 @@ export default function LastfmSyncCard() {
   };
 
   const sync = async () => {
+    // First sync paginates a year of history — for a 2008-era heavy
+    // user that can take 30-60s. Show an upfront toast so the spinner
+    // doesn't feel hung. Subsequent syncs return in <5s and skip this.
+    const isFirst = !state.lastSyncedAt;
+    if (isFirst) {
+      toast(t('lastfm.firstSyncWait') || 'Pulling your scrobble history (~30-60s)…');
+    }
     setBusy(true);
     try {
       const r = await fetch('/api/lastfm/sync', { method: 'POST' });
@@ -73,13 +80,17 @@ export default function LastfmSyncCard() {
         toast.error(d.error || (t('lastfm.syncFailed') || 'Sync failed'));
       } else {
         haptic.success();
-        const matched = d.matched ?? 0;
-        if (matched === 0) {
+        const matched   = d.matched   ?? 0;
+        const unmatched = d.unmatched ?? 0;
+        // Combined message — "X vinyl-matched, Y went to discovery
+        // candidates" gives the user a clearer signal than just matched.
+        if (matched === 0 && unmatched === 0) {
           toast(t('lastfm.syncNone') || 'No new matches yet — keep scrobbling!');
         } else {
-          toast.success(
-            (t('lastfm.syncMatched', { n: matched }) || (matched + ' new plays logged ✓'))
-          );
+          const parts = [];
+          if (matched > 0)   parts.push(matched + ' vinyl');
+          if (unmatched > 0) parts.push(unmatched + ' discovery');
+          toast.success(parts.join(' · ') + ' ✓');
           window.dispatchEvent(new CustomEvent('mv-watchlist-changed'));
         }
         await refresh();

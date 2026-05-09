@@ -78,14 +78,15 @@ export default function SpotifySyncCard() {
         toast.error(d.error || (t('spotify.syncFailed') || 'Sync failed'));
       } else {
         haptic.success();
-        const matched = d.matched ?? 0;
-        if (matched === 0) {
+        const matched   = d.matched   ?? 0;
+        const unmatched = d.unmatched ?? 0;
+        if (matched === 0 && unmatched === 0) {
           toast(t('spotify.syncNone') || 'No new matches yet — keep listening!');
         } else {
-          toast.success(
-            (t('spotify.syncMatched', { n: matched }) || (matched + ' new plays logged ✓'))
-          );
-          // Force a collection re-fetch so the listen counter updates.
+          const parts = [];
+          if (matched > 0)   parts.push(matched + ' vinyl');
+          if (unmatched > 0) parts.push(unmatched + ' discovery');
+          toast.success(parts.join(' · ') + ' ✓');
           window.dispatchEvent(new CustomEvent('mv-watchlist-changed'));
         }
         await refresh();
