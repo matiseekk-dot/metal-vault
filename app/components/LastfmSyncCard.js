@@ -64,17 +64,19 @@ export default function LastfmSyncCard() {
     setBusy(false);
   };
 
-  const sync = async () => {
-    // First sync paginates a year of history — for a 2008-era heavy
-    // user that can take 30-60s. Show an upfront toast so the spinner
-    // doesn't feel hung. Subsequent syncs return in <5s and skip this.
-    const isFirst = !state.lastSyncedAt;
+  const sync = async (opts = {}) => {
+    const force = !!opts.force;
+    // First sync (or forced re-sync) paginates a year of history —
+    // for a 2008-era heavy user that can take 30-60s. Show an upfront
+    // toast so the spinner doesn't feel hung. Subsequent incremental
+    // syncs return in <5s and skip this.
+    const isFirst = force || !state.lastSyncedAt;
     if (isFirst) {
       toast(t('lastfm.firstSyncWait') || 'Pulling your scrobble history (~30-60s)…');
     }
     setBusy(true);
     try {
-      const r = await fetch('/api/lastfm/sync', { method: 'POST' });
+      const r = await fetch('/api/lastfm/sync' + (force ? '?force=true' : ''), { method: 'POST' });
       const d = await r.json();
       if (!r.ok) {
         toast.error(d.error || (t('lastfm.syncFailed') || 'Sync failed'));
@@ -153,7 +155,7 @@ export default function LastfmSyncCard() {
 
       {state.connected && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button onClick={sync} disabled={busy}
+          <button onClick={() => sync()} disabled={busy}
             style={{
               width: '100%', padding: '12px',
               background: '#d51007', border: 'none', borderRadius: 10,
@@ -168,6 +170,28 @@ export default function LastfmSyncCard() {
               ? (t('lastfm.lastSync') || 'Last synced') + ': ' + new Date(state.lastSyncedAt).toLocaleString()
               : (t('lastfm.notSyncedYet') || 'Not synced yet — tap above')}
           </div>
+          {/* "Reset & re-sync" — wipes the last_synced_at pointer +
+              streaming_history rows for this user, then runs a full
+              paginated backfill. Solves the case where the user
+              connected before migration 034 (or the previous sync
+              advanced last_synced_at past the data we wanted). */}
+          <button onClick={async () => {
+            const ok = await mvConfirm(
+              t('lastfm.resyncConfirm') || 'Reset & pull full Last.fm history? Wipes your existing streaming history; vinyl listen logs stay. Takes 30-60s.',
+              { confirmLabel: t('lastfm.resync') || 'Reset & re-sync' }
+            );
+            if (!ok) return;
+            await sync({ force: true });
+          }} disabled={busy}
+            style={{
+              padding: '10px',
+              background: 'transparent',
+              border: '1px solid ' + C.border, borderRadius: 8,
+              color: '#d51007', cursor: busy ? 'wait' : 'pointer',
+              ...MONO, fontSize: 11, letterSpacing: '0.04em',
+            }}>
+            ↺ {t('lastfm.resync') || 'Reset & re-sync (full history)'}
+          </button>
           <button onClick={disconnect} disabled={busy}
             style={{
               padding: '8px',

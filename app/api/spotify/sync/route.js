@@ -54,10 +54,13 @@ function normaliseArtist(s) {
     .trim();
 }
 
-export async function POST() {
+export async function POST(request) {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const url = new URL(request.url);
+  const force = url.searchParams.get('force') === 'true';
 
   const admin = getAdminClient();
 
@@ -70,6 +73,23 @@ export async function POST() {
 
   if (tokenErr || !tokenRow) {
     return NextResponse.json({ error: 'Spotify not connected' }, { status: 400 });
+  }
+
+  if (force) {
+    // Spotify's recently-played API caps at 50 items + ~24h of
+    // history regardless of `after`, so a full re-sync just gets us
+    // the full 50-track window again — but we still wipe streaming
+    // _history to clear stale post-collection-add matches.
+    await admin.from('spotify_tokens')
+      .update({ last_synced_at: null })
+      .eq('user_id', user.id);
+    try {
+      await admin.from('streaming_history')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('source', 'spotify');
+    } catch {}
+    tokenRow.last_synced_at = null;
   }
 
   // 2) Refresh access_token

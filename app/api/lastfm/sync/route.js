@@ -53,10 +53,18 @@ export async function GET() {
   });
 }
 
-export async function POST() {
+export async function POST(request) {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // ?force=true forces a full backfill — wipes the last_synced_at
+  // pointer + (optionally) the user's existing streaming_history
+  // rows, so the loop below treats this as a first-sync. Used by
+  // the "Reset & re-sync" button after the user notices an
+  // incomplete import.
+  const url = new URL(request.url);
+  const force = url.searchParams.get('force') === 'true';
 
   const admin = getAdminClient();
   const { data: tokenRow, error: tokenErr } = await admin
@@ -66,6 +74,26 @@ export async function POST() {
     .single();
   if (tokenErr || !tokenRow) {
     return NextResponse.json({ error: 'Last.fm not connected' }, { status: 400 });
+  }
+
+  if (force) {
+    // Reset last_synced_at so the first-sync branch below kicks in.
+    // We DON'T wipe listen_logs — those are user-touched data
+    // (matched scrobbles), wiping them would also drop genuine
+    // vinyl listens manually logged. We DO wipe streaming_history
+    // because that table is fully derivable from a fresh sync
+    // and is the one we need re-populated for Discovery.
+    await admin.from('lastfm_tokens')
+      .update({ last_synced_at: null })
+      .eq('user_id', user.id);
+    try {
+      await admin.from('streaming_history')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('source', 'lastfm');
+    } catch {}
+    // Re-read so isFirstSync detection below sees the cleared value.
+    tokenRow.last_synced_at = null;
   }
 
   // `from` parameter is unix seconds. Last.fm returns plays *after*
