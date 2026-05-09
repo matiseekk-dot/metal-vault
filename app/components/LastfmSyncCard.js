@@ -64,17 +64,15 @@ export default function LastfmSyncCard() {
     setBusy(false);
   };
 
-  const sync = async (opts = {}) => {
-    const force = !!opts.force;
-    // First sync (or forced re-sync) paginates a year of Last.fm history —
-    // 30-60s for a 2008-era heavy user. Show a heads-up toast first.
-    const isFirst = force || !state.lastSyncedAt;
-    if (isFirst) {
-      toast(t('lastfm.firstSyncWait') || 'Pulling your scrobble history (~30-60s)…');
-    }
+  const sync = async () => {
+    // Last.fm sync = paginated user.getTopAlbums(period='overall').
+    // Whole account-history aggregated to one row per album. For a
+    // user since 2008 that can be 1-3k unique albums, takes 5-30s
+    // depending on pagination depth. Heads-up toast.
+    toast(t('lastfm.firstSyncWait') || 'Pulling your full Last.fm history…');
     setBusy(true);
     try {
-      const r = await fetch('/api/lastfm/sync' + (force ? '?force=true' : ''), { method: 'POST' });
+      const r = await fetch('/api/lastfm/sync', { method: 'POST' });
       const d = await r.json();
       if (!r.ok) {
         toast.error(d.error || (t('lastfm.syncFailed') || 'Sync failed'));
@@ -84,11 +82,11 @@ export default function LastfmSyncCard() {
         const unmatched = d.unmatched ?? 0;
         const total     = d.total     ?? 0;
         if (total === 0) {
-          toast(t('lastfm.syncNone') || 'No new scrobbles — try scrobbling first.');
+          toast(t('lastfm.syncNone') || 'No top albums — scrobble more first.');
         } else {
-          // "12,847 scrobbles · 423 in collection · 12,424 for Discovery"
+          // "1,247 albums · 47 in collection · 1,200 for Discovery"
           toast.success(
-            total + ' ' + (t('lastfm.toastScrobbles') || 'scrobbles') +
+            total + ' ' + (t('lastfm.toastAlbums') || 'albums') +
             ' · ' + matched + ' ' + (t('lastfm.toastInCol') || 'in collection') +
             ' · ' + unmatched + ' ' + (t('lastfm.toastForDiscovery') || 'for Discovery')
           );
@@ -170,27 +168,6 @@ export default function LastfmSyncCard() {
               ? (t('lastfm.lastSync') || 'Last synced') + ': ' + new Date(state.lastSyncedAt).toLocaleString()
               : (t('lastfm.notSyncedYet') || 'Not synced yet — tap above')}
           </div>
-          {/* Reset & full-history re-sync — needed for users who synced
-              under the previous getTopAlbums logic and now want the
-              chronological feed populated. Wipes streaming_history(lastfm)
-              + last_synced_at, then runs the paginated full-year backfill. */}
-          <button onClick={async () => {
-            const ok = await mvConfirm(
-              t('lastfm.resyncConfirm') || 'Reset & pull full Last.fm history? Wipes existing rows; vinyl logs stay. Takes 30-60s.',
-              { confirmLabel: t('lastfm.resync') || 'Reset & re-sync' }
-            );
-            if (!ok) return;
-            await sync({ force: true });
-          }} disabled={busy}
-            style={{
-              padding: '10px',
-              background: 'transparent',
-              border: '1px solid ' + C.border, borderRadius: 8,
-              color: '#d51007', cursor: busy ? 'wait' : 'pointer',
-              ...MONO, fontSize: 11, letterSpacing: '0.04em',
-            }}>
-            ↺ {t('lastfm.resync') || 'Reset & re-sync (full history)'}
-          </button>
           <button onClick={disconnect} disabled={busy}
             style={{
               padding: '8px',

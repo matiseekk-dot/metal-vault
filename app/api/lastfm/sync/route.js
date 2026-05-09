@@ -1,25 +1,28 @@
-// ── /api/lastfm/sync — paginated full-history scrobble import ──
+// ── /api/lastfm/sync — full all-time top albums (paginated) ────
 //
-// Why getRecentTracks (paginated) and not getTopAlbums (aggregate):
-// the Vault → Listen tab needs CHRONOLOGICAL feed of individual
-// scrobbles to be useful. getTopAlbums collapses to top-200 per
-// period — fine for Discovery aggregation, useless for "what did
-// I listen to last Tuesday".
+// Uses user.getTopAlbums(period='overall') paginated to the end —
+// that gives EVERY unique album the user has ever scrobbled, with
+// playcount aggregated server-side. For a user since 2008 with
+// 100k scrobbles, this typically resolves to 500-3000 distinct
+// albums — much smaller than per-track recenttracks (which would
+// need to paginate through 100k rows for the same coverage).
 //
-// Discovery still works on this shape: every row has play_count = 1
-// and Discovery SUMs it. Effectively the same numbers as the
-// previous getTopAlbums approach, just with more granular data.
+// Each row in streaming_history = one album with play_count = N.
+// Listen tab "Cyfrowo" filter shows these as albums sorted by
+// play_count desc. Discovery aggregates via SUM(play_count).
 //
-// Trade-off: first sync is paginated (~30-60s for a power scrobbler
-// with 12k+ tracks in last 12 months). Subsequent syncs incremental
-// since last_synced_at — typically <5s.
+// Why all-time (overall) not 12month: user explicitly asked for the
+// "full history". Last.fm's overall period IS that — covers the
+// account from creation. Cap at 30 pages × 1000 = 30k unique albums
+// is a safety net for the most extreme users; nobody actually has
+// that many distinct albums in real life.
 
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
-import { lastfmRecentTracks, lastfmRecentTracksAll } from '@/lib/lastfm';
+import { lastfmTopAlbumsAll } from '@/lib/lastfm';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;   // 5 min — first-sync backfill headroom
+export const maxDuration = 300;   // 5 min — pagination headroom
 
 function normaliseAlbumTitle(s) {
   return String(s || '').toLowerCase().trim()
@@ -50,13 +53,10 @@ export async function GET() {
   });
 }
 
-export async function POST(request) {
+export async function POST() {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const url   = new URL(request.url);
-  const force = url.searchParams.get('force') === 'true';
 
   const admin = getAdminClient();
   const { data: tokenRow, error: tokenErr } = await admin
@@ -68,56 +68,40 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Last.fm not connected' }, { status: 400 });
   }
 
-  if (force) {
-    await admin.from('lastfm_tokens')
-      .update({ last_synced_at: null })
-      .eq('user_id', user.id);
-    try {
-      await admin.from('streaming_history')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('source', 'lastfm');
-    } catch {}
-    tokenRow.last_synced_at = null;
-  }
-
-  // 1) Pull tracks. First sync = paginated up to 1 year back. Subsequent =
-  // single page since last_synced_at.
-  const isFirstSync = !tokenRow.last_synced_at;
-  const fromSec = tokenRow.last_synced_at
-    ? Math.floor(new Date(tokenRow.last_synced_at).getTime() / 1000)
-    : null;
-  const oneYearAgoSec = Math.floor((Date.now() - 365 * 24 * 60 * 60 * 1000) / 1000);
-
-  let tracks;
+  // Every sync = full replace — getTopAlbums(overall) returns the
+  // canonical top-of-all-time, so an old subset would just be stale.
+  // No incremental path; this is a periodic full refresh model.
   try {
-    if (isFirstSync) {
-      tracks = await lastfmRecentTracksAll({
-        user:             tokenRow.username,
-        fromSec:          null,
-        maxPages:         60,
-        pacingMs:         220,
-        oldestAllowedSec: oneYearAgoSec,
-      });
-    } else {
-      tracks = await lastfmRecentTracks({
-        user:  tokenRow.username,
-        fromSec,
-        limit: 200,
-      });
-    }
+    await admin.from('streaming_history')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('source', 'lastfm');
+  } catch {}
+
+  // 1) Pull all top albums.
+  let albums;
+  try {
+    albums = await lastfmTopAlbumsAll({
+      user:      tokenRow.username,
+      period:    'overall',
+      maxPages:  30,
+      pacingMs:  250,
+    });
   } catch (e) {
     return NextResponse.json({ error: 'Last.fm fetch failed: ' + e.message }, { status: 502 });
   }
 
-  if (tracks.length === 0) {
+  if (albums.length === 0) {
     await admin.from('lastfm_tokens')
       .update({ last_synced_at: new Date().toISOString() })
       .eq('user_id', user.id);
-    return NextResponse.json({ matched: 0, unmatched: 0, total: 0, message: 'No new plays' });
+    return NextResponse.json({
+      matched: 0, unmatched: 0, total: 0,
+      message: 'No top albums in Last.fm history',
+    });
   }
 
-  // 2) Build collection index for matching.
+  // 2) Build collection index.
   const { data: collection } = await admin
     .from('collection')
     .select('id, artist, album')
@@ -129,89 +113,54 @@ export async function POST(request) {
     if (!index.has(k)) index.set(k, c.id);
   }
 
-  // 3) Build per-scrobble rows. play_count=1 — Discovery still aggregates
-  //    correctly via SUM. No more aggregated entries — chronological feed
-  //    needs every play to land as its own row.
+  // 3) Build per-album rows. play_count = aggregate from Last.fm.
+  // played_at is synthetic (now() − i*1s) so the unique index
+  // (user, source, played_at, artist_norm, album_norm) doesn't collide.
+  // Listen UI's FormatPlayedAt swaps timestamp for "{N} plays" when
+  // kind === 'lastfm', so the synthetic value is never displayed.
+  const nowMs = Date.now();
   let matched   = 0;
   let unmatched = 0;
   const errors  = [];
   const rows    = [];
-  const logRows = [];
 
-  for (const t of tracks) {
-    const artist = t.artist?.['#text'] || t.artist?.name || t.artist;
-    const album  = t.album?.['#text']  || t.album?.name  || t.album;
-    if (!artist || !album) continue;
-
-    const artistNorm = normaliseArtist(artist);
-    const albumNorm  = normaliseAlbumTitle(album);
-    if (!artistNorm || !albumNorm) continue;
+  albums.forEach((a, i) => {
+    const artistNorm = normaliseArtist(a.artist);
+    const albumNorm  = normaliseAlbumTitle(a.album);
+    if (!artistNorm || !albumNorm) return;
 
     const collectionItemId = index.get(artistNorm + '::' + albumNorm) || null;
-    const playedAt = new Date(Number(t.date.uts) * 1000).toISOString();
-
     if (collectionItemId) matched++;
     else                  unmatched++;
 
     rows.push({
       user_id:               user.id,
       source:                'lastfm',
-      artist,
-      album,
+      artist:                a.artist,
+      album:                 a.album,
       artist_norm:           artistNorm,
       album_norm:            albumNorm,
-      played_at:             playedAt,
+      played_at:             new Date(nowMs - i * 1000).toISOString(),
       matched_collection_id: collectionItemId,
-      play_count:            1,
+      play_count:            a.playcount,
     });
+  });
 
-    if (collectionItemId) {
-      logRows.push({
-        user_id:            user.id,
-        collection_item_id: collectionItemId,
-        played_at:          playedAt,
-        source:             'lastfm',
-        notes:              '[lastfm]',
-      });
-    }
-  }
-
-  // 4) Bulk upsert into streaming_history. ON CONFLICT DO NOTHING via
-  //    ignoreDuplicates so re-syncing overlapping windows is safe.
+  // 4) Bulk insert in chunks. 30k rows × ~250 bytes = ~7.5 MB total —
+  //    easily fits chunked at 500/insert.
   const CHUNK = 500;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const slice = rows.slice(i, i + CHUNK);
     let { error: insErr } = await admin
       .from('streaming_history')
-      .upsert(slice, {
-        onConflict: 'user_id,source,played_at,artist_norm,album_norm',
-        ignoreDuplicates: true,
-      });
+      .insert(slice);
     if (insErr && /column.*play_count|does not exist/i.test(insErr.message || '')) {
       // pre-035 fallback
       const stripped = slice.map(r => { const { play_count, ...rest } = r; return rest; });
-      const r2 = await admin.from('streaming_history').upsert(stripped, {
-        onConflict: 'user_id,source,played_at,artist_norm,album_norm',
-        ignoreDuplicates: true,
-      });
+      const r2 = await admin.from('streaming_history').insert(stripped);
       insErr = r2.error;
     }
     if (insErr) errors.push('hist:' + (insErr.message || '').slice(0, 60));
-  }
-
-  // 5) Bulk insert matched into listen_logs — silent skip on
-  //    duplicates (re-sync of overlapping window).
-  for (let i = 0; i < logRows.length; i += CHUNK) {
-    const slice = logRows.slice(i, i + CHUNK);
-    let { error } = await admin.from('listen_logs').insert(slice);
-    if (error && /column.*source|does not exist/i.test(error.message || '')) {
-      const stripped = slice.map(r => { const { source, ...rest } = r; return rest; });
-      const r2 = await admin.from('listen_logs').insert(stripped);
-      error = r2.error;
-    }
-    if (error && !/duplicate key|unique constraint/i.test(error.message || '')) {
-      errors.push('logs:' + (error.message || '').slice(0, 60));
-    }
   }
 
   await admin.from('lastfm_tokens')
@@ -221,7 +170,7 @@ export async function POST(request) {
   return NextResponse.json({
     matched,
     unmatched,
-    total:    tracks.length,
+    total:    albums.length,
     errors:   errors.slice(0, 5),
   });
 }
