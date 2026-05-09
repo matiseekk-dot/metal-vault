@@ -1,5 +1,9 @@
 'use client';
-// ── VaultTab — sub-tab wrapper for Collection / Watchlist / Bands / Stats ──
+// ── VaultTab — sub-tab wrapper ────────────────────────────────────
+// Six sub-tabs as of v1.2: Collection / Watchlist / Bands / Listen /
+// Search / Stats. "Listen" is the unified Scrobbling view added in
+// the listening-feed feature — combines vinyl spins + Spotify + Last.fm
+// into one place with Discovery suggestions on top.
 import { useState, useEffect } from 'react';
 import { C, MONO, BEBAS } from '@/lib/theme';
 import { useT } from '@/lib/i18n';
@@ -9,12 +13,14 @@ import { WatchlistTab } from '@/app/collection/CollectionTab';
 import BandsTab from '@/app/artists/BandsTab';
 import StatsTab from '@/app/stats/StatsTab';
 import SearchTab from '@/app/search/SearchTab';
+import ListeningTab from '@/app/vault/ListeningTab';
 
 const LS_KEY = 'mv_vault_subtab';
 const SUB_TAB_IDS = [
   { id: 'collection', iconName: 'pkg',      i18n: 'vault.tab.collection' },
   { id: 'watchlist',  iconName: 'heart',    i18n: 'vault.tab.watchlist'  },
   { id: 'bands',      iconName: 'music',    i18n: 'vault.tab.bands'      },
+  { id: 'listening',  iconName: 'play',     i18n: 'vault.tab.listening'  },
   { id: 'search',     iconName: 'search',   i18n: 'common.search'        },
   { id: 'stats',      iconName: 'barChart', i18n: 'vault.tab.stats'      },
 ];
@@ -53,7 +59,7 @@ export default function VaultTab(props) {
   return (
     <div>
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
+        display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)',
         background: C.bg2, borderBottom: '1px solid ' + C.border,
         position: 'sticky', top: 56, zIndex: 50,
       }}>
@@ -106,6 +112,12 @@ export default function VaultTab(props) {
             onAddToWatchlist={props.onAddToWatchlist}
             onAlbumClick={props.onAlbumClick} AlbumCover={props.AlbumCover}
             premium={props.premium} onUpgrade={props.onUpgrade}
+          />
+        )}
+        {sub === 'listening' && (
+          <ListeningTab
+            user={props.user}
+            onAlbumClick={props.onAlbumClick}
           />
         )}
         {sub === 'search' && (

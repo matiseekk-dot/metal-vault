@@ -6,7 +6,11 @@ import Icon from '@/app/components/Icon';
 import { useT } from '@/lib/i18n';
 import PortfolioChangeCard from '@/app/components/PortfolioChangeCard';
 import ListenStats from '@/app/components/ListenStats';
-import StreamingDiscoveries from '@/app/components/StreamingDiscoveries';
+// StreamingDiscoveries moved to Vault → Scrobbling tab (ListeningTab) —
+// "albums you stream but don't own" is action-driving, not analytics.
+// It belongs next to the listening feed where users do something
+// about it. ListenStats stays here for vinyl-only analytics
+// (streak, dust collection, heatmap).
 import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 
 const GRADE_COLORS = {M:'#a78bfa',NM:'#4ade80','VG+':'#60a5fa',VG:'#f5c842','G+':'#f97316',G:'#f87171',F:'#888',P:'#555'};
@@ -805,11 +809,6 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
       {/* Listen tracking — vinyl play stats. Renders nothing for users
           with no plays AND no collection. */}
       <ListenStats collectionLength={collection.length}/>
-
-      {/* Streaming discoveries — albums user streamed a lot but doesn't
-          own. Hides itself if no candidates (no Spotify/Last.fm
-          connected, or every streamed album already owned). */}
-      <StreamingDiscoveries/>
 
       {/* Format breakdown — only renders if 2+ formats in collection */}
       <FormatBreakdown collection={collection}/>

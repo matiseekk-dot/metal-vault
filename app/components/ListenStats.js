@@ -208,79 +208,11 @@ export default function ListenStats({ collectionLength = 0 }) {
             </div>
           )}
 
-          {/* Streaming activity (Spotify / Last.fm) — separate from
-              vinyl counters above, NEVER conflated. Shown only when
-              the user has connected at least one source AND has
-              non-zero streaming logs. Positioned between Top Played
-              and Dust because it's "what you also listened to digitally"
-              — bridges the discovery angle. */}
-          {(data.streaming?.total?.allTime > 0) && (
-            <div style={{ marginTop: 16, padding: '12px 14px',
-              background: 'linear-gradient(135deg, #0a0a1a 0%, #14142a 100%)',
-              border: '1px solid #4f46e555', borderRadius: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 14 }}>🎧</span>
-                  <span style={{ fontSize: 9, color: '#818cf8', ...MONO,
-                    letterSpacing: '0.18em', textTransform: 'uppercase' }}>
-                    {t('listen.streaming.title') || 'Streaming activity'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, fontSize: 9, ...MONO, color: C.dim }}>
-                  {data.streaming.sources?.spotify > 0 && (
-                    <span style={{ color: '#1db954' }}>● spotify</span>
-                  )}
-                  {data.streaming.sources?.lastfm > 0 && (
-                    <span style={{ color: '#d51007' }}>● last.fm</span>
-                  )}
-                </div>
-              </div>
-              <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 10, lineHeight: 1.5 }}>
-                {t('listen.streaming.note') || 'Streaming plays are tracked separately — never counted toward vinyl streak / dust.'}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-                <Stat label={t('listen.streaming.allTime') || 'All time'} value={data.streaming.total.allTime} accent="#818cf8"/>
-                <Stat label={t('listen.streaming.last30')  || 'Last 30d'} value={data.streaming.total.last30d} accent="#818cf8"/>
-              </div>
-              {data.streaming.topStreamed?.length > 0 && (
-                <>
-                  <div style={{ fontSize: 9, color: '#818cf8', ...MONO,
-                    letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>
-                    {t('listen.streaming.top') || 'Most streamed (in your collection)'}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {data.streaming.topStreamed.slice(0, 5).map((it, i) => {
-                      const ratio = it.streaming_count > 0 && it.play_count >= 0
-                        ? (it.play_count === 0
-                            ? (t('listen.streaming.vinylZero') || 'never on vinyl')
-                            : (it.streaming_count + ' streams · ' + it.play_count + ' vinyl'))
-                        : null;
-                      return (
-                        <div key={it.id}
-                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0',
-                            borderBottom: i < Math.min(4, data.streaming.topStreamed.length - 1) ? `1px solid ${C.border}` : 'none' }}>
-                          <span style={{ ...BEBAS, fontSize: 14, color: '#818cf8', width: 22, textAlign: 'right' }}>
-                            {i + 1}.
-                          </span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, color: C.text, ...MONO,
-                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {it.artist}
-                            </div>
-                            <div style={{ fontSize: 10, color: C.dim, ...MONO,
-                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {it.album}
-                              {ratio ? ' · ' + ratio : ''}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+          {/* Streaming activity card moved to Vault → Scrobbling tab.
+              Stats stays vinyl-only — streak / dust / top played make
+              sense ONLY for physical interaction. Streaming totals +
+              top streamed live next to the listening feed where
+              they're actionable. */}
 
           {/* Dust collection */}
           {data.dust?.length > 0 && (
