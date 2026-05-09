@@ -26,7 +26,15 @@ export async function GET() {
     .order('detected_at',  { ascending: false })
     .limit(50);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // Migration 028 not applied yet — return empty so the
+    // RepressBanner hides itself (it gates on items.length > 0)
+    // instead of throwing in the network log.
+    if (/relation.*repress_announcements|does not exist/i.test(error.message || '')) {
+      return NextResponse.json({ items: [], migration_pending: true });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ items: data || [] });
 }
 

@@ -118,21 +118,25 @@ export async function POST() {
     const collectionItemId = index.get(key) || null;
     const playedAt = new Date(Number(t.date.uts) * 1000).toISOString();
 
-    // 1) ALWAYS write to streaming_history — same shape as Spotify
-    //    sync, see /api/spotify/sync for the rationale.
-    const { error: histErr } = await admin
-      .from('streaming_history')
-      .upsert({
-        user_id:               user.id,
-        source:                'lastfm',
-        artist:                artist,
-        album:                 album,
-        artist_norm:           artistNorm,
-        album_norm:            albumNorm,
-        played_at:             playedAt,
-        matched_collection_id: collectionItemId,
-      }, { onConflict: 'user_id,source,played_at,artist_norm,album_norm', ignoreDuplicates: true });
-    if (histErr) errors.push('hist:' + (histErr.message || '').slice(0, 30));
+    // Best-effort streaming_history (migration 034). Same defensive
+    // pattern as Spotify sync — see comment there.
+    try {
+      const { error: histErr } = await admin
+        .from('streaming_history')
+        .upsert({
+          user_id:               user.id,
+          source:                'lastfm',
+          artist:                artist,
+          album:                 album,
+          artist_norm:           artistNorm,
+          album_norm:            albumNorm,
+          played_at:             playedAt,
+          matched_collection_id: collectionItemId,
+        }, { onConflict: 'user_id,source,played_at,artist_norm,album_norm', ignoreDuplicates: true });
+      if (histErr && !/relation.*streaming_history|does not exist/i.test(histErr.message || '')) {
+        errors.push('hist:' + (histErr.message || '').slice(0, 30));
+      }
+    } catch {}
 
     if (!collectionItemId) {
       unmatched++;
@@ -150,13 +154,22 @@ export async function POST() {
       continue;
     }
 
-    const { error: insErr } = await admin.from('listen_logs').insert({
+    // listen_logs insert with source-column fallback for unmigrated DBs.
+    const baseRow = {
       user_id:            user.id,
       collection_item_id: collectionItemId,
       played_at:          playedAt,
-      source:             'lastfm',
       notes:              '[lastfm]',
-    });
+    };
+    let insErr = null;
+    {
+      const r = await admin.from('listen_logs').insert({ ...baseRow, source: 'lastfm' });
+      insErr = r.error;
+      if (insErr && /column.*source|does not exist/i.test(insErr.message || '')) {
+        const r2 = await admin.from('listen_logs').insert(baseRow);
+        insErr = r2.error;
+      }
+    }
     if (insErr) {
       errors.push((insErr.message || '').slice(0, 40));
       continue;

@@ -76,13 +76,40 @@ export async function GET(req) {
   // Single fetch of the last year of VINYL play timestamps + item_ids
   // — drives total counts, heatmap, and streak. Streaming is a
   // separate query at the end so the original signals stay clean.
-  const { data: recentLogs, error: logsErr } = await sb
-    .from('listen_logs')
-    .select('id, collection_item_id, played_at, source')
-    .eq('user_id', user.id)
-    .eq('source', 'vinyl')
-    .gte('played_at', cut365)
-    .order('played_at', { ascending: true });
+  //
+  // FALLBACK: migration 033 added the `source` column. If it hasn't
+  // run yet, filtering by `source='vinyl'` 500s on the column-not-found
+  // PG error and the whole stats endpoint goes dark — which the user
+  // sees as "scrobbling section disappeared". Try the new query first;
+  // on a 42703-class error fall back to the legacy query that uses
+  // `notes` markers ('[spotify]' / '[lastfm]') the sync routes
+  // historically wrote, so an unmigrated database degrades gracefully
+  // rather than crashing.
+  let recentLogs = null;
+  let logsErr    = null;
+  {
+    const r1 = await sb
+      .from('listen_logs')
+      .select('id, collection_item_id, played_at, source')
+      .eq('user_id', user.id)
+      .eq('source', 'vinyl')
+      .gte('played_at', cut365)
+      .order('played_at', { ascending: true });
+    if (r1.error && /column.*source|does not exist/i.test(r1.error.message || '')) {
+      // migration 033 not applied — legacy fallback
+      const r2 = await sb
+        .from('listen_logs')
+        .select('id, collection_item_id, played_at, notes')
+        .eq('user_id', user.id)
+        .gte('played_at', cut365)
+        .order('played_at', { ascending: true });
+      recentLogs = (r2.data || []).filter(l => l.notes !== '[spotify]' && l.notes !== '[lastfm]');
+      logsErr    = r2.error;
+    } else {
+      recentLogs = r1.data;
+      logsErr    = r1.error;
+    }
+  }
   if (logsErr) return NextResponse.json({ error: logsErr.message }, { status: 500 });
 
   const logs    = recentLogs || [];
@@ -156,52 +183,55 @@ export async function GET(req) {
   }
 
   // ── Streaming block (NEW in migration 033) ─────────────────
-  // Pulled separately so vinyl stats above stay untouched. We
-  // aggregate per-source counts in last 30 days for the
-  // "where do my plays come from" pie chart, plus pull the top-
-  // streamed items from collection.streaming_count.
+  // Additive — every query is independently fault-tolerant so an
+  // unmigrated database returns the rest of the stats payload
+  // intact rather than 500ing the endpoint.
   let streaming = { total: { allTime: 0, last30d: 0 }, topStreamed: [], sources: {} };
   try {
-    // Recent streaming logs for the per-source breakdown.
-    const { data: recentStream } = await sb
+    const sources = { spotify: 0, lastfm: 0 };
+    let stream30      = 0;
+    let streamAllTime = 0;
+    let topStream     = [];
+
+    // Per-source breakdown (last 30d). Needs `source` column.
+    const r1 = await sb
       .from('listen_logs')
       .select('id, source, played_at')
       .eq('user_id', user.id)
       .in('source', ['spotify', 'lastfm'])
       .gte('played_at', cut30);
-    const sources = { spotify: 0, lastfm: 0 };
-    let stream30 = 0;
-    for (const l of (recentStream || [])) {
-      stream30++;
-      if (sources[l.source] != null) sources[l.source]++;
+    if (!r1.error) {
+      for (const l of (r1.data || [])) {
+        stream30++;
+        if (sources[l.source] != null) sources[l.source]++;
+      }
     }
 
-    // All-time streaming total from the denormalized counter.
-    const { data: streamSum } = await sb
+    // All-time streaming counter. Needs `streaming_count` column on collection.
+    const r2 = await sb
       .from('collection')
       .select('streaming_count.sum()')
       .eq('user_id', user.id)
       .single();
-    const streamAllTime = streamSum?.sum || 0;
+    if (!r2.error && r2.data) streamAllTime = r2.data.sum || 0;
 
     // Top-streamed items.
-    const { data: topStream } = await sb
+    const r3 = await sb
       .from('collection')
       .select('id, artist, album, cover, streaming_count, play_count')
       .eq('user_id', user.id)
       .gt('streaming_count', 0)
       .order('streaming_count', { ascending: false })
       .limit(10);
+    if (!r3.error) topStream = r3.data || [];
 
     streaming = {
       total: { allTime: streamAllTime, last30d: stream30 },
-      topStreamed: topStream || [],
+      topStreamed: topStream,
       sources,
     };
-  } catch (e) {
-    // streaming block is additive — failing to compute it must NOT
-    // break the rest of the stats page (older deployments may not
-    // have run migration 033 yet).
+  } catch {
+    // never propagate — UI hides the streaming card when allTime===0
   }
 
   return NextResponse.json({

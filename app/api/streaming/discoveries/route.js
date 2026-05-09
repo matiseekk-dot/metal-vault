@@ -160,6 +160,12 @@ export async function DELETE(request) {
       { user_id: user.id, artist_norm, album_norm },
       { onConflict: 'user_id,artist_norm,album_norm', ignoreDuplicates: true }
     );
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // Same graceful fallback as GET — pre-034 DB.
+    if (/relation.*streaming_dismissed|does not exist/i.test(error.message || '')) {
+      return NextResponse.json({ ok: true, migration_pending: true });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }

@@ -141,24 +141,26 @@ export async function POST() {
     const collectionItemId = index.get(key) || null;
     const playedAt = new Date(it.played_at).toISOString();
 
-    // 1) ALWAYS write to streaming_history — matched OR not. The
-    // discovery feature reads this table for "top albums you stream
-    // but don't own". Unique index (user, source, played_at,
-    // artist_norm, album_norm) handles re-sync deduplication via
-    // ON CONFLICT DO NOTHING.
-    const { error: histErr } = await admin
-      .from('streaming_history')
-      .upsert({
-        user_id:               user.id,
-        source:                'spotify',
-        artist:                artist,
-        album:                 album,
-        artist_norm:           artistNorm,
-        album_norm:            albumNorm,
-        played_at:             playedAt,
-        matched_collection_id: collectionItemId,
-      }, { onConflict: 'user_id,source,played_at,artist_norm,album_norm', ignoreDuplicates: true });
-    if (histErr) errors.push('hist:' + (histErr.message || '').slice(0, 30));
+    // 1) Best-effort streaming_history write. Migration 034 added
+    //    this table; on a database that hasn't run 034 yet the upsert
+    //    silently fails and we still log the matched scrobble below.
+    try {
+      const { error: histErr } = await admin
+        .from('streaming_history')
+        .upsert({
+          user_id:               user.id,
+          source:                'spotify',
+          artist:                artist,
+          album:                 album,
+          artist_norm:           artistNorm,
+          album_norm:            albumNorm,
+          played_at:             playedAt,
+          matched_collection_id: collectionItemId,
+        }, { onConflict: 'user_id,source,played_at,artist_norm,album_norm', ignoreDuplicates: true });
+      if (histErr && !/relation.*streaming_history|does not exist/i.test(histErr.message || '')) {
+        errors.push('hist:' + (histErr.message || '').slice(0, 30));
+      }
+    } catch {}
 
     if (!collectionItemId) {
       // Not in collection → discovery candidate, not a vinyl listen.
@@ -179,13 +181,25 @@ export async function POST() {
       continue;
     }
 
-    const { error: insErr } = await admin.from('listen_logs').insert({
+    // Try with `source` first (post-033), fall back to legacy shape
+    // (no source column) on column-not-found error so unmigrated
+    // databases still log matched scrobbles.
+    const baseRow = {
       user_id:            user.id,
       collection_item_id: collectionItemId,
       played_at:          playedAt,
-      source:             'spotify',
       notes:              '[spotify]',
-    });
+    };
+    let insErr = null;
+    {
+      const r = await admin.from('listen_logs').insert({ ...baseRow, source: 'spotify' });
+      insErr = r.error;
+      if (insErr && /column.*source|does not exist/i.test(insErr.message || '')) {
+        // migration 033 not applied — retry without source
+        const r2 = await admin.from('listen_logs').insert(baseRow);
+        insErr = r2.error;
+      }
+    }
     if (insErr) {
       errors.push((insErr.message || '').slice(0, 40));
       continue;
