@@ -41,9 +41,13 @@ const KIND_BADGE = {
 };
 
 function FormatPlayedAt({ iso, kind, count }) {
-  // Last.fm aggregates use played_at = sync time, not real listens.
-  // Render the play_count as the primary signal instead.
-  if (kind === 'lastfm') {
+  // Last.fm aggregates use played_at = sync time, not real listens →
+  // render play_count as the primary signal.
+  // Spotify rows are now aggregated per album server-side, so when
+  // count > 1 we show "N plays" too. count === 1 falls through to the
+  // timestamp ("when did you last spin this") for both vinyl and one-off
+  // Spotify scrobbles.
+  if (kind === 'lastfm' || (kind === 'spotify' && count > 1)) {
     return <span>{count} {count === 1 ? 'play' : 'plays'}</span>;
   }
   if (!iso) return null;

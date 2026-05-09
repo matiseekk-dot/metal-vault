@@ -52,46 +52,85 @@ export async function GET(request) {
 
   const items = [];
 
-  // ── 1. Pull listen_logs (vinyl + spotify per-track) ─────────
-  // Only when filter allows. listen_logs has collection_item_id FK
-  // so we already know in_collection = true for every row here.
+  // ── 1. Pull listen_logs (vinyl + spotify) ───────────────────
+  // listen_logs has collection_item_id FK so in_collection = true
+  // for every row here.
+  //
+  // Treatment differs by source:
+  //   • vinyl   → keep per-event (each ▶ tap is a meaningful spin)
+  //   • spotify → AGGREGATE per album (user wants "płytami nie utwór":
+  //               many per-track scrobbles of the same album collapse to
+  //               one feed row with play_count = N, played_at = most recent)
   if (source === 'all' || source === 'vinyl' || source === 'spotify' || source === 'streaming') {
     const sourceFilter = source === 'vinyl'    ? ['vinyl']
                        : source === 'spotify'  ? ['spotify']
                        : source === 'streaming'? ['spotify']  // listen_logs only has spotify under "streaming"
                        :                         ['vinyl', 'spotify'];
 
-    let q = sb.from('listen_logs')
+    // Pull a wide window so per-album aggregation actually has something
+    // to roll up (5 scrobbles of an album = 1 row, but we still need the
+    // raw 5 to count them).
+    const RAW_LIMIT = 2000;
+
+    let r1 = await sb.from('listen_logs')
       .select('id, played_at, source, collection_item_id, collection:collection_item_id(id, artist, album, cover)')
       .eq('user_id', user.id)
+      .in('source', sourceFilter)
       .order('played_at', { ascending: false })
-      .limit(limit);
-
-    // source filter — listen_logs migrated table
-    let r1 = await q.in('source', sourceFilter);
+      .limit(RAW_LIMIT);
     if (r1.error && /column.*source|does not exist/i.test(r1.error.message || '')) {
       // pre-033 fallback: no source column, treat all as vinyl
       r1 = await sb.from('listen_logs')
         .select('id, played_at, collection_item_id, collection:collection_item_id(id, artist, album, cover)')
         .eq('user_id', user.id)
         .order('played_at', { ascending: false })
-        .limit(limit);
+        .limit(RAW_LIMIT);
     }
+
+    // Spotify per-track → per-album buckets.
+    const spotifyBuckets = new Map();
 
     for (const row of (r1.data || [])) {
       if (!row.collection) continue;   // FK orphan — skip
-      items.push({
-        kind:           row.source || 'vinyl',
-        played_at:      row.played_at,
-        artist:         row.collection.artist,
-        album:          row.collection.album,
-        cover:          row.collection.cover,
-        in_collection:  true,
-        collection_id:  row.collection.id,
-        play_count:     1,
-        watched:        false,
-      });
+      const kind = row.source || 'vinyl';
+
+      if (kind === 'spotify') {
+        const id = row.collection.id;
+        let b = spotifyBuckets.get(id);
+        if (!b) {
+          b = {
+            kind:          'spotify',
+            played_at:     row.played_at,
+            artist:        row.collection.artist,
+            album:         row.collection.album,
+            cover:         row.collection.cover,
+            in_collection: true,
+            collection_id: id,
+            play_count:    0,
+            watched:       false,
+          };
+          spotifyBuckets.set(id, b);
+        }
+        b.play_count++;
+        // played_at row is sorted desc, so the FIRST hit is already the
+        // most recent — no need to compare. Leave b.played_at alone.
+      } else {
+        // Vinyl / unknown source — emit per-event row.
+        items.push({
+          kind,
+          played_at:     row.played_at,
+          artist:        row.collection.artist,
+          album:         row.collection.album,
+          cover:         row.collection.cover,
+          in_collection: true,
+          collection_id: row.collection.id,
+          play_count:    1,
+          watched:       false,
+        });
+      }
     }
+
+    items.push(...spotifyBuckets.values());
   }
 
   // ── 2. Pull streaming_history rows (Last.fm aggregates) ────
@@ -158,21 +197,24 @@ export async function GET(request) {
   }
 
   // Sort:
-  //   • Last.fm aggregates by play_count desc (high engagement on top)
-  //   • listen_logs by played_at desc (recent on top)
-  // Mixed source default: aggregates first, then chronological vinyl/spotify.
+  //   • lastfm + spotify aggregates  → by play_count desc (most played top)
+  //   • vinyl per-event              → by played_at desc (recent top)
+  //   • mixed default                → aggregates by play_count first,
+  //                                    then chronological vinyl
   if (source === 'lastfm') {
     items.sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
-  } else if (source === 'vinyl' || source === 'spotify') {
+  } else if (source === 'spotify' || source === 'streaming') {
+    items.sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
+  } else if (source === 'vinyl') {
     items.sort((a, b) => String(b.played_at).localeCompare(String(a.played_at)));
   } else {
-    // ALL — show Last.fm top first, then chronological listens
-    const aggs    = items.filter(i => i.kind === 'lastfm');
-    const tracks  = items.filter(i => i.kind !== 'lastfm');
+    // ALL — aggregates first (Last.fm + Spotify per-album), then vinyl spins.
+    const aggs   = items.filter(i => i.kind === 'lastfm' || i.kind === 'spotify');
+    const spins  = items.filter(i => i.kind !== 'lastfm' && i.kind !== 'spotify');
     aggs.sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
-    tracks.sort((a, b) => String(b.played_at).localeCompare(String(a.played_at)));
+    spins.sort((a, b) => String(b.played_at).localeCompare(String(a.played_at)));
     items.length = 0;
-    items.push(...aggs, ...tracks);
+    items.push(...aggs, ...spins);
   }
 
   return NextResponse.json({
