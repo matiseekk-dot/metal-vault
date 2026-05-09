@@ -9,10 +9,20 @@ import { lastfmAuthorizeUrl, isLastfmConfigured } from '@/lib/lastfm';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  if (!isLastfmConfigured() || !process.env.LASTFM_SECRET) {
+  // Distinguish "no API key at all" from "missing secret" — first
+  // case is "developer hasn't set up Last.fm at all", second is
+  // "API key exists for read-only artist info but auth flow needs
+  // the SECRET too". Different fixes, different operators.
+  if (!isLastfmConfigured()) {
     return NextResponse.json({
-      error:   'Last.fm not configured',
+      error:   'Last.fm not configured (LASTFM_API_KEY env var missing)',
       helpUrl: 'https://www.last.fm/api/account/create',
+    }, { status: 503 });
+  }
+  if (!process.env.LASTFM_SECRET) {
+    return NextResponse.json({
+      error:   'Last.fm auth missing — set LASTFM_SECRET in Vercel and redeploy',
+      helpUrl: 'https://www.last.fm/api/accounts',
     }, { status: 503 });
   }
   const sb = await createClient();
