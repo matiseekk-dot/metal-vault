@@ -79,15 +79,19 @@ export default function LastfmSyncCard() {
         haptic.success();
         const matched   = d.matched   ?? 0;
         const unmatched = d.unmatched ?? 0;
-        // Combined message — "X vinyl-matched, Y went to discovery
-        // candidates" gives the user a clearer signal than just matched.
-        if (matched === 0 && unmatched === 0) {
-          toast(t('lastfm.syncNone') || 'No new matches yet — keep scrobbling!');
+        const total     = d.total     ?? 0;
+        // Friendlier breakdown — "200 top albums · 47 in collection
+        // · 153 for Discovery". Tells the user exactly what landed.
+        if (total === 0) {
+          toast(t('lastfm.syncNone') || 'No top albums in this period — try scrobbling first.');
         } else {
-          const parts = [];
-          if (matched > 0)   parts.push(matched + ' vinyl');
-          if (unmatched > 0) parts.push(unmatched + ' discovery');
-          toast.success(parts.join(' · ') + ' ✓');
+          toast.success(
+            total + ' ' + (t('lastfm.toastAlbums') || 'top albums') +
+            ' · ' + matched + ' ' + (t('lastfm.toastInCol') || 'in collection') +
+            ' · ' + unmatched + ' ' + (t('lastfm.toastForDiscovery') || 'for Discovery')
+          );
+          // Tell Stats + Discovery cards to refetch.
+          window.dispatchEvent(new CustomEvent('mv-streaming-changed'));
           window.dispatchEvent(new CustomEvent('mv-watchlist-changed'));
         }
         await refresh();

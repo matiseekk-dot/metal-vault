@@ -40,7 +40,15 @@ export default function StreamingDiscoveries() {
     setLoading(false);
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    refresh();
+    // Refetch when sync just finished — the LastfmSyncCard /
+    // SpotifySyncCard dispatch this after a successful POST.
+    if (typeof window === 'undefined') return;
+    const handler = () => { setLoading(true); refresh(); };
+    window.addEventListener('mv-streaming-changed', handler);
+    return () => window.removeEventListener('mv-streaming-changed', handler);
+  }, []);
 
   if (loading) return null;
   if (items.length === 0) return null;

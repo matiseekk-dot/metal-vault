@@ -97,11 +97,21 @@ export default function ListenStats({ collectionLength = 0 }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/listens/stats')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
-      .catch(() => setLoading(false));
-    return () => { cancelled = true; };
+    const load = () => {
+      fetch('/api/listens/stats')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
+        .catch(() => { if (!cancelled) setLoading(false); });
+    };
+    load();
+    if (typeof window === 'undefined') return () => { cancelled = true; };
+    // Refetch on streaming sync (Last.fm / Spotify just imported).
+    const handler = () => { setLoading(true); load(); };
+    window.addEventListener('mv-streaming-changed', handler);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('mv-streaming-changed', handler);
+    };
   }, []);
 
   // Hide the whole section for users who haven't started using listen

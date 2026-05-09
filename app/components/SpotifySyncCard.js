@@ -87,6 +87,7 @@ export default function SpotifySyncCard() {
           if (matched > 0)   parts.push(matched + ' vinyl');
           if (unmatched > 0) parts.push(unmatched + ' discovery');
           toast.success(parts.join(' · ') + ' ✓');
+          window.dispatchEvent(new CustomEvent('mv-streaming-changed'));
           window.dispatchEvent(new CustomEvent('mv-watchlist-changed'));
         }
         await refresh();

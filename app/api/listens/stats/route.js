@@ -182,10 +182,19 @@ export async function GET(req) {
     heatmap[key] = (heatmap[key] || 0) + 1;
   }
 
-  // ── Streaming block (NEW in migration 033) ─────────────────
-  // Additive — every query is independently fault-tolerant so an
-  // unmigrated database returns the rest of the stats payload
-  // intact rather than 500ing the endpoint.
+  // ── Streaming block ────────────────────────────────────────
+  // Source of truth is streaming_history (migrations 034 + 035) —
+  // for Last.fm we sync via getTopAlbums which writes one
+  // pre-aggregated row per album with play_count = the API's
+  // playcount, so SUM(play_count) IS the total. The previous
+  // version read `collection.streaming_count` denormalized counter,
+  // but that's only updated by the listen_logs trigger — Last.fm's
+  // top-albums sync bypasses listen_logs entirely so the denormalized
+  // counter stayed at 0 even with thousands of scrobbles imported.
+  //
+  // Fault-tolerance: any branch that 42703s (column missing) or
+  // 42P01s (table missing) silently zeroes its segment so stats
+  // payload always returns something the UI can render.
   let streaming = { total: { allTime: 0, last30d: 0 }, topStreamed: [], sources: {} };
   try {
     const sources = { spotify: 0, lastfm: 0 };
@@ -193,37 +202,54 @@ export async function GET(req) {
     let streamAllTime = 0;
     let topStream     = [];
 
-    // Per-source breakdown (last 30d). Needs `source` column.
-    const r1 = await sb
-      .from('listen_logs')
-      .select('id, source, played_at')
-      .eq('user_id', user.id)
-      .in('source', ['spotify', 'lastfm'])
-      .gte('played_at', cut30);
-    if (!r1.error) {
-      for (const l of (r1.data || [])) {
-        stream30++;
-        if (sources[l.source] != null) sources[l.source]++;
+    // All-time aggregate from streaming_history.
+    const rAll = await sb
+      .from('streaming_history')
+      .select('source, play_count, played_at, matched_collection_id')
+      .eq('user_id', user.id);
+    if (!rAll.error) {
+      for (const row of (rAll.data || [])) {
+        const n = Number(row.play_count) || 1;
+        streamAllTime += n;
+        // Per-source breakdown — last 30d
+        if (new Date(row.played_at).getTime() >= now - 30 * DAY_MS) {
+          stream30 += n;
+          if (sources[row.source] != null) sources[row.source] += n;
+        }
       }
+    } else if (!/relation.*streaming_history|column.*play_count|does not exist/i.test(rAll.error.message || '')) {
+      // Unknown error — keep silent.
     }
 
-    // All-time streaming counter. Needs `streaming_count` column on collection.
-    const r2 = await sb
-      .from('collection')
-      .select('streaming_count.sum()')
+    // Top streamed FROM the user's collection (= albums you own AND
+    // stream a lot). Reuses the matched_collection_id link from
+    // sync time — single query, no extra join.
+    const rTop = await sb
+      .from('streaming_history')
+      .select('matched_collection_id, play_count')
       .eq('user_id', user.id)
-      .single();
-    if (!r2.error && r2.data) streamAllTime = r2.data.sum || 0;
-
-    // Top-streamed items.
-    const r3 = await sb
-      .from('collection')
-      .select('id, artist, album, cover, streaming_count, play_count')
-      .eq('user_id', user.id)
-      .gt('streaming_count', 0)
-      .order('streaming_count', { ascending: false })
-      .limit(10);
-    if (!r3.error) topStream = r3.data || [];
+      .not('matched_collection_id', 'is', null);
+    if (!rTop.error) {
+      const sums = new Map();
+      for (const row of (rTop.data || [])) {
+        const id = row.matched_collection_id;
+        const n  = Number(row.play_count) || 1;
+        sums.set(id, (sums.get(id) || 0) + n);
+      }
+      const topIds = [...sums.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([id]) => id);
+      if (topIds.length > 0) {
+        const { data: collRows } = await sb
+          .from('collection')
+          .select('id, artist, album, cover, play_count')
+          .in('id', topIds);
+        topStream = (collRows || [])
+          .map(c => ({ ...c, streaming_count: sums.get(c.id) || 0 }))
+          .sort((a, b) => b.streaming_count - a.streaming_count);
+      }
+    }
 
     streaming = {
       total: { allTime: streamAllTime, last30d: stream30 },
