@@ -102,23 +102,42 @@ export async function POST() {
     if (!index.has(k)) index.set(k, c.id);
   }
 
-  let matched = 0;
-  let skipped = 0;
-  const errors = [];
+  let matched   = 0;
+  let unmatched = 0;
+  let skipped   = 0;
+  const errors  = [];
   for (const t of tracks) {
     // Last.fm shape: { name (track), artist: { '#text': name }, album: { '#text': name }, date: { uts, '#text' } }
     const artist = t.artist?.['#text'] || t.artist?.name || t.artist;
     const album  = t.album?.['#text']  || t.album?.name  || t.album;
     if (!artist || !album) continue;
 
-    const key = normaliseArtist(artist) + '::' + normaliseAlbumTitle(album);
-    const collectionItemId = index.get(key);
+    const artistNorm = normaliseArtist(artist);
+    const albumNorm  = normaliseAlbumTitle(album);
+    const key = artistNorm + '::' + albumNorm;
+    const collectionItemId = index.get(key) || null;
+    const playedAt = new Date(Number(t.date.uts) * 1000).toISOString();
+
+    // 1) ALWAYS write to streaming_history — same shape as Spotify
+    //    sync, see /api/spotify/sync for the rationale.
+    const { error: histErr } = await admin
+      .from('streaming_history')
+      .upsert({
+        user_id:               user.id,
+        source:                'lastfm',
+        artist:                artist,
+        album:                 album,
+        artist_norm:           artistNorm,
+        album_norm:            albumNorm,
+        played_at:             playedAt,
+        matched_collection_id: collectionItemId,
+      }, { onConflict: 'user_id,source,played_at,artist_norm,album_norm', ignoreDuplicates: true });
+    if (histErr) errors.push('hist:' + (histErr.message || '').slice(0, 30));
+
     if (!collectionItemId) {
-      skipped++;
+      unmatched++;
       continue;
     }
-
-    const playedAt = new Date(Number(t.date.uts) * 1000).toISOString();
 
     const { data: existing } = await admin
       .from('listen_logs')
@@ -150,7 +169,7 @@ export async function POST() {
     .eq('user_id', user.id);
 
   return NextResponse.json({
-    matched, skipped,
+    matched, skipped, unmatched,
     total: tracks.length,
     errors: errors.slice(0, 5),
   });

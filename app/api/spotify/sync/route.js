@@ -123,9 +123,10 @@ export async function POST() {
   // 5) Match + insert listen logs. We dedupe on (collection_item_id,
   //    played_at) by checking listen_logs first — Spotify can return
   //    a play we already logged if the user opens this twice quickly.
-  let matched = 0;
-  let skipped = 0;
-  const errors = [];
+  let matched     = 0;
+  let unmatched   = 0;
+  let skipped     = 0;
+  const errors    = [];
 
   for (const it of items) {
     const track = it.track;
@@ -133,15 +134,40 @@ export async function POST() {
     const artist = track.artists?.[0]?.name;
     const album  = track.album?.name;
     if (!artist || !album) continue;
-    const key = normaliseArtist(artist) + '::' + normaliseAlbumTitle(album);
-    const collectionItemId = index.get(key);
-    if (!collectionItemId) {
-      skipped++;
-      continue;
-    }
+
+    const artistNorm = normaliseArtist(artist);
+    const albumNorm  = normaliseAlbumTitle(album);
+    const key = artistNorm + '::' + albumNorm;
+    const collectionItemId = index.get(key) || null;
     const playedAt = new Date(it.played_at).toISOString();
 
-    // Dedupe — same item + same timestamp already logged
+    // 1) ALWAYS write to streaming_history — matched OR not. The
+    // discovery feature reads this table for "top albums you stream
+    // but don't own". Unique index (user, source, played_at,
+    // artist_norm, album_norm) handles re-sync deduplication via
+    // ON CONFLICT DO NOTHING.
+    const { error: histErr } = await admin
+      .from('streaming_history')
+      .upsert({
+        user_id:               user.id,
+        source:                'spotify',
+        artist:                artist,
+        album:                 album,
+        artist_norm:           artistNorm,
+        album_norm:            albumNorm,
+        played_at:             playedAt,
+        matched_collection_id: collectionItemId,
+      }, { onConflict: 'user_id,source,played_at,artist_norm,album_norm', ignoreDuplicates: true });
+    if (histErr) errors.push('hist:' + (histErr.message || '').slice(0, 30));
+
+    if (!collectionItemId) {
+      // Not in collection → discovery candidate, not a vinyl listen.
+      unmatched++;
+      continue;
+    }
+
+    // 2) Matched scrobble → also write to listen_logs for the
+    //    per-collection-item streaming counter.
     const { data: existing } = await admin
       .from('listen_logs')
       .select('id')
@@ -158,8 +184,6 @@ export async function POST() {
       collection_item_id: collectionItemId,
       played_at:          playedAt,
       source:             'spotify',
-      // notes kept as a legacy filter marker — newer queries should
-      // filter by `source` directly. Will drop on the next sweep.
       notes:              '[spotify]',
     });
     if (insErr) {
@@ -176,7 +200,7 @@ export async function POST() {
     .eq('user_id', user.id);
 
   return NextResponse.json({
-    matched, skipped,
+    matched, skipped, unmatched,
     total: items.length,
     errors: errors.slice(0, 5),
   });
