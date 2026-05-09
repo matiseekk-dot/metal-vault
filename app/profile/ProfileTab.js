@@ -777,6 +777,43 @@ export default function ProfileTab({
       {/* Display currency — USD source data converted to user's choice */}
       <CurrencyPicker/>
 
+      {/* Local cache wipe — for the "app feels weird, prices look stale"
+          situation. Clears the LRU vinyl cache + price-history + image
+          caches written by the SW. Doesn't touch user data; doesn't
+          sign out; doesn't touch anything on Supabase. Equivalent to
+          "Clear site data" in Chrome devtools, scoped to the safe
+          subset of keys. */}
+      <button onClick={async () => {
+        const ok = await mvConfirm(
+          t('profile.cache.confirm') || 'Clear local cache? Your collection stays — only cached prices and images are dropped, then reloaded next time you open them.',
+          { confirmLabel: t('profile.cache.clear') || 'Clear cache' }
+        );
+        if (!ok) return;
+        try {
+          // 1) Clear LRU vinyl cache (lib/cache.js).
+          const { vinylCache } = await import('@/lib/cache');
+          vinylCache.clear();
+          // 2) Drop SW caches that hold price/image responses. The next
+          // request repopulates them on demand.
+          if (typeof caches !== 'undefined' && caches.keys) {
+            const keys = await caches.keys();
+            await Promise.all(
+              keys.filter(k => /-(data|img)$/.test(k)).map(k => caches.delete(k))
+            );
+          }
+          toast.success(t('profile.cache.cleared') || 'Local cache cleared');
+        } catch (e) {
+          toast.error(t('profile.cache.failed') || 'Could not clear local cache');
+        }
+      }}
+        style={{
+          width: '100%', padding: '10px', marginBottom: 8,
+          background: 'none', border: '1px solid ' + C.border,
+          borderRadius: 10, color: C.dim, cursor: 'pointer', ...MONO, fontSize: 11,
+        }}>
+        ↻ {t('profile.cache.clear') || 'Clear local cache'}
+      </button>
+
       {/* Sign out */}
       <button onClick={onSignOut}
         style={{

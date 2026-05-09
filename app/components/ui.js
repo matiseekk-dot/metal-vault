@@ -6,23 +6,36 @@ import MarketComparison from '@/app/components/MarketComparison';
 import PhotoUploader from '@/app/components/PhotoUploader';
 import Icon from '@/app/components/Icon';
 import { useBackButton } from '@/lib/hooks/useBackButton';
-import { useT } from '@/lib/i18n';
+import { useT, getLocale } from '@/lib/i18n';
 import { useCurrency, useFx, formatPrice } from '@/lib/currency';
 
-// ── formatDate helper ─────────────────────────────────────────
+// ── formatDate — locale-aware via Intl.DateTimeFormat ────────────
+// Previous version used hardcoded English month abbreviations, so a
+// Polish user saw "15 Mar 2025" instead of "15 mar 2025" / "15.03.2025".
+// Intl handles month-abbreviation conventions per locale, including
+// the German "Mär" and Polish lowercase short form. Falls back to the
+// raw string for inputs we can't parse (e.g. just "1980s").
+function localeTag() {
+  const code = (typeof getLocale === 'function' ? getLocale() : 'en');
+  if (code === 'pl') return 'pl-PL';
+  if (code === 'de') return 'de-DE';
+  return 'en-US';
+}
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const s = String(dateStr).trim();
-  if (/^\d{4}$/.test(s)) return s;  // just year
+  if (/^\d{4}$/.test(s)) return s;  // just year, all locales
+  const tag = localeTag();
   try {
-    const d = new Date(s + (s.length === 7 ? '-01' : ''));  // handle YYYY-MM
-    if (isNaN(d)) return s;
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-      return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+      const d = new Date(s);
+      if (isNaN(d)) return s;
+      return new Intl.DateTimeFormat(tag, { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
     }
     if (/^\d{4}-\d{2}$/.test(s)) {
-      return months[d.getMonth()] + ' ' + d.getFullYear();
+      const d = new Date(s + '-01');
+      if (isNaN(d)) return s;
+      return new Intl.DateTimeFormat(tag, { month: 'short', year: 'numeric' }).format(d);
     }
   } catch {}
   return s;
@@ -142,8 +155,8 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
             <button onClick={e=>{e.stopPropagation();onWatchToggle(album);}}
               aria-label={isWatched ? t('search.inWatchlist') : t('search.addToWatch')}
               style={{background:'#00000066',border:'none',
-                borderRadius:6,cursor:'pointer',fontSize:18,padding:'8px 10px',
-                minWidth:36,minHeight:36,
+                borderRadius:6,cursor:'pointer',fontSize:18,padding:'10px 12px',
+                minWidth:44,minHeight:44,
                 color:isWatched?'#f5c842':'#ffffff88',lineHeight:1}}>
               {isWatched?'★':'☆'}
             </button>

@@ -4,6 +4,8 @@ import { C, MONO, BEBAS } from '@/lib/theme';
 import { lookupBarcodeLocal, queuePendingScan } from '@/lib/offline-barcode';
 import { useT } from '@/lib/i18n';
 import { useCurrency, useFx, formatPrice } from '@/lib/currency';
+import { trackBarcodeScan } from '@/lib/analytics';
+import { haptic } from '@/lib/haptics';
 
 
 function PriceTag({ label, value, color = C.accent }) {
@@ -172,6 +174,8 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
           }],
         });
         setScanCount(n => n + 1);
+        trackBarcodeScan(true);
+        haptic.success();
         setLoading(false);
         return;
       }
@@ -199,9 +203,12 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
         } else {
           setError(`No Discogs results for barcode: ${code}`);
         }
+        trackBarcodeScan(false);
       } else {
         setResult(d);
         setScanCount(n => n + 1);
+        trackBarcodeScan(true);
+        haptic.success();
       }
     } catch (e) {
       // Total fail = network error AND no SW cache. Queue.

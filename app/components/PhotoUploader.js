@@ -202,16 +202,17 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
               onClick={() => handleDelete(p.path)}
               aria-label={t('photos.delete')}
               style={{
-                // Visual hit target: 28×28 pill in the corner of the
-                // photo. Native touch area extended via padding+inset
-                // because Material/HIG want ≥44×44 — we used to ship
-                // 20×20 which mis-fired half the time on mobile.
+                // Bumped to full WCAG/HIG 44×44 minimum touch target.
+                // Earlier 32×32 + padding-inset trick still left users
+                // mis-tapping near corners on Android Chrome — we get
+                // a few support tickets per week about "delete X
+                // didn't work, photo disappeared anyway later".
                 position: 'absolute', top: 2, right: 2,
-                width: 32, height: 32, borderRadius: '50%',
+                width: 44, height: 44, borderRadius: '50%',
                 background: 'rgba(0,0,0,0.7)', border: '1px solid #444',
                 color: '#fff', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, lineHeight: 1, padding: 0,
+                fontSize: 16, lineHeight: 1, padding: 0,
               }}
             >×</button>
           </div>

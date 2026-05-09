@@ -17,6 +17,8 @@ import ListenButton from '@/app/components/ListenButton';
 import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 import ManualAddForm from '@/app/collection/ManualAddForm';
 import PriceModal from '@/app/collection/PriceModal';
+import { trackAlertCreated } from '@/lib/analytics';
+import { haptic } from '@/lib/haptics';
 // (Previously had a dynamic-import for BandsTab here — dead code, never
 // referenced inside this file, and BandsTab is also statically imported
 // by VaultTab.js. Mixing static + dynamic imports of the same module
@@ -884,6 +886,10 @@ export function CollectionTab({
         }
       }
       toast.success(t('alert.saved') || 'Alert set');
+      // Only count NEW alerts (not edits) toward the funnel — edits
+      // are a different signal (user changing their mind about target).
+      if (!editing) trackAlertCreated(alertType);
+      haptic.success();
       setShowAlertForm(null); setTargetPrice(''); setAlertType('PRICE_DROP');
       setEditingAlertId(null);
     } catch (e) {

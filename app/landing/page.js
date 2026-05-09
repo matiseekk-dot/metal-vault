@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { PRO_MONTHLY_USD, PRO_YEARLY_USD, FREE_TRIAL_DAYS, YEARLY_SAVINGS_PCT } from '@/lib/pricing';
 import { useT } from '@/lib/i18n';
 import { trackDemoStarted } from '@/lib/analytics';
+import InstallPrompt from '@/app/components/InstallPrompt';
 
 const C = { bg:'#0a0a0a',bg2:'#141414',border:'#1e1e1e',accent:'#dc2626',gold:'#f5c842',text:'#f0f0f0',muted:'#888' };
 
@@ -164,6 +165,11 @@ export default function LandingPage() {
           <a href="mailto:hello@metal-vault.app" style={{color:'#444',textDecoration:'none'}}>{t('landing.contact')}</a>
         </div>
       </div>
+
+      {/* PWA install CTA — captures beforeinstallprompt and shows a
+          discrete bar above the fold. No-op on Safari, on installed
+          PWAs, and after a 30-day dismiss. */}
+      <InstallPrompt accent={C.accent}/>
     </div>
   );
 }
