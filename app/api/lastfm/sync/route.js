@@ -194,7 +194,11 @@ export async function POST() {
   return NextResponse.json({
     matched,
     unmatched,
-    total:    albums.length,
+    // Post-dedup count = what's actually in the DB. albums.length would
+    // be inflated by Last.fm returning the same album under multiple
+    // MBIDs, which would mislead the user about how much they have.
+    total:    rows.length,
+    rawCount: albums.length,
     errors:   errors.slice(0, 5),
   });
 }

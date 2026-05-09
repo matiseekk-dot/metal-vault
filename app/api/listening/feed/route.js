@@ -48,7 +48,11 @@ export async function GET(request) {
 
   const url    = new URL(request.url);
   const source = url.searchParams.get('source') || 'all';
-  const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
+  // Cap at 5000 — power users with 15+ years of scrobbling commonly hit
+  // 1k-3k unique albums; we need headroom to return "the whole history"
+  // in a single call. 5000 rows × ~250 bytes payload = ~1.2MB JSON, fine
+  // for one page render. Anything beyond that is paginated client-side.
+  const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 5000);
 
   const items = [];
 
@@ -137,11 +141,16 @@ export async function GET(request) {
   // Only when filter allows lastfm/streaming. Each row = one album
   // with play_count = N. matched_collection_id tells us if user owns it.
   if (source === 'all' || source === 'lastfm' || source === 'streaming') {
-    // Pull a wider window than the requested limit so the dedupe pass
-    // below has enough source rows to merge — old syncs (pre-dedup fix)
-    // may have inserted the same album 3-5x, so without padding we'd
-    // return fewer unique albums than the user asked for.
-    const RAW_LIMIT = Math.max(limit * 5, 500);
+    // Pull a buffer beyond the requested limit so the dedupe pass below
+    // has enough source rows to merge — old syncs (pre-dedup fix) may
+    // have inserted the same album 3-5x, so without padding we'd return
+    // fewer unique albums than the user asked for. Post-fix syncs are
+    // already clean so the buffer mostly doesn't kick in.
+    //
+    // Supabase + PostgREST default has a soft cap around 1000 rows per
+    // query unless ranged. We use range() to defeat that ceiling for
+    // power users with thousands of unique albums.
+    const RAW_LIMIT = Math.min(limit + 500, 10000);
 
     let r2 = await sb
       .from('streaming_history')
@@ -149,7 +158,7 @@ export async function GET(request) {
       .eq('user_id', user.id)
       .eq('source', 'lastfm')
       .order('play_count', { ascending: false })
-      .limit(RAW_LIMIT);
+      .range(0, RAW_LIMIT - 1);
     if (r2.error && /column.*play_count|does not exist/i.test(r2.error.message || '')) {
       r2 = await sb
         .from('streaming_history')
@@ -157,7 +166,7 @@ export async function GET(request) {
         .eq('user_id', user.id)
         .eq('source', 'lastfm')
         .order('played_at', { ascending: false })
-        .limit(RAW_LIMIT);
+        .range(0, RAW_LIMIT - 1);
     }
 
     if (r2.error && /relation.*streaming_history|does not exist/i.test(r2.error.message || '')) {

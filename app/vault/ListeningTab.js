@@ -72,7 +72,7 @@ export default function ListeningTab({ user, onAlbumClick }) {
 
   const refresh = (currentFilter = filter) => {
     setLoading(true);
-    fetch('/api/listening/feed?limit=100&source=' + currentFilter)
+    fetch('/api/listening/feed?limit=2000&source=' + currentFilter)
       .then(r => r.ok ? r.json() : null)
       .then(d => { setItems(d?.items || []); setLoading(false); })
       .catch(() => setLoading(false));
