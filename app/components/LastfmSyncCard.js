@@ -65,11 +65,11 @@ export default function LastfmSyncCard() {
   };
 
   const sync = async () => {
-    // Last.fm sync = paginated user.getTopAlbums(period='overall').
-    // Whole account-history aggregated to one row per album. For a
-    // user since 2008 that can be 1-3k unique albums, takes 5-30s
-    // depending on pagination depth. Heads-up toast.
-    toast(t('lastfm.firstSyncWait') || 'Pulling your full Last.fm history…');
+    // Last.fm sync = paginated user.getRecentTracks (raw scrobbles)
+    // + getTopAlbums backstop, then aggregated per album in code.
+    // For a user with 100k scrobbles since 2008 this can take 1-3 min
+    // (500 pages × ~220ms). Heads-up toast so they know it's chewing.
+    toast(t('lastfm.firstSyncWait') || 'Pulling your full Last.fm history… (may take a couple minutes)');
     setBusy(true);
     try {
       const r = await fetch('/api/lastfm/sync', { method: 'POST' });
@@ -81,12 +81,16 @@ export default function LastfmSyncCard() {
         const matched   = d.matched   ?? 0;
         const unmatched = d.unmatched ?? 0;
         const total     = d.total     ?? 0;
+        const scrobbles = d.scrobbles ?? 0;
         if (total === 0) {
           toast(t('lastfm.syncNone') || 'No top albums — scrobble more first.');
         } else {
-          // "1,247 albums · 47 in collection · 1,200 for Discovery"
+          // "1,247 albums (45,231 scrobbles) · 47 in collection · 1,200 for Discovery"
+          const scrobbleNote = scrobbles > 0
+            ? ' (' + scrobbles.toLocaleString() + ' ' + (t('lastfm.toastScrobbles') || 'scrobbles') + ')'
+            : '';
           toast.success(
-            total + ' ' + (t('lastfm.toastAlbums') || 'albums') +
+            total.toLocaleString() + ' ' + (t('lastfm.toastAlbums') || 'albums') + scrobbleNote +
             ' · ' + matched + ' ' + (t('lastfm.toastInCol') || 'in collection') +
             ' · ' + unmatched + ' ' + (t('lastfm.toastForDiscovery') || 'for Discovery')
           );

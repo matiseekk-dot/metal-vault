@@ -19,7 +19,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
-import { lastfmTopAlbumsAll } from '@/lib/lastfm';
+import { lastfmTopAlbumsAll, lastfmRecentTracksAll } from '@/lib/lastfm';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;   // 5 min — pagination headroom
@@ -78,27 +78,42 @@ export async function POST() {
       .eq('source', 'lastfm');
   } catch {}
 
-  // 1) Pull all top albums.
-  let albums;
+  // 1) Pull RAW scrobbles via getRecentTracks paginated to all-time.
+  //
+  // Why not getTopAlbums? Because Last.fm's server-side aggregator
+  // silently drops scrobbles whose album metadata wasn't tagged at
+  // scrobble time — Spotify/Apple Music scrobblers historically didn't
+  // always include album info, so for many users "top albums" is far
+  // sparser than what they actually listened to. getRecentTracks gives
+  // us the complete scrobble stream (with whatever album info each
+  // scrobble carries), and we aggregate per album client-side.
+  //
+  // We ALSO call getTopAlbums as a backstop: it surfaces albums the
+  // server has aggregated from sources getRecentTracks may not include
+  // (e.g. older purged tracks, MBID-resolved entries). The two get
+  // merged later, summing playcounts where they overlap.
+  //
+  // 500 pages × 200 tracks = 100k scrobble cap. Most users top out
+  // well below this; the cap exists for the most extreme histories.
+  // Vercel maxDuration=300s headroom: 500 × 220ms = 110s, plenty.
+  let tracks = [];
+  let topAlbums = [];
   try {
-    albums = await lastfmTopAlbumsAll({
-      user:      tokenRow.username,
-      period:    'overall',
-      maxPages:  30,
-      pacingMs:  250,
-    });
+    [tracks, topAlbums] = await Promise.all([
+      lastfmRecentTracksAll({
+        user:      tokenRow.username,
+        maxPages:  500,
+        pacingMs:  220,
+      }),
+      lastfmTopAlbumsAll({
+        user:      tokenRow.username,
+        period:    'overall',
+        maxPages:  30,
+        pacingMs:  250,
+      }).catch(() => []),   // backstop is optional
+    ]);
   } catch (e) {
     return NextResponse.json({ error: 'Last.fm fetch failed: ' + e.message }, { status: 502 });
-  }
-
-  if (albums.length === 0) {
-    await admin.from('lastfm_tokens')
-      .update({ last_synced_at: new Date().toISOString() })
-      .eq('user_id', user.id);
-    return NextResponse.json({
-      matched: 0, unmatched: 0, total: 0,
-      message: 'No top albums in Last.fm history',
-    });
   }
 
   // 2) Build collection index.
@@ -113,31 +128,66 @@ export async function POST() {
     if (!index.has(k)) index.set(k, c.id);
   }
 
-  // 3) Dedupe by (artist_norm, album_norm) — Last.fm sometimes returns
-  // the same album under multiple MBIDs (live vs studio metadata, locale
-  // variants, capitalisation drift), or duplicates across pagination
-  // pages when the user has < 1000 unique albums. Without this collapse
-  // we'd insert N near-identical rows per album, each with playcount=1
-  // — and the user sees "Ulver · Flowers Of Evil · 1 play" four times
-  // in the feed.
+  // 3) Aggregate scrobbles per album. Each track that has album metadata
+  // contributes +1 to that album's playcount. Tracks without album info
+  // are dropped (can't classify them — Last.fm sometimes scrobbles
+  // singles or radio shows without album).
   const merged = new Map();   // key = artistNorm::albumNorm
-  for (const a of albums) {
+
+  for (const t of tracks) {
+    const artistName = t.artist?.name || t.artist?.['#text'] || '';
+    const albumName  = t.album?.['#text'] || (typeof t.album === 'string' ? t.album : '') || '';
+    if (!artistName || !albumName) continue;
+    const artistNorm = normaliseArtist(artistName);
+    const albumNorm  = normaliseAlbumTitle(albumName);
+    if (!artistNorm || !albumNorm) continue;
+    const key = artistNorm + '::' + albumNorm;
+    const existing = merged.get(key);
+    if (existing) {
+      existing.playcount += 1;
+    } else {
+      merged.set(key, {
+        artist:     artistName,
+        album:      albumName,
+        artistNorm,
+        albumNorm,
+        playcount:  1,
+      });
+    }
+  }
+
+  // Backstop merge: getTopAlbums may know about albums getRecentTracks
+  // didn't return (deep history, MBID-resolved). For each album we add,
+  // take MAX of (our scrobble count, server's playcount) so we don't
+  // under-count if our window missed something the server tracked.
+  for (const a of topAlbums) {
     const artistNorm = normaliseArtist(a.artist);
     const albumNorm  = normaliseAlbumTitle(a.album);
     if (!artistNorm || !albumNorm) continue;
     const key = artistNorm + '::' + albumNorm;
     const existing = merged.get(key);
+    const serverCount = Number(a.playcount) || 0;
     if (existing) {
-      existing.playcount += Number(a.playcount) || 0;
+      if (serverCount > existing.playcount) existing.playcount = serverCount;
     } else {
       merged.set(key, {
         artist:     a.artist,
         album:      a.album,
         artistNorm,
         albumNorm,
-        playcount:  Number(a.playcount) || 0,
+        playcount:  serverCount,
       });
     }
+  }
+
+  if (merged.size === 0) {
+    await admin.from('lastfm_tokens')
+      .update({ last_synced_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+    return NextResponse.json({
+      matched: 0, unmatched: 0, total: 0,
+      message: 'No albums found in Last.fm history',
+    });
   }
 
   // Build per-album rows. play_count = aggregate from Last.fm (post-dedupe).
@@ -194,12 +244,14 @@ export async function POST() {
   return NextResponse.json({
     matched,
     unmatched,
-    // Post-dedup count = what's actually in the DB. albums.length would
-    // be inflated by Last.fm returning the same album under multiple
-    // MBIDs, which would mislead the user about how much they have.
-    total:    rows.length,
-    rawCount: albums.length,
-    errors:   errors.slice(0, 5),
+    // Post-aggregation count = unique albums actually in the DB. The
+    // raw scrobble stream count goes in `scrobbles` for diagnostics
+    // (helps the user understand why an active scrobbler with 100k
+    // tracks ends up with ~2k albums after grouping).
+    total:     rows.length,
+    scrobbles: tracks.length,
+    rawCount:  topAlbums.length,
+    errors:    errors.slice(0, 5),
   });
 }
 
