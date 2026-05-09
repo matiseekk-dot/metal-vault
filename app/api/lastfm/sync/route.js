@@ -135,6 +135,7 @@ export async function POST() {
       user_id:            user.id,
       collection_item_id: collectionItemId,
       played_at:          playedAt,
+      source:             'lastfm',
       notes:              '[lastfm]',
     });
     if (insErr) {

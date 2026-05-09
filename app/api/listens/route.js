@@ -80,6 +80,11 @@ export async function POST(req) {
     side,
     duration_min:       duration,
     notes,
+    // source: 'vinyl' for everything submitted via this endpoint.
+    // Spotify/Last.fm sync routes write directly via the admin client
+    // with their own source value; we never accept that field over
+    // the public API to prevent spoofing.
+    source:             'vinyl',
   };
   if (playedAt) insert.played_at = playedAt;
 

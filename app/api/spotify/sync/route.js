@@ -157,7 +157,9 @@ export async function POST() {
       user_id:            user.id,
       collection_item_id: collectionItemId,
       played_at:          playedAt,
-      // Note marker so the user can later filter "Spotify auto-logs"
+      source:             'spotify',
+      // notes kept as a legacy filter marker — newer queries should
+      // filter by `source` directly. Will drop on the next sweep.
       notes:              '[spotify]',
     });
     if (insErr) {

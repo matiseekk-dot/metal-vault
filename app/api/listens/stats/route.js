@@ -4,12 +4,23 @@
 //
 // Returns a single payload with everything the Stats UI needs:
 //   {
-//     total: { allTime, last30d, last90d, last365d },
+//     total:     { allTime, last30d, last90d, last365d },     // VINYL only
 //     topPlayed: [{ id, artist, album, play_count, cover, last_played_at }, ...],
 //     dust:      [{ id, artist, album, days_since, cover }, ...],
 //     streak:    { current_days, longest_days, last_played_at },
-//     heatmap:   { '2026-04-30': 3, '2026-05-01': 1, ... }   // last 12 mo
+//     heatmap:   { '2026-04-30': 3, '2026-05-01': 1, ... },   // last 12 mo, VINYL
+//     streaming: {                                              // NEW (033)
+//       total: { allTime, last30d },
+//       topStreamed: [{ id, artist, album, streaming_count, cover }, ...],
+//       sources: { spotify: <count>, lastfm: <count> }
+//     }
 //   }
+//
+// All counts are VINYL-only by default — the original use case
+// ("dust collection", "haven't played in N days", "longest streak")
+// only makes sense for physical interaction. Streaming gets its own
+// block so the UI can render a separate card without conflating
+// the two signals.
 //
 // Why one route instead of four? The Stats tab renders all sections
 // together — one round-trip is faster and cheaper than four.
@@ -62,13 +73,14 @@ export async function GET(req) {
   const cut90    = new Date(now - 90  * DAY_MS).toISOString();
   const cut365   = new Date(now - 365 * DAY_MS).toISOString();
 
-  // Single fetch of the last year of play timestamps + item_ids — drives
-  // total counts, heatmap, and streak. For total counts we filter in JS;
-  // for top-played we use the denormalized `play_count` on collection.
+  // Single fetch of the last year of VINYL play timestamps + item_ids
+  // — drives total counts, heatmap, and streak. Streaming is a
+  // separate query at the end so the original signals stay clean.
   const { data: recentLogs, error: logsErr } = await sb
     .from('listen_logs')
-    .select('id, collection_item_id, played_at')
+    .select('id, collection_item_id, played_at, source')
     .eq('user_id', user.id)
+    .eq('source', 'vinyl')
     .gte('played_at', cut365)
     .order('played_at', { ascending: true });
   if (logsErr) return NextResponse.json({ error: logsErr.message }, { status: 500 });
@@ -143,6 +155,55 @@ export async function GET(req) {
     heatmap[key] = (heatmap[key] || 0) + 1;
   }
 
+  // ── Streaming block (NEW in migration 033) ─────────────────
+  // Pulled separately so vinyl stats above stay untouched. We
+  // aggregate per-source counts in last 30 days for the
+  // "where do my plays come from" pie chart, plus pull the top-
+  // streamed items from collection.streaming_count.
+  let streaming = { total: { allTime: 0, last30d: 0 }, topStreamed: [], sources: {} };
+  try {
+    // Recent streaming logs for the per-source breakdown.
+    const { data: recentStream } = await sb
+      .from('listen_logs')
+      .select('id, source, played_at')
+      .eq('user_id', user.id)
+      .in('source', ['spotify', 'lastfm'])
+      .gte('played_at', cut30);
+    const sources = { spotify: 0, lastfm: 0 };
+    let stream30 = 0;
+    for (const l of (recentStream || [])) {
+      stream30++;
+      if (sources[l.source] != null) sources[l.source]++;
+    }
+
+    // All-time streaming total from the denormalized counter.
+    const { data: streamSum } = await sb
+      .from('collection')
+      .select('streaming_count.sum()')
+      .eq('user_id', user.id)
+      .single();
+    const streamAllTime = streamSum?.sum || 0;
+
+    // Top-streamed items.
+    const { data: topStream } = await sb
+      .from('collection')
+      .select('id, artist, album, cover, streaming_count, play_count')
+      .eq('user_id', user.id)
+      .gt('streaming_count', 0)
+      .order('streaming_count', { ascending: false })
+      .limit(10);
+
+    streaming = {
+      total: { allTime: streamAllTime, last30d: stream30 },
+      topStreamed: topStream || [],
+      sources,
+    };
+  } catch (e) {
+    // streaming block is additive — failing to compute it must NOT
+    // break the rest of the stats page (older deployments may not
+    // have run migration 033 yet).
+  }
+
   return NextResponse.json({
     total: {
       allTime:   totalAllTime,
@@ -154,5 +215,6 @@ export async function GET(req) {
     dust,
     streak: { ...streak, last_played_at: lastPlayedAt },
     heatmap,
+    streaming,
   });
 }
