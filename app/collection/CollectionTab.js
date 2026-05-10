@@ -380,6 +380,35 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
           {user && <span style={{ color: '#4ade80' }}> {t('watchlist.synced')}</span>}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          {/* Pull Discogs wantlist → watchlist. The full /api/sync POST
+              already does both collection AND wantlist under type:'both',
+              but power users on Discogs add to their wantlist constantly
+              and don't want to re-sync the whole collection every time.
+              This button hits type:'wantlist' only — fast, additive,
+              non-destructive. */}
+          {user && (
+            <button onClick={async () => {
+              try {
+                const r = await fetch('/api/sync', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ type: 'wantlist' }),
+                });
+                const d = await r.json();
+                if (!r.ok) { toast.error(d.error || 'Sync failed'); return; }
+                if (d.watchAdded > 0) {
+                  toast.success((t('watchlist.syncAdded', { n: d.watchAdded }) || (d.watchAdded + ' added')));
+                  window.dispatchEvent(new CustomEvent('mv-watchlist-changed'));
+                } else {
+                  toast(t('watchlist.syncEmpty') || 'Already up to date');
+                }
+              } catch (e) { toast.error(e.message); }
+            }}
+              title={t('watchlist.syncDiscogsTitle') || 'Pull from Discogs wantlist'}
+              style={{ background: '#0d1f3a', border: '1px solid #3b82f666', borderRadius: 6, color: '#60a5fa', padding: '5px 9px', fontSize: 10, ...MONO, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              ↓ {t('watchlist.syncDiscogs') || 'Discogs'}
+            </button>
+          )}
           {user && Object.keys(alertDone).length > 0 && (
             <button onClick={checkAlertsNow}
               title={t('alert.checkNowTitle')}

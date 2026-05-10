@@ -91,6 +91,12 @@ export default function ListeningTab({ user, onAlbumClick }) {
   // in parallel and the UI shows whichever resolved.
   const [lookups,     setLookups]     = useState({});   // Discogs
   const [ebayLookups, setEbayLookups] = useState({});   // eBay
+  // Set of artist names the user follows. Powers the +Follow / ✓Following
+  // toggle on each row — followed artists feed cron/releases, daily-digest
+  // push, concerts, and recommendations. So even for artists you don't
+  // OWN on vinyl yet (just stream), follow makes sure you find out when
+  // they drop something pressable.
+  const [followed, setFollowed] = useState(new Set());
 
   const refresh = (currentFilter = filter, currentRange = range) => {
     setLoading(true);
@@ -170,6 +176,11 @@ export default function ListeningTab({ user, onAlbumClick }) {
 
   useEffect(() => {
     refresh();
+    // Hydrate the followed-artists set so per-row toggles render correct
+    // state on first paint instead of flashing "+Follow" → "✓Following".
+    fetch('/api/artists').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.artists) setFollowed(new Set(d.artists.map(a => a.artist_name)));
+    }).catch(() => {});
     if (typeof window === 'undefined') return;
     const handler = () => refresh();
     window.addEventListener('mv-streaming-changed', handler);
@@ -188,6 +199,40 @@ export default function ListeningTab({ user, onAlbumClick }) {
   const switchFilter = (id) => {
     setFilter(id);
     refresh(id, range);
+  };
+
+  const toggleFollow = async (artistName) => {
+    if (!artistName) return;
+    const isFollowing = followed.has(artistName);
+    // Optimistic UI — flip the set immediately so the user feels the tap
+    // even on a slow network. If the network call fails we'll revert.
+    setFollowed(prev => {
+      const next = new Set(prev);
+      if (isFollowing) next.delete(artistName);
+      else             next.add(artistName);
+      return next;
+    });
+    try {
+      if (isFollowing) {
+        await fetch('/api/artists?artist_name=' + encodeURIComponent(artistName), { method: 'DELETE' });
+      } else {
+        await fetch('/api/artists', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ artist_name: artistName }),
+        });
+        haptic.success();
+        track('listening_action', { action: 'follow_artist' });
+      }
+    } catch {
+      // Network failed — revert the optimistic flip.
+      setFollowed(prev => {
+        const next = new Set(prev);
+        if (isFollowing) next.add(artistName);
+        else             next.delete(artistName);
+        return next;
+      });
+    }
   };
 
   const wishlist = async (it, key) => {
@@ -409,6 +454,22 @@ export default function ListeningTab({ user, onAlbumClick }) {
                         ✓ {t('listening.badge.owned') || 'OWNED'}
                       </span>
                     )}
+                    {/* Follow-band toggle. Available on every row regardless
+                        of collection / kind — even an album you OWN may
+                        belong to a band you don't yet follow (and miss
+                        repress / release alerts for). */}
+                    <button onClick={e => { e.stopPropagation(); toggleFollow(it.artist); }}
+                      style={{
+                        fontSize: 8, ...MONO, padding: '1px 6px', borderRadius: 3,
+                        letterSpacing: '0.05em', cursor: 'pointer',
+                        background:  followed.has(it.artist) ? '#1a1a3d' : 'transparent',
+                        color:       followed.has(it.artist) ? '#a5b4fc' : C.dim,
+                        border: '1px solid ' + (followed.has(it.artist) ? '#a5b4fc44' : C.border),
+                      }}>
+                      {followed.has(it.artist)
+                        ? '★ ' + (t('listening.badge.following') || 'FOLLOWING')
+                        : '+ ' + (t('listening.badge.follow')    || 'FOLLOW')}
+                    </button>
                   </div>
                 </div>
 
