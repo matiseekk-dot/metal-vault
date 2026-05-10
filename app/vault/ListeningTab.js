@@ -149,7 +149,7 @@ export default function ListeningTab({ user, onAlbumClick }) {
     // the user wants both prices ASAP.
     Promise.all([
       guard(() => fillFrom('/api/discogs/album-lookup', setLookups,     lookups)),
-      guard(() => fillFrom('/api/ebay/album-lookup',    setEbayLookups, ebayLookups)),
+      guard(() => fillFrom('/api/listings/ebay',        setEbayLookups, ebayLookups)),
     ]).catch(() => {});
 
     return () => { cancelled = true; };   // eslint-disable-line
