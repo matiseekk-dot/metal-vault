@@ -71,6 +71,11 @@ export default function ListeningTab({ user, onAlbumClick }) {
   const [busyKey, setBusyKey] = useState(null);
 
   const [totals, setTotals] = useState({ items: 0, lastfm: 0, spotify: 0, vinyl: 0 });
+  // Lookup cache keyed on artist::album. Stores { cover, lowestPrice, currency,
+  // discogsUrl, notFound } for unmatched rows that we've resolved against
+  // Discogs. Lives in memory for the session — server-side cache (7d TTL)
+  // covers across-session reuse.
+  const [lookups, setLookups] = useState({});
 
   const refresh = (currentFilter = filter) => {
     setLoading(true);
@@ -89,6 +94,50 @@ export default function ListeningTab({ user, onAlbumClick }) {
       })
       .catch(() => setLoading(false));
   };
+
+  // ── Background Discogs resolve for unmatched rows ──────────────
+  // Items NOT in collection don't have covers (Last.fm killed image URLs
+  // in 2019) or prices. Hit the lookup endpoint in batches of 12 with
+  // 1.5s spacing — for a typical 200-item discovery slice this finishes
+  // in ~25s. Cached server-side so subsequent loads are instant.
+  useEffect(() => {
+    if (!items.length) return;
+    const targets = items.filter(it =>
+      !it.in_collection &&
+      it.kind !== 'vinyl' &&
+      !lookups[(it.artist + '::' + it.album).toLowerCase()]
+    );
+    if (targets.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      for (let i = 0; i < targets.length && !cancelled; i += 12) {
+        const slice = targets.slice(i, i + 12).map(t => ({ artist: t.artist, album: t.album }));
+        try {
+          const r = await fetch('/api/discogs/album-lookup', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ items: slice }),
+          });
+          if (!r.ok) break;   // 503 (no Discogs key) or 401 — stop trying
+          const d = await r.json();
+          if (cancelled) return;
+          setLookups(prev => {
+            const next = { ...prev };
+            for (const res of (d.results || [])) {
+              const k = (res.artist + '::' + res.album).toLowerCase();
+              next[k] = res;
+            }
+            return next;
+          });
+        } catch { break; }
+        // Small space between batches so we don't slam Discogs even if
+        // the server pacing fails.
+        if (i + 12 < targets.length) await new Promise(r => setTimeout(r, 1500));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [items]);   // eslint-disable-line
 
   useEffect(() => {
     refresh();
@@ -202,6 +251,11 @@ export default function ListeningTab({ user, onAlbumClick }) {
             const key   = (it.collection_id || (it.artist + '::' + it.album)) + '::' + (it.played_at || '') + '::' + i;
             const badge = KIND_BADGE[it.kind] || KIND_BADGE.vinyl;
             const busy  = busyKey === key;
+            const lookupKey = (it.artist + '::' + it.album).toLowerCase();
+            const lookup = !it.in_collection ? lookups[lookupKey] : null;
+            // Effective cover: collection cover first (most reliable),
+            // then Discogs lookup result.
+            const effectiveCover = it.cover || lookup?.cover || null;
             const clickable = !!it.collection_id;
             return (
               <div key={key}
@@ -217,9 +271,9 @@ export default function ListeningTab({ user, onAlbumClick }) {
                   display:       'flex', alignItems: 'center', gap: 10,
                   cursor:        clickable ? 'pointer' : 'default',
                 }}>
-                {/* Cover thumb (if available) */}
-                {it.cover ? (
-                  <img src={it.cover} alt={it.artist}
+                {/* Cover thumb — collection cover OR Discogs lookup */}
+                {effectiveCover ? (
+                  <img src={effectiveCover} alt={it.artist}
                     style={{ width: 40, height: 40, borderRadius: 4, objectFit: 'cover',
                       flexShrink: 0, border: '1px solid ' + C.border }}
                     onError={e => { e.currentTarget.style.display = 'none'; }}/>
@@ -289,6 +343,25 @@ export default function ListeningTab({ user, onAlbumClick }) {
                     }}>
                       {it.play_count}×
                     </span>
+                  )}
+
+                  {/* Discogs price — only for unowned streaming rows that
+                      we resolved against the marketplace. Click → opens
+                      the Discogs release page in a new tab so the user
+                      can buy. Implies "this would cost ~X to add". */}
+                  {lookup && !lookup.notFound && lookup.lowestPrice != null && (
+                    <a href={lookup.discogsUrl} target="_blank" rel="noopener noreferrer"
+                      onClick={e => { e.stopPropagation(); track('listening_action', { action: 'price_click', kind: it.kind }); }}
+                      style={{
+                        ...MONO, fontSize: 11, fontWeight: 600,
+                        color: '#f97316', textDecoration: 'none',
+                        background: '#3a1a06', border: '1px solid #f9731644',
+                        padding: '3px 7px', borderRadius: 6,
+                        whiteSpace: 'nowrap',
+                      }}>
+                      {(t('listening.priceFrom') || 'od') + ' '}
+                      {Number(lookup.lowestPrice).toFixed(0)} {lookup.currency || 'USD'}
+                    </a>
                   )}
 
                   {/* Wishlist if NOT owned + streaming source */}
