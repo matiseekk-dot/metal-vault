@@ -253,49 +253,64 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
               <Icon name="info" size={11} color={C.muted}/> {tn(missing.length, 'plural.bandsWithoutTm')}
             </div>
             <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 10, lineHeight: 1.5 }}>
-              {t('concerts.missingBandsHint') || 'Tych zespołów nie ma w Ticketmaster. Sprawdź gdzieś indziej — każde źródło ma inną metalową scenę.'}
+              {t('concerts.missingBandsHintLfm') || 'Tych zespołów nie ma w Ticketmaster — sprawdź na Last.fm (community-curated, najlepsza dla metalu).'}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {missing.map(name => {
-                // Bandsintown's `/a/{name}` route doesn't actually work
-                // — their canonical URLs are `/a/{numericId}-{slug}`.
-                // Their search query param IS stable though, and lands
-                // the user on a results page they can pick from.
+                // Last.fm events is the primary surface — empirically the
+                // best coverage for metal scene (Bandsintown-powered data
+                // plus community-curated indie/underground gigs). The two
+                // smaller sidekick chips (Bandsintown, Songkick) stay as
+                // alternate paths because each database catches what the
+                // others miss for the deepest niche bands.
                 const q = encodeURIComponent(name);
                 return (
                   <div key={name} style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
-                    background: C.bg3, border: '1px solid ' + C.border,
-                    borderRadius: 6, flexWrap: 'wrap',
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px',
+                    background: C.bg3, border: '1px solid ' + C.border, borderRadius: 8,
                   }}>
-                    <span style={{ flex: 1, fontSize: 11, color: C.text, ...MONO,
-                      minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {name}
-                    </span>
-                    <a href={'https://www.bandsintown.com/?query=' + q}
-                      target="_blank" rel="noopener noreferrer"
-                      title="Bandsintown"
-                      style={{
-                        fontSize: 9, ...MONO, padding: '3px 7px', borderRadius: 4,
-                        background: '#0e7c4c', color: '#fff', textDecoration: 'none',
-                        whiteSpace: 'nowrap', letterSpacing: '0.05em',
-                      }}>BIT</a>
-                    <a href={'https://www.songkick.com/search?query=' + q + '&type=artists'}
-                      target="_blank" rel="noopener noreferrer"
-                      title="Songkick"
-                      style={{
-                        fontSize: 9, ...MONO, padding: '3px 7px', borderRadius: 4,
-                        background: '#f80046', color: '#fff', textDecoration: 'none',
-                        whiteSpace: 'nowrap', letterSpacing: '0.05em',
-                      }}>SK</a>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ ...BEBAS, fontSize: 14, color: C.text, letterSpacing: '0.04em', lineHeight: 1.1,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {name}
+                      </div>
+                      {/* Sidekick chips — same row as the artist name,
+                          small font, secondary sources. */}
+                      <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                        <a href={'https://www.bandsintown.com/?query=' + q}
+                          target="_blank" rel="noopener noreferrer"
+                          title="Bandsintown"
+                          style={{
+                            fontSize: 8, ...MONO, padding: '2px 6px', borderRadius: 3,
+                            background: '#0e7c4c', color: '#fff', textDecoration: 'none',
+                            whiteSpace: 'nowrap', letterSpacing: '0.05em',
+                          }}>BIT</a>
+                        <a href={'https://www.songkick.com/search?query=' + q + '&type=artists'}
+                          target="_blank" rel="noopener noreferrer"
+                          title="Songkick"
+                          style={{
+                            fontSize: 8, ...MONO, padding: '2px 6px', borderRadius: 3,
+                            background: '#f80046', color: '#fff', textDecoration: 'none',
+                            whiteSpace: 'nowrap', letterSpacing: '0.05em',
+                          }}>SK</a>
+                      </div>
+                    </div>
+                    {/* Primary CTA — Last.fm events. Big, branded, takes
+                        the user straight to the artist's events page on
+                        the source where they're most likely to find a gig. */}
                     <a href={'https://www.last.fm/music/' + q + '/+events'}
                       target="_blank" rel="noopener noreferrer"
-                      title="Last.fm events"
                       style={{
-                        fontSize: 9, ...MONO, padding: '3px 7px', borderRadius: 4,
-                        background: '#d51007', color: '#fff', textDecoration: 'none',
-                        whiteSpace: 'nowrap', letterSpacing: '0.05em',
-                      }}>LFM</a>
+                        flexShrink: 0,
+                        padding: '8px 14px',
+                        background: '#d51007',
+                        color: '#fff', textDecoration: 'none',
+                        borderRadius: 6,
+                        ...BEBAS, fontSize: 12, letterSpacing: '0.05em',
+                        display: 'flex', alignItems: 'center', gap: 5,
+                      }}>
+                      📻 {t('concerts.checkOnLastfm') || 'LAST.FM'}
+                    </a>
                   </div>
                 );
               })}
