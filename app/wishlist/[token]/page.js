@@ -9,6 +9,7 @@
 // which respects is_public on the wishlist row.
 
 import { headers } from 'next/headers';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,10 +83,10 @@ export default async function WishlistSharePage({ params }) {
           <div style={{ fontSize: 12, color: '#888' }}>
             The link may be invalid, or the owner made the list private.
           </div>
-          <a href="/" style={{ display: 'inline-block', marginTop: 24, color: '#dc2626',
+          <Link href="/" style={{ display: 'inline-block', marginTop: 24, color: '#dc2626',
             textDecoration: 'none', fontSize: 12 }}>
             ← Open Metal Vault
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -98,10 +99,10 @@ export default async function WishlistSharePage({ params }) {
 
       {/* Header */}
       <div style={{ borderBottom: '1px solid #222', paddingBottom: 16, marginBottom: 20 }}>
-        <a href="/" style={{ color: '#dc2626', textDecoration: 'none', fontSize: 12,
+        <Link href="/" style={{ color: '#dc2626', textDecoration: 'none', fontSize: 12,
           letterSpacing: '0.18em', textTransform: 'uppercase' }}>
           🎸 Metal Vault
-        </a>
+        </Link>
         <h1 style={{ fontSize: 28, margin: '12px 0 4px', fontFamily: '"Bebas Neue", sans-serif',
           letterSpacing: '0.04em' }}>
           {wishlist.name}
@@ -181,11 +182,11 @@ export default async function WishlistSharePage({ params }) {
         <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
           Build your own wishlist
         </div>
-        <a href="/" style={{ display: 'inline-block', padding: '10px 20px',
+        <Link href="/" style={{ display: 'inline-block', padding: '10px 20px',
           background: '#dc2626', color: '#fff', textDecoration: 'none',
           borderRadius: 8, fontSize: 13, letterSpacing: '0.06em' }}>
           OPEN METAL VAULT
-        </a>
+        </Link>
       </div>
     </div>
   );
