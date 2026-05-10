@@ -13,6 +13,7 @@ import Sparkline from '@/app/components/Sparkline';
 import { rarityFromCount } from '@/lib/rarity';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm as mvConfirm } from '@/app/components/Toast';
+import WishlistsManager from '@/app/components/WishlistsManager';
 import ListenButton from '@/app/components/ListenButton';
 import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 import ManualAddForm from '@/app/collection/ManualAddForm';
@@ -92,6 +93,14 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
   // server in profiles.auto_drop_pct so the daily cron can see it.
   const [autoPct, setAutoPct]   = useState(null);
   const [autoOpen, setAutoOpen] = useState(false);
+  // Wishlists — lifted into WatchlistTab so each row can fire a quick
+  // "Add this album to a gift list" picker. Refresh handler is exposed
+  // via window event so WishlistsManager can trigger a re-pull when it
+  // mutates (create / delete).
+  const [wishlists, setWishlists] = useState([]);
+  // When the user taps the gift icon on a row, we stash that album so
+  // the picker overlay knows which item to add on confirm.
+  const [pickerAlbum, setPickerAlbum] = useState(null);
   // When non-null, the inline form is editing that alert id (PATCH
   // instead of POST). Set when clicking "Alert aktywny" on an item
   // that already has an alert.
@@ -182,6 +191,49 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
       .then(d => { if (d?.pct != null) setAutoPct(Number(d.pct)); })
       .catch(() => {});
   }, [user]);
+
+  // Wishlists list — populates the per-row "🎁+" picker.
+  // Re-fetch when the manager component fires a custom event after CRUD.
+  useEffect(() => {
+    if (!user) return;
+    const load = () => {
+      fetch('/api/wishlists')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => setWishlists(d?.wishlists || []))
+        .catch(() => {});
+    };
+    load();
+    const handler = () => load();
+    window.addEventListener('mv-wishlists-changed', handler);
+    return () => window.removeEventListener('mv-wishlists-changed', handler);
+  }, [user]);
+
+  const addToWishlist = async (wlId, album) => {
+    try {
+      const r = await fetch('/api/wishlists/' + wlId + '/items', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          artist:      album.artist,
+          album:       album.album,
+          cover:       album.cover || resolved[(album.artist + '::' + album.album).toLowerCase()]?.cover || null,
+          album_id:    album.album_id ? String(album.album_id) : null,
+          discogs_url: album.discogs_url || resolved[(album.artist + '::' + album.album).toLowerCase()]?.discogsUrl || null,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        toast.error(d.error || t('wishlists.addFailed') || 'Add failed');
+        return;
+      }
+      const wl = wishlists.find(w => w.id === wlId);
+      toast.success(
+        (t('wishlists.addedTo', { name: wl?.name }) || ('Added to ' + (wl?.name || 'wishlist')))
+      );
+      window.dispatchEvent(new CustomEvent('mv-wishlists-changed'));
+      setPickerAlbum(null);
+    } catch (e) { toast.error(e.message); }
+  };
 
   const saveAutoPct = async (newPct) => {
     setAutoPct(newPct);
@@ -531,6 +583,63 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
         </div>
       )}
 
+      {/* Gift wishlists — collapsible, owner-only. Each watchlist row
+          below also has its own "Add to gift list" picker so power users
+          can curate "buy this for me at Christmas" lists per occasion. */}
+      <WishlistsManager user={user}/>
+
+      {/* Gift-list picker overlay — appears when the user taps "🎁+" on
+          a row. Lists their wishlists; tapping one adds the album and
+          closes. Tap-outside dismisses. */}
+      {pickerAlbum && (
+        <div onClick={() => setPickerAlbum(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16,
+          }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{
+              background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12,
+              padding: 18, maxWidth: 360, width: '100%',
+            }}>
+            <div style={{ ...BEBAS, fontSize: 16, color: C.text, letterSpacing: '0.04em', marginBottom: 4 }}>
+              🎁 {t('wishlists.addToList') || 'Add to gift list'}
+            </div>
+            <div style={{ fontSize: 11, color: C.dim, ...MONO, lineHeight: 1.5, marginBottom: 12,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {pickerAlbum.artist} — {pickerAlbum.album}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {wishlists.map(wl => (
+                <button key={wl.id} onClick={() => addToWishlist(wl.id, pickerAlbum)}
+                  style={{
+                    padding: '10px 12px', textAlign: 'left',
+                    background: C.bg3, border: '1px solid ' + C.border,
+                    borderRadius: 8, color: C.text, cursor: 'pointer',
+                    ...MONO, fontSize: 12,
+                  }}>
+                  {wl.name}
+                  <span style={{ float: 'right', color: C.dim, fontSize: 10 }}>
+                    {wl.item_count || 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setPickerAlbum(null)}
+              style={{
+                marginTop: 12, width: '100%', padding: '8px',
+                background: 'transparent', border: '1px solid ' + C.border,
+                borderRadius: 8, color: C.dim, cursor: 'pointer',
+                ...MONO, fontSize: 11,
+              }}>
+              {t('common.cancel') || 'Cancel'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {sorted.map(album => {
           const id = String(album.album_id || album.id);
@@ -597,6 +706,20 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                         {(t('listening.priceFrom') || 'od') + ' '}
                         {Number(resv.lowestPrice).toFixed(0)} {resv.currency || 'USD'}
                       </a>
+                    )}
+                    {/* Add to gift list — only renders if the user has at
+                        least one wishlist (no point teasing the picker
+                        when there's nothing to pick). */}
+                    {wishlists.length > 0 && (
+                      <button onClick={e => { e.stopPropagation(); setPickerAlbum(album); }}
+                        style={{
+                          fontSize: 10, padding: '2px 7px', borderRadius: 5,
+                          background: '#1a1a3d', color: '#a5b4fc',
+                          border: '1px solid #a5b4fc44',
+                          ...MONO, cursor: 'pointer', whiteSpace: 'nowrap',
+                        }}>
+                        🎁+
+                      </button>
                     )}
                   </div>
                   {hasAlert && (
