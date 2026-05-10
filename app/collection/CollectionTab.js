@@ -1112,8 +1112,8 @@ export function CollectionTab({
               {'+ ' + t('common.add').toUpperCase()}
             </button>
           </div>
-          {/* Filter pills */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto' }}>
+          {/* Filter pills — pan-x so Android doesn't trap vertical scrolls. */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', touchAction: 'pan-x' }}>
             {[
               ['all',       t('vault.filter.all')],
               ['vinyl',     t('vault.filter.vinyl')],

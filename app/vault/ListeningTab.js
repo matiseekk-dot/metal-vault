@@ -189,8 +189,12 @@ export default function ListeningTab({ user, onAlbumClick }) {
 
   return (
     <div style={{ padding: '12px 16px' }}>
-      {/* Filter chips */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto' }}>
+      {/* Filter chips. touch-action: pan-x lets Android Chromium know
+          this element handles only horizontal pan — vertical drags
+          bubble up to the page scroller. Without this, swiping down
+          on the chips on Android does nothing (scroll-chaining quirk
+          that iOS Safari handles automatically). */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', touchAction: 'pan-x' }}>
         {FILTERS.map(f => {
           const active = filter === f.id;
           return (

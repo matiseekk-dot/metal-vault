@@ -65,7 +65,11 @@ function Heatmap({ heatmap }) {
 
   return (
     <div style={{ marginTop: 8 }}>
-      <div style={{ display: 'flex', gap: 2, overflowX: 'auto', paddingBottom: 4 }}>
+      <div style={{ display: 'flex', gap: 2, overflowX: 'auto', paddingBottom: 4,
+        // Heatmap is wider than viewport — keep horizontal swipe but
+        // let vertical drags bubble up so the Stats page still scrolls
+        // when finger starts on the heatmap (Android Chromium quirk).
+        touchAction: 'pan-x' }}>
         {weeks.map((week, wi) => (
           <div key={wi} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {week.map((day, di) => (

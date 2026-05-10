@@ -209,8 +209,10 @@ function SimilarStrip({ items, photos, onPick, title }) {
         {title} →
       </div>
       <div style={{ display:'flex', gap:8, overflowX:'auto', paddingBottom:4,
-        // Hide horizontal scrollbar but keep scroll snap for nicer touch UX
-        scrollSnapType:'x mandatory', WebkitOverflowScrolling:'touch' }}>
+        // Hide horizontal scrollbar but keep scroll snap for nicer touch UX.
+        // pan-x stops Android Chromium from eating vertical drags here.
+        scrollSnapType:'x mandatory', WebkitOverflowScrolling:'touch',
+        touchAction: 'pan-x' }}>
         {items.slice(0, 12).map(item => {
           const photo = photos[item.name];
           return (
