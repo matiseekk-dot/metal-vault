@@ -11,7 +11,8 @@
 // in profiles makes it canonically server-known.
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, supabaseAdmin } from '@/lib/supabase-server';
+import { isPremium } from '@/lib/stripe';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +40,22 @@ export async function PATCH(request) {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Premium gate. Frontend already blocks the modal for free users,
+  // but a hand-crafted PATCH would otherwise let anyone enable the
+  // server-side cron loop. The 402 status maps cleanly to the
+  // mv:upgrade event consumer.
+  let premium = false;
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('subscription_status, subscription_end, subscription_source')
+      .eq('id', user.id).maybeSingle();
+    premium = isPremium(profile);
+  } catch {}
+  if (!premium) {
+    return NextResponse.json({ error: 'Pro feature', reason: 'AUTO_DROP_ALERTS' }, { status: 402 });
+  }
 
   let body;
   try { body = await request.json(); } catch { body = {}; }

@@ -18,12 +18,18 @@ import { toast } from '@/app/components/Toast';
 import { haptic } from '@/lib/haptics';
 import { track } from '@/lib/analytics';
 
-export default function Recommendations() {
+export default function Recommendations({ premium = false }) {
   const t = useT();
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [followedSet, setFollowedSet] = useState(new Set());
   const [busyName, setBusyName] = useState(null);
+
+  // Free tier sees a preview of the algorithm's output (top 3); Pro
+  // sees the full 12. Both pull the same endpoint — gating lives in
+  // the render layer because the discovery COST (Last.fm calls,
+  // aggregation) is the same regardless of how many we display.
+  const FREE_LIMIT = 3;
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +87,7 @@ export default function Recommendations() {
         )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {data.recommendations.map((r, i) => {
+        {(premium ? data.recommendations : data.recommendations.slice(0, FREE_LIMIT)).map((r, i) => {
           const isFollowed = followedSet.has(r.name);
           const isBusy     = busyName === r.name;
           return (
@@ -129,6 +135,28 @@ export default function Recommendations() {
             </div>
           );
         })}
+        {/* Upgrade CTA — only when free user has more recs hidden than
+            shown. Tapping the row dispatches the global mv:upgrade
+            event which mounts UpgradeModal with reason=RECOMMENDATIONS
+            so we can A/B test paywall copy per feature. */}
+        {!premium && data.recommendations.length > FREE_LIMIT && (
+          <button onClick={() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'RECOMMENDATIONS' } }));
+            }
+          }}
+            style={{
+              marginTop: 8, padding: '10px 12px',
+              background: 'linear-gradient(135deg,#1a0a00,#2a1000)',
+              border: '1px solid ' + C.accent + '66',
+              borderRadius: 8, cursor: 'pointer',
+              color: C.text, ...MONO, fontSize: 11, textAlign: 'center',
+              letterSpacing: '0.04em',
+            }}>
+            ✨ {(t('reco.moreInPro', { n: data.recommendations.length - FREE_LIMIT })
+                 || ('+' + (data.recommendations.length - FREE_LIMIT) + ' więcej w Pro →'))}
+          </button>
+        )}
       </div>
     </div>
   );

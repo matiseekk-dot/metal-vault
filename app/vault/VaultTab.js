@@ -118,6 +118,7 @@ export default function VaultTab(props) {
           <ListeningTab
             user={props.user}
             onAlbumClick={props.onAlbumClick}
+            premium={props.premium}
           />
         )}
         {sub === 'search' && (

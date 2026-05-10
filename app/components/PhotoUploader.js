@@ -14,6 +14,7 @@ import { useT } from '@/lib/i18n';
 import { C, MONO } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 import { compressImage } from '@/lib/photo-compress';
+import SleeveAnnotator from '@/app/components/SleeveAnnotator';
 
 const FREE_LIMIT       = 0;     // Pro-only feature
 const PRO_LIMIT        = 6;
@@ -36,6 +37,9 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
   const [uploading, setUploading] = useState(false);
   const [error,     setError]     = useState(null);
   const [lightbox,  setLightbox]  = useState(null);
+  // Annotator state — which photo (by path) is currently open in the
+  // sleeve-defect editor. null = closed.
+  const [annotating, setAnnotating] = useState(null);
   const fileInput = useRef(null);
 
   const limit = premium ? PRO_LIMIT : FREE_LIMIT;
@@ -198,15 +202,27 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
               style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
               loading="lazy"
             />
+            {/* Annotation count badge — only shows when this photo has
+                defect markers. Tap-anywhere (the whole badge) opens
+                the editor; helps power users see "yes, this one has
+                annotations" without entering the editor blindly. */}
+            {p.annotations?.length > 0 && (
+              <div style={{
+                position: 'absolute', bottom: 4, left: 4,
+                background: 'rgba(0,0,0,0.7)', border: '1px solid ' + C.accent + '88',
+                borderRadius: 4, padding: '2px 6px',
+                color: C.accent, ...MONO, fontSize: 9,
+                letterSpacing: '0.05em',
+                pointerEvents: 'none',
+              }}>
+                🩹 {p.annotations.length}
+              </div>
+            )}
             <button
               onClick={() => handleDelete(p.path)}
               aria-label={t('photos.delete')}
               style={{
                 // Bumped to full WCAG/HIG 44×44 minimum touch target.
-                // Earlier 32×32 + padding-inset trick still left users
-                // mis-tapping near corners on Android Chrome — we get
-                // a few support tickets per week about "delete X
-                // didn't work, photo disappeared anyway later".
                 position: 'absolute', top: 2, right: 2,
                 width: 44, height: 44, borderRadius: '50%',
                 background: 'rgba(0,0,0,0.7)', border: '1px solid #444',
@@ -215,6 +231,32 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
                 fontSize: 16, lineHeight: 1, padding: 0,
               }}
             >×</button>
+            {/* Annotate (Pro) — opens SleeveAnnotator overlay. Free
+                users see the button but tapping triggers the upgrade
+                modal via mv:upgrade event from the API 402 path. */}
+            <button
+              onClick={() => {
+                if (!premium) {
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'ANNOTATIONS' } }));
+                  }
+                  return;
+                }
+                setAnnotating(p);
+              }}
+              aria-label={t('photos.annotate') || 'Oznacz defekty'}
+              title={premium ? (t('photos.annotate') || 'Oznacz defekty')
+                             : (t('photos.annotateProOnly') || 'Pro — kliknij by upgradować')}
+              style={{
+                position: 'absolute', bottom: 2, right: 2,
+                width: 44, height: 44, borderRadius: '50%',
+                background: 'rgba(0,0,0,0.7)',
+                border: '1px solid ' + (premium ? C.accent + '88' : '#666'),
+                color: premium ? C.accent : '#bbb', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16, lineHeight: 1, padding: 0,
+              }}
+            >🩹</button>
           </div>
         ))}
 
@@ -286,6 +328,32 @@ export default function PhotoUploader({ collectionId, photos: initialPhotos = []
 
       {lightbox && (
         <PhotoLightbox src={lightbox} onClose={() => setLightbox(null)} />
+      )}
+
+      {/* Annotator overlay — full-screen editor for marking defects on
+          one photo at a time. Saves via PATCH /api/photos/annotate;
+          on success we splice the returned photo back into local
+          state so the badge count + read-only overlay updates in
+          place without a refetch. */}
+      {annotating && (
+        <SleeveAnnotator
+          photo={annotating}
+          collectionItemId={collectionId}
+          onClose={() => setAnnotating(null)}
+          onSaved={(updated) => {
+            setPhotos(prev => prev.map(p => p.path === updated.path ? updated : p));
+            // Propagate up so VinylModal's parent collection state
+            // reflects the change too (annotations are part of
+            // user_photos which is read across multiple surfaces).
+            onPhotosChange && onPhotosChange(
+              collectionId,
+              photos.map(p => p.path === updated.path ? updated : p)
+            );
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('mv-collection-changed'));
+            }
+          }}
+        />
       )}
 
       <style jsx>{`

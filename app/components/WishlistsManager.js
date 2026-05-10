@@ -18,7 +18,14 @@ import { useT } from '@/lib/i18n';
 import { toast, confirm as mvConfirm } from '@/app/components/Toast';
 import { haptic } from '@/lib/haptics';
 
-export default function WishlistsManager({ user }) {
+export default function WishlistsManager({ user, premium = false }) {
+  // Free tier: 1 wishlist. Pro: unlimited. The gate lives client-side
+  // here because the cost of creating an extra row in Supabase is tiny
+  // — surfacing the limit visibly is more valuable than server enforcement.
+  // Power users who bypass the UI gate by hand-crafting POST would still
+  // get rate-limited by the regular auth + RLS path; this is product
+  // gating, not security gating.
+  const FREE_WISHLISTS = 1;
   const t = useT();
   const [lists, setLists]     = useState([]);
   const [open, setOpen]       = useState(false);
@@ -68,6 +75,16 @@ export default function WishlistsManager({ user }) {
     const name = newName.trim();
     if (!name) {
       toast.error(t('wishlists.nameRequired') || 'Wpisz nazwę listy');
+      return;
+    }
+    // Free-tier hard stop. Existing list gets the slot; this only
+    // blocks creating a SECOND one. We trigger the global paywall
+    // event so the UpgradeModal pops with the right reason for
+    // analytics segmentation.
+    if (!premium && lists.length >= FREE_WISHLISTS) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'MULTIPLE_WISHLISTS' } }));
+      }
       return;
     }
     setCreating(true);

@@ -77,7 +77,7 @@ function FormatPlayedAt({ iso, kind, count }) {
   return <span>{d.toLocaleDateString()}</span>;
 }
 
-export default function ListeningTab({ user, onAlbumClick }) {
+export default function ListeningTab({ user, onAlbumClick, premium = false }) {
   const t = useT();
   const [filter, setFilter] = useState('all');
   const [range,  setRange]  = useState('all');
@@ -389,9 +389,10 @@ export default function ListeningTab({ user, onAlbumClick }) {
           shows when there's enough listening data to seed it (the API
           self-empty-states). Available across all and streaming views;
           hidden under vinyl-only since recs are about expanding listening
-          horizon, which is more streaming-shaped behaviour. */}
+          horizon, which is more streaming-shaped behaviour.
+          Free tier sees 3 recs + "Pro for full list"; Pro sees all 12. */}
       {(filter === 'all' || filter === 'streaming') && (
-        <Recommendations/>
+        <Recommendations premium={premium}/>
       )}
 
       {/* Feed */}

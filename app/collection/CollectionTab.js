@@ -75,7 +75,7 @@ function PortfolioChart({ snapshots }) {
 }
 
 // ── WatchlistTab ──────────────────────────────────────────────────
-export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCover }) {
+export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCover, premium = false }) {
   const t = useT();
   const [sort, setSort]           = useState('added');
   const [alertItem, setAlertItem]     = useState(null);
@@ -511,7 +511,15 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
               Single user-level setting beats configuring 50 alerts
               one by one. */}
           {user && (
-            <button onClick={() => setAutoOpen(true)}
+            <button onClick={() => {
+              if (!premium) {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('mv:upgrade', { detail: { reason: 'AUTO_DROP_ALERTS' } }));
+                }
+                return;
+              }
+              setAutoOpen(true);
+            }}
               title={t('autoDrop.title') || 'Auto price-drop alerts'}
               style={{
                 background: autoPct != null ? '#3a1a06' : C.bg3,
@@ -592,8 +600,9 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
 
       {/* Gift wishlists — collapsible, owner-only. Each watchlist row
           below also has its own "Add to gift list" picker so power users
-          can curate "buy this for me at Christmas" lists per occasion. */}
-      <WishlistsManager user={user}/>
+          can curate "buy this for me at Christmas" lists per occasion.
+          Premium gates list count (1 free → unlimited Pro). */}
+      <WishlistsManager user={user} premium={premium}/>
 
       {/* Gift-list picker overlay — appears when the user taps "🎁+" on
           a row. Lists their wishlists; tapping one adds the album and
