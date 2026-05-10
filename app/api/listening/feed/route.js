@@ -54,93 +54,96 @@ export async function GET(request) {
   // for one page render. Anything beyond that is paginated client-side.
   const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 5000);
 
+  // Time-range filter. Applied to listen_logs.played_at (vinyl + spotify
+  // have real per-event timestamps). Last.fm aggregates use synthetic
+  // played_at (sync time) so a since-filter would be meaningless — for
+  // any non-"all" range we skip the lastfm pull entirely.
+  const sinceParam = url.searchParams.get('since') || 'all';
+  let sinceIso = null;
+  if (sinceParam === '30d')  sinceIso = new Date(Date.now() -  30*86400000).toISOString();
+  else if (sinceParam === '90d')  sinceIso = new Date(Date.now() -  90*86400000).toISOString();
+  else if (sinceParam === '365d') sinceIso = new Date(Date.now() - 365*86400000).toISOString();
+
   const items = [];
 
   // ── 1. Pull listen_logs (vinyl + spotify) ───────────────────
-  // listen_logs has collection_item_id FK so in_collection = true
-  // for every row here.
-  //
-  // Treatment differs by source:
-  //   • vinyl   → keep per-event (each ▶ tap is a meaningful spin)
-  //   • spotify → AGGREGATE per album (user wants "płytami nie utwór":
-  //               many per-track scrobbles of the same album collapse to
-  //               one feed row with play_count = N, played_at = most recent)
+  // Both source types aggregated per album now: each row in the feed
+  // represents one album with play_count = number of spins/scrobbles
+  // and played_at = most recent. User wanted symmetry between vinyl
+  // and digital views — "5× plays" reads the same for both sources.
+  // Per-event detail still available in VinylModal on row tap.
   if (source === 'all' || source === 'vinyl' || source === 'spotify' || source === 'streaming') {
     const sourceFilter = source === 'vinyl'    ? ['vinyl']
                        : source === 'spotify'  ? ['spotify']
                        : source === 'streaming'? ['spotify']  // listen_logs only has spotify under "streaming"
                        :                         ['vinyl', 'spotify'];
 
-    // Pull a wide window so per-album aggregation actually has something
-    // to roll up (5 scrobbles of an album = 1 row, but we still need the
-    // raw 5 to count them).
-    const RAW_LIMIT = 2000;
+    // Pull a wide window so per-album aggregation has enough raw events
+    // to roll up. 5 spins of an album collapse to 1 row, but we need
+    // the raw 5 to count them.
+    const RAW_LIMIT = 5000;
 
-    let r1 = await sb.from('listen_logs')
+    let q = sb.from('listen_logs')
       .select('id, played_at, source, collection_item_id, collection:collection_item_id(id, artist, album, cover)')
       .eq('user_id', user.id)
       .in('source', sourceFilter)
       .order('played_at', { ascending: false })
       .limit(RAW_LIMIT);
+    if (sinceIso) q = q.gte('played_at', sinceIso);
+    let r1 = await q;
     if (r1.error && /column.*source|does not exist/i.test(r1.error.message || '')) {
       // pre-033 fallback: no source column, treat all as vinyl
-      r1 = await sb.from('listen_logs')
+      let q2 = sb.from('listen_logs')
         .select('id, played_at, collection_item_id, collection:collection_item_id(id, artist, album, cover)')
         .eq('user_id', user.id)
         .order('played_at', { ascending: false })
         .limit(RAW_LIMIT);
+      if (sinceIso) q2 = q2.gte('played_at', sinceIso);
+      r1 = await q2;
     }
 
-    // Spotify per-track → per-album buckets.
-    const spotifyBuckets = new Map();
+    // Per-album buckets, keyed by (kind, collection.id). Same album played
+    // on vinyl AND via Spotify gets two rows so the user can see both
+    // engagement modes side by side.
+    const buckets = new Map();   // key = `${kind}::${collectionId}`
 
     for (const row of (r1.data || [])) {
       if (!row.collection) continue;   // FK orphan — skip
       const kind = row.source || 'vinyl';
-
-      if (kind === 'spotify') {
-        const id = row.collection.id;
-        let b = spotifyBuckets.get(id);
-        if (!b) {
-          b = {
-            kind:          'spotify',
-            played_at:     row.played_at,
-            artist:        row.collection.artist,
-            album:         row.collection.album,
-            cover:         row.collection.cover,
-            in_collection: true,
-            collection_id: id,
-            play_count:    0,
-            watched:       false,
-          };
-          spotifyBuckets.set(id, b);
-        }
-        b.play_count++;
-        // played_at row is sorted desc, so the FIRST hit is already the
-        // most recent — no need to compare. Leave b.played_at alone.
-      } else {
-        // Vinyl / unknown source — emit per-event row.
-        items.push({
+      const id   = row.collection.id;
+      const key  = kind + '::' + id;
+      let b = buckets.get(key);
+      if (!b) {
+        b = {
           kind,
           played_at:     row.played_at,
           artist:        row.collection.artist,
           album:         row.collection.album,
           cover:         row.collection.cover,
           in_collection: true,
-          collection_id: row.collection.id,
-          play_count:    1,
+          collection_id: id,
+          play_count:    0,
           watched:       false,
-        });
+        };
+        buckets.set(key, b);
       }
+      b.play_count++;
+      // rows arrive ordered by played_at desc, so the first time we see
+      // a bucket its played_at is already the most recent — leave it.
     }
 
-    items.push(...spotifyBuckets.values());
+    items.push(...buckets.values());
   }
 
   // ── 2. Pull streaming_history rows (Last.fm aggregates) ────
   // Only when filter allows lastfm/streaming. Each row = one album
   // with play_count = N. matched_collection_id tells us if user owns it.
-  if (source === 'all' || source === 'lastfm' || source === 'streaming') {
+  //
+  // Last.fm's played_at is synthetic (sync time) so it can't honour a
+  // time-range filter — for any since-restricted view we omit Last.fm
+  // entirely. User who wants "last 30 days" expects per-event truth,
+  // not an all-time aggregate mislabelled into the window.
+  if ((source === 'all' || source === 'lastfm' || source === 'streaming') && !sinceIso) {
     // Pull a buffer beyond the requested limit so the dedupe pass below
     // has enough source rows to merge — old syncs (pre-dedup fix) may
     // have inserted the same album 3-5x, so without padding we'd return
@@ -238,26 +241,17 @@ export async function GET(request) {
     }
   }
 
-  // Sort:
-  //   • lastfm + spotify aggregates  → by play_count desc (most played top)
-  //   • vinyl per-event              → by played_at desc (recent top)
-  //   • mixed default                → aggregates by play_count first,
-  //                                    then chronological vinyl
-  if (source === 'lastfm') {
-    items.sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
-  } else if (source === 'spotify' || source === 'streaming') {
-    items.sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
-  } else if (source === 'vinyl') {
-    items.sort((a, b) => String(b.played_at).localeCompare(String(a.played_at)));
-  } else {
-    // ALL — aggregates first (Last.fm + Spotify per-album), then vinyl spins.
-    const aggs   = items.filter(i => i.kind === 'lastfm' || i.kind === 'spotify');
-    const spins  = items.filter(i => i.kind !== 'lastfm' && i.kind !== 'spotify');
-    aggs.sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
-    spins.sort((a, b) => String(b.played_at).localeCompare(String(a.played_at)));
-    items.length = 0;
-    items.push(...aggs, ...spins);
-  }
+  // Everything is per-album aggregated now → unified sort by play_count
+  // desc. "Most played first" reads consistently across vinyl, Spotify
+  // and Last.fm, and a time-range filter scopes the input rather than
+  // changing the sort. Tiebreaker: most recent activity wins, so two
+  // albums each played 3 times surface the one you played yesterday
+  // above the one you played 6 months ago.
+  items.sort((a, b) => {
+    const pc = (b.play_count || 0) - (a.play_count || 0);
+    if (pc !== 0) return pc;
+    return String(b.played_at || '').localeCompare(String(a.played_at || ''));
+  });
 
   return NextResponse.json({
     items: items.slice(0, limit),

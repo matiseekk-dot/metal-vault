@@ -36,6 +36,17 @@ const FILTERS = [
   { id: 'streaming', i18n: 'listening.filter.streaming' },
 ];
 
+// Time-range chips. Last.fm aggregates have synthetic timestamps so a
+// non-"all" range hides them — the API filters them out automatically.
+// 'all' is the default since most users want lifetime totals on first
+// visit (matches what ListenStats / heatmap already show).
+const RANGES = [
+  { id: 'all',  i18n: 'listening.range.all',  label: 'Wszystko' },
+  { id: '30d',  i18n: 'listening.range.30d',  label: '30 dni'   },
+  { id: '90d',  i18n: 'listening.range.90d',  label: '90 dni'   },
+  { id: '365d', i18n: 'listening.range.365d', label: 'Rok'      },
+];
+
 const KIND_BADGE = {
   vinyl:   { label: 'VINYL',    color: '#dc2626', icon: '💿' },
   spotify: { label: 'SPOTIFY',  color: '#1db954', icon: '🟢' },
@@ -43,13 +54,13 @@ const KIND_BADGE = {
 };
 
 function FormatPlayedAt({ iso, kind, count }) {
-  // Last.fm aggregates use played_at = sync time, not real listens →
-  // render play_count as the primary signal.
-  // Spotify rows are now aggregated per album server-side, so when
-  // count > 1 we show "N plays" too. count === 1 falls through to the
-  // timestamp ("when did you last spin this") for both vinyl and one-off
-  // Spotify scrobbles.
-  if (kind === 'lastfm' || (kind === 'spotify' && count > 1)) {
+  // All sources now aggregated per album. When count > 1 the play count
+  // is the primary signal ("47 plays"). For count === 1 we fall through
+  // to the timestamp display so the row still tells you WHEN you last
+  // engaged — useful for one-time vinyl spins or freshly-scrobbled albums.
+  // Last.fm always shows count even at 1 because its timestamp is
+  // synthetic (sync time, not real play time).
+  if (kind === 'lastfm' || count > 1) {
     return <span>{count} {count === 1 ? 'play' : 'plays'}</span>;
   }
   if (!iso) return null;
@@ -68,6 +79,7 @@ function FormatPlayedAt({ iso, kind, count }) {
 export default function ListeningTab({ user, onAlbumClick }) {
   const t = useT();
   const [filter, setFilter] = useState('all');
+  const [range,  setRange]  = useState('all');
   const [items,  setItems]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState(null);
@@ -80,9 +92,9 @@ export default function ListeningTab({ user, onAlbumClick }) {
   const [lookups,     setLookups]     = useState({});   // Discogs
   const [ebayLookups, setEbayLookups] = useState({});   // eBay
 
-  const refresh = (currentFilter = filter) => {
+  const refresh = (currentFilter = filter, currentRange = range) => {
     setLoading(true);
-    fetch('/api/listening/feed?limit=2000&source=' + currentFilter)
+    fetch('/api/listening/feed?limit=2000&source=' + currentFilter + '&since=' + currentRange)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         const list = d?.items || [];
@@ -168,9 +180,14 @@ export default function ListeningTab({ user, onAlbumClick }) {
     };
   }, []);  // eslint-disable-line
 
+  const switchRange = (id) => {
+    setRange(id);
+    refresh(filter, id);
+  };
+
   const switchFilter = (id) => {
     setFilter(id);
-    refresh(id);
+    refresh(id, range);
   };
 
   const wishlist = async (it, key) => {
@@ -227,6 +244,33 @@ export default function ListeningTab({ user, onAlbumClick }) {
                 flexShrink: 0,
               }}>
               {t(f.i18n) || f.id}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Time-range chips — Wszystko / 30d / 90d / Rok. Scopes the feed
+          to a window of recent listening activity. Last.fm aggregates
+          drop out of any non-"all" range because their played_at is
+          synthetic (sync time). */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto',
+        touchAction: 'pan-x' }}>
+        {RANGES.map(r => {
+          const active = range === r.id;
+          return (
+            <button key={r.id} onClick={() => switchRange(r.id)}
+              style={{
+                padding: '5px 12px', borderRadius: 14,
+                background: active ? C.bg3 : 'transparent',
+                color:      active ? C.text : C.dim,
+                border:     '1px solid ' + (active ? C.border : 'transparent'),
+                cursor:     'pointer', fontSize: 10, ...MONO,
+                whiteSpace: 'nowrap',
+                minHeight: 32,
+                flexShrink: 0,
+                letterSpacing: '0.04em',
+              }}>
+              {t(r.i18n) || r.label}
             </button>
           );
         })}
@@ -362,18 +406,20 @@ export default function ListeningTab({ user, onAlbumClick }) {
                   display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
                   gap: 6, flexShrink: 0,
                 }}>
-                  {/* Big play count for streaming aggregates — the "what's
-                      best" signal. Color-graded so 50+ pops harder than a
-                      one-time scrobble. */}
-                  {(it.kind === 'lastfm' || it.kind === 'spotify') && (it.play_count || 0) > 0 && (
+                  {/* Big play count for all per-album aggregates — the
+                      "what's best" signal. Vinyl thresholds are tighter
+                      than streaming (10 vinyl spins is genuinely heavy
+                      rotation, vs 10 scrobbles which is one casual
+                      listen-through). */}
+                  {(it.play_count || 0) > 0 && (
                     <span style={{
                       ...BEBAS,
-                      fontSize:    (it.play_count >= 50) ? 24
-                                 : (it.play_count >= 10) ? 20
-                                 : 16,
-                      color:       (it.play_count >= 50) ? '#f97316'
-                                 : (it.play_count >= 10) ? C.accent
-                                 : C.muted,
+                      fontSize:    (it.kind === 'vinyl'
+                                       ? (it.play_count >= 10 ? 24 : it.play_count >= 3 ? 20 : 16)
+                                       : (it.play_count >= 50 ? 24 : it.play_count >= 10 ? 20 : 16)),
+                      color:       (it.kind === 'vinyl'
+                                       ? (it.play_count >= 10 ? '#f97316' : it.play_count >= 3 ? C.accent : C.muted)
+                                       : (it.play_count >= 50 ? '#f97316' : it.play_count >= 10 ? C.accent : C.muted)),
                       lineHeight:  1,
                       letterSpacing: '0.02em',
                     }}>
