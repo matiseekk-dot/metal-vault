@@ -70,11 +70,23 @@ export default function ListeningTab({ user, onAlbumClick }) {
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState(null);
 
+  const [totals, setTotals] = useState({ items: 0, lastfm: 0, spotify: 0, vinyl: 0 });
+
   const refresh = (currentFilter = filter) => {
     setLoading(true);
     fetch('/api/listening/feed?limit=2000&source=' + currentFilter)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { setItems(d?.items || []); setLoading(false); })
+      .then(d => {
+        const list = d?.items || [];
+        setItems(list);
+        setTotals({
+          items:   list.length,
+          lastfm:  list.filter(x => x.kind === 'lastfm').length,
+          spotify: list.filter(x => x.kind === 'spotify').length,
+          vinyl:   list.filter(x => x.kind === 'vinyl').length,
+        });
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   };
 
@@ -149,6 +161,22 @@ export default function ListeningTab({ user, onAlbumClick }) {
           );
         })}
       </div>
+
+      {/* Counter strip — diagnostic + at-a-glance summary. If it shows
+          0 / 0 / 0 the user knows their sync didn't land anything. */}
+      {!loading && totals.items > 0 && (
+        <div style={{
+          display: 'flex', gap: 10, marginBottom: 10, padding: '6px 10px',
+          background: C.bg2, border: '1px solid ' + C.border, borderRadius: 8,
+          fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.04em',
+          flexWrap: 'wrap',
+        }}>
+          <span><strong style={{ color: C.text }}>{totals.items}</strong> {t('listening.totals.items') || 'total'}</span>
+          {totals.lastfm  > 0 && <span>· <strong style={{ color: '#d51007' }}>{totals.lastfm}</strong> Last.fm</span>}
+          {totals.spotify > 0 && <span>· <strong style={{ color: '#1db954' }}>{totals.spotify}</strong> Spotify</span>}
+          {totals.vinyl   > 0 && <span>· <strong style={{ color: '#dc2626' }}>{totals.vinyl}</strong> Vinyl</span>}
+        </div>
+      )}
 
       {/* Discovery card on top — "Brak na winylu, może kup" */}
       <StreamingDiscoveries/>

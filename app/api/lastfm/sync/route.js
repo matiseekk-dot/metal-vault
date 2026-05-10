@@ -46,10 +46,41 @@ export async function GET() {
     .select('username, last_synced_at')
     .eq('user_id', user.id)
     .maybeSingle();
+
+  // Diagnostic counts — surface to the UI so the user can immediately
+  // see whether the sync actually populated streaming_history. If the
+  // card says "Connected · 0 albums" they know to tap SYNC NOW; if it
+  // says "1,247 albums" but the feed shows fewer, the issue is in the
+  // feed query, not the sync.
+  let albumCount  = 0;
+  let scrobbleSum = 0;
+  if (data) {
+    try {
+      const { count } = await sb.from('streaming_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('source', 'lastfm');
+      albumCount = count || 0;
+
+      // Sum play_count via a tiny aggregation page — Supabase doesn't
+      // expose SQL SUM directly, so we paginate the play_count column
+      // in big chunks and sum in JS. For typical ≤ 10k row counts this
+      // is one round trip.
+      const { data: pcRows } = await sb.from('streaming_history')
+        .select('play_count')
+        .eq('user_id', user.id)
+        .eq('source', 'lastfm')
+        .range(0, 9999);
+      for (const r of (pcRows || [])) scrobbleSum += Number(r.play_count) || 1;
+    } catch {}
+  }
+
   return NextResponse.json({
     connected:    !!data,
     username:     data?.username || null,
     lastSyncedAt: data?.last_synced_at || null,
+    albumCount,
+    scrobbleSum,
   });
 }
 

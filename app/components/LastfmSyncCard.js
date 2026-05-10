@@ -139,6 +139,22 @@ export default function LastfmSyncCard() {
               ? (t('lastfm.connectedAs') || 'Connected as') + ' ' + (state.username || 'unknown')
               : (t('lastfm.pitch') || 'Bridges Apple Music / Tidal / YT Music via scrobblers')}
           </div>
+          {/* Live counts — diagnostic + reassurance. After SYNC the user
+              sees this update to "1247 albums · 45,000 plays" so they
+              know the data actually landed. Zero = something to fix. */}
+          {state.connected && (state.albumCount > 0 || state.scrobbleSum > 0) && (
+            <div style={{ fontSize: 10, color: C.accent, ...MONO, marginTop: 2,
+              letterSpacing: '0.04em' }}>
+              {(state.albumCount || 0).toLocaleString()} {t('lastfm.toastAlbums') || 'albums'}
+              {' · '}
+              {(state.scrobbleSum || 0).toLocaleString()} {t('lastfm.toastScrobbles') || 'plays'}
+            </div>
+          )}
+          {state.connected && state.albumCount === 0 && (
+            <div style={{ fontSize: 10, color: '#f97316', ...MONO, marginTop: 2 }}>
+              {t('lastfm.noDataYet') || '⚠ no albums in DB — tap SYNC NOW'}
+            </div>
+          )}
         </div>
       </div>
 
