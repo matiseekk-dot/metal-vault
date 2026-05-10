@@ -24,47 +24,63 @@ async function fetchWishlist(token, baseUrl) {
 }
 
 async function resolveBaseUrl() {
-  // In production we know the canonical URL via env; in dev we infer
-  // from the request host so the SSR fetch hits the same origin.
+  // Prefer the env var — works at build time AND request time, no
+  // request-context dependency. headers() is only safe inside a
+  // dynamic request scope, and during Vercel build it can throw
+  // ("dynamic context not available") even with force-dynamic on
+  // the page, because generateMetadata may be evaluated for OG
+  // pre-flight. Wrapped in try so a missing context falls back to
+  // the canonical URL.
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  const h = await headers();
-  const host = h.get('host') || 'localhost:3000';
-  const proto = h.get('x-forwarded-proto') || 'http';
-  return proto + '://' + host;
+  if (process.env.VERCEL_URL)         return 'https://' + process.env.VERCEL_URL;
+  try {
+    const h = await headers();
+    const host = h.get('host') || 'localhost:3000';
+    const proto = h.get('x-forwarded-proto') || 'http';
+    return proto + '://' + host;
+  } catch {
+    return 'http://localhost:3000';
+  }
 }
 
 export async function generateMetadata({ params }) {
-  const { token } = await params;
-  const base = await resolveBaseUrl();
-  const data = await fetchWishlist(token, base);
-  if (!data?.wishlist) {
-    return { title: 'Wishlist not found · Metal Vault' };
-  }
-  const name = data.wishlist.name || 'Wishlist';
-  const owner = data.wishlist.owner_name ? ' · ' + data.wishlist.owner_name : '';
-  const desc = data.wishlist.description
-    || (data.items.length + ' albums · gift wishlist on Metal Vault');
-  // First item's cover doubles as og:image — gives the share preview
-  // a real album sleeve to render.
-  const ogImage = data.items.find(i => i.cover)?.cover || base + '/icons/icon-512.png';
+  // Defensive: if anything throws (no request context during a Vercel
+  // build sweep, Supabase env missing, network) we still want the page
+  // to render. Falls back to a generic title so the route isn't a
+  // hard build-blocker.
+  try {
+    const { token } = await params;
+    const base = await resolveBaseUrl();
+    const data = await fetchWishlist(token, base);
+    if (!data?.wishlist) {
+      return { title: 'Wishlist not found · Metal Vault' };
+    }
+    const name = data.wishlist.name || 'Wishlist';
+    const owner = data.wishlist.owner_name ? ' · ' + data.wishlist.owner_name : '';
+    const desc = data.wishlist.description
+      || (data.items.length + ' albums · gift wishlist on Metal Vault');
+    const ogImage = data.items.find(i => i.cover)?.cover || base + '/icons/icon-512.png';
 
-  return {
-    title: name + owner + ' · Metal Vault',
-    description: desc,
-    openGraph: {
-      title:       name + owner,
+    return {
+      title: name + owner + ' · Metal Vault',
       description: desc,
-      type:        'website',
-      url:         base + '/wishlist/' + token,
-      images:      [{ url: ogImage }],
-    },
-    twitter: {
-      card:        'summary_large_image',
-      title:       name + owner,
-      description: desc,
-      images:      [ogImage],
-    },
-  };
+      openGraph: {
+        title:       name + owner,
+        description: desc,
+        type:        'website',
+        url:         base + '/wishlist/' + token,
+        images:      [{ url: ogImage }],
+      },
+      twitter: {
+        card:        'summary_large_image',
+        title:       name + owner,
+        description: desc,
+        images:      [ogImage],
+      },
+    };
+  } catch {
+    return { title: 'Gift wishlist · Metal Vault' };
+  }
 }
 
 export default async function WishlistSharePage({ params }) {
