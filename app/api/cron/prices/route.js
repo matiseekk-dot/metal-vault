@@ -299,6 +299,110 @@ export async function GET(request) {
     }
   }
 
+  // ── 3. Auto price-drop scan (one threshold per user) ─────────
+  // For users who set profiles.auto_drop_pct, walk their watchlist and
+  // notify on any item whose current price has dropped pct% below its
+  // 30-day average from price_history. Cooldown: 7 days per item via
+  // watchlist.last_auto_alert_at so a perpetually-cheap item doesn't
+  // re-fire every cron pass.
+  //
+  // Sequence rationale: this runs AFTER collection-refresh so today's
+  // snapshot is already in price_history, then we have current data to
+  // compare against. If budget expired we skip — partial coverage is
+  // fine; the next run picks up the rest.
+  if (!budgetExpired()) {
+    let autoUsers = [];
+    try {
+      const { data } = await sb.from('profiles')
+        .select('id, auto_drop_pct')
+        .not('auto_drop_pct', 'is', null);
+      autoUsers = data || [];
+    } catch {
+      // profiles.auto_drop_pct column doesn't exist — migration 036
+      // hasn't been applied yet. Silent skip; the rest of the cron still ran.
+      autoUsers = [];
+    }
+    results.autoUsers          = autoUsers.length;
+    results.autoAlertsTriggered = 0;
+    results.autoAlertsSkipped   = 0;
+
+    const COOLDOWN_DAYS = 7;
+    const cooldownIso = new Date(Date.now() - COOLDOWN_DAYS * 86400000).toISOString();
+
+    for (const u of autoUsers) {
+      if (budgetExpired()) break;
+      const pct = Number(u.auto_drop_pct);
+      if (!Number.isFinite(pct) || pct < 5 || pct > 90) continue;
+
+      // Pull watchlist items for this user with a resolvable discogs_id.
+      // Skip rows we've already alerted on inside the cooldown window —
+      // last_auto_alert_at is null OR older than cooldownIso.
+      const { data: watch } = await sb
+        .from('watchlist')
+        .select('id, album_id, artist, album, last_auto_alert_at')
+        .eq('user_id', u.id)
+        .or('last_auto_alert_at.is.null,last_auto_alert_at.lt.' + cooldownIso);
+      const watchItems = watch || [];
+
+      for (const w of watchItems) {
+        if (budgetExpired()) break;
+        // Only items whose album_id is a numeric Discogs release id —
+        // slug-based rows have nothing to look up market data for.
+        const did = (() => {
+          const n = Number(w.album_id);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })();
+        if (!did) { results.autoAlertsSkipped++; continue; }
+
+        // 30-day average — pull from price_history. If <3 snapshots
+        // exist we don't have a meaningful baseline; skip rather than
+        // alert against weak data.
+        const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+        const { data: hist } = await sb.from('price_history')
+          .select('lowest_price, snapshot_date')
+          .eq('discogs_id', did)
+          .gte('snapshot_date', since)
+          .order('snapshot_date', { ascending: false });
+        const prices = (hist || []).map(h => Number(h.lowest_price)).filter(p => p > 0);
+        if (prices.length < 3) { results.autoAlertsSkipped++; continue; }
+
+        const avg     = prices.reduce((s, p) => s + p, 0) / prices.length;
+        const current = prices[0];   // newest snapshot first thanks to desc order
+        const threshold = avg * (1 - pct / 100);
+        if (current > threshold) continue;   // not enough drop
+
+        // Trigger! Push + email + bookkeeping.
+        try {
+          await sendPushToUser(u.id, {
+            title: '↓ ' + Math.round((1 - current / avg) * 100) + '% — ' + w.artist,
+            body:  w.album + ' — $' + current.toFixed(0) + ' (avg $' + avg.toFixed(0) + ')',
+            url:   '/?tab=watchlist',
+          });
+          // Email (only if user has one and the column doesn't error).
+          try {
+            const { data: ud } = await supabaseAdmin.auth.admin.getUserById(u.id);
+            const email = ud?.user?.email;
+            if (email) {
+              await sendEmail(email,
+                '[Metal Vault] ' + w.artist + ' — ' + Math.round((1 - current / avg) * 100) + '% off',
+                '<p><strong>' + w.artist + ' — ' + w.album + '</strong></p>' +
+                '<p>Current price: <strong>$' + current.toFixed(2) + '</strong> ' +
+                '(30-day avg: $' + avg.toFixed(2) + ', threshold: ' + pct + '% drop)</p>' +
+                '<p><a href="' + APP_URL + '/?tab=watchlist">Open watchlist →</a></p>'
+              );
+            }
+          } catch {}
+          await sb.from('watchlist')
+            .update({ last_auto_alert_at: new Date().toISOString() })
+            .eq('id', w.id);
+          results.autoAlertsTriggered++;
+        } catch (e) {
+          results.errors.push('auto:' + w.id + ':' + (e.message || '').slice(0, 30));
+        }
+      }
+    }
+  }
+
   results.durationMs = Date.now() - startedAt;
   return NextResponse.json({ success: true, ...results });
 }

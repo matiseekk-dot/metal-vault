@@ -88,6 +88,10 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
   // artist::album lower-case. Resolved values pull from the same
   // server-side 7d cache that powers the Listening tab.
   const [resolved, setResolved] = useState({});
+  // Auto-drop threshold (% off 30d avg). null = disabled. Lives on the
+  // server in profiles.auto_drop_pct so the daily cron can see it.
+  const [autoPct, setAutoPct]   = useState(null);
+  const [autoOpen, setAutoOpen] = useState(false);
   // When non-null, the inline form is editing that alert id (PATCH
   // instead of POST). Set when clicking "Alert aktywny" on an item
   // that already has an alert.
@@ -168,6 +172,39 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
     })();
     return () => { cancelled = true; };
   }, [watchlist]);   // eslint-disable-line
+
+  // Load auto-drop threshold once on mount. Silent fall-back to null
+  // if the column / endpoint is missing (migration 036 not applied).
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/profile/auto-drop')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.pct != null) setAutoPct(Number(d.pct)); })
+      .catch(() => {});
+  }, [user]);
+
+  const saveAutoPct = async (newPct) => {
+    setAutoPct(newPct);
+    setAutoOpen(false);
+    try {
+      const r = await fetch('/api/profile/auto-drop', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ pct: newPct }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        toast.error(d.error || 'Save failed');
+        // Revert UI
+        setAutoPct(autoPct);
+      } else if (newPct != null) {
+        toast.success(t('autoDrop.toastOn', { n: newPct })
+          || ('Auto-drop ON: -' + newPct + '%'));
+      } else {
+        toast(t('autoDrop.toastOff') || 'Auto-drop disabled');
+      }
+    } catch (e) { toast.error(e.message); setAutoPct(autoPct); }
+  };
 
   // Load saved alerts on mount — persists across tab switches.
   // Index by every identifier the watchlist UI might know about
@@ -409,6 +446,27 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
               ↓ {t('watchlist.syncDiscogs') || 'Discogs'}
             </button>
           )}
+          {/* Auto price-drop threshold — applies to ALL watchlist rows.
+              Cron checks each row's 30d avg from price_history and
+              fires push/email when current ≤ avg × (1 − pct/100).
+              Single user-level setting beats configuring 50 alerts
+              one by one. */}
+          {user && (
+            <button onClick={() => setAutoOpen(true)}
+              title={t('autoDrop.title') || 'Auto price-drop alerts'}
+              style={{
+                background: autoPct != null ? '#3a1a06' : C.bg3,
+                border: '1px solid ' + (autoPct != null ? '#f9731666' : C.border),
+                borderRadius: 6,
+                color:      autoPct != null ? '#f97316' : C.dim,
+                padding: '5px 9px', fontSize: 10, ...MONO,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>
+              {autoPct != null
+                ? '🔻 ' + (t('autoDrop.chipOn', { n: autoPct }) || 'Auto -' + autoPct + '%')
+                : '🔻 ' + (t('autoDrop.chipOff') || 'Auto drop')}
+            </button>
+          )}
           {user && Object.keys(alertDone).length > 0 && (
             <button onClick={checkAlertsNow}
               title={t('alert.checkNowTitle')}
@@ -424,6 +482,54 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
           </select>
         </div>
       </div>
+
+      {/* Auto-drop modal — list of presets + Off button. Tapping a value
+          PATCHes profiles.auto_drop_pct and closes. */}
+      {autoOpen && (
+        <div onClick={() => setAutoOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16,
+          }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{
+              background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12,
+              padding: 18, maxWidth: 360, width: '100%',
+            }}>
+            <div style={{ ...BEBAS, fontSize: 16, color: C.text, letterSpacing: '0.04em', marginBottom: 6 }}>
+              {t('autoDrop.title') || 'Auto price-drop alerts'}
+            </div>
+            <div style={{ fontSize: 11, color: C.dim, ...MONO, lineHeight: 1.5, marginBottom: 14 }}>
+              {t('autoDrop.desc') || 'Powiadom mnie gdy cena spadnie o X% poniżej 30-dniowej średniej. Działa dla każdej płyty z watchlisty.'}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {[10, 15, 20, 25, 30, 40].map(p => (
+                <button key={p} onClick={() => saveAutoPct(p)}
+                  style={{
+                    padding: '12px 6px', borderRadius: 8,
+                    background: autoPct === p ? '#3a1a06' : C.bg3,
+                    border: '1px solid ' + (autoPct === p ? '#f97316' : C.border),
+                    color:   autoPct === p ? '#f97316' : C.text,
+                    cursor: 'pointer', ...BEBAS, fontSize: 18, letterSpacing: '0.02em',
+                  }}>
+                  -{p}%
+                </button>
+              ))}
+            </div>
+            <button onClick={() => saveAutoPct(null)}
+              style={{
+                marginTop: 10, width: '100%', padding: '10px',
+                background: 'transparent', border: '1px solid ' + C.border,
+                borderRadius: 8, color: C.dim, cursor: 'pointer',
+                ...MONO, fontSize: 11,
+              }}>
+              {t('autoDrop.off') || 'Wyłącz auto-alert'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {sorted.map(album => {
