@@ -39,6 +39,25 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 
 // Map Ticketmaster event JSON → our internal schema (compatible with
 // existing UpcomingConcertsTab.js, no UI changes needed).
+//
+// ticketsUrl fallback chain — `e.url` is preferred but the Discovery
+// API occasionally returns it empty for events imported via partner
+// feeds (festivals, regional promoters), and even when present the
+// URL sometimes 404s for users in a different country than the event.
+// Walk down: event URL → artist's Ticketmaster page → public search.
+// Never returns empty (last resort = global TM search by artist name).
+function buildTicketsUrl(e) {
+  if (e?.url && /^https?:\/\//.test(e.url)) return e.url;
+  const attractions = e?._embedded?.attractions || [];
+  const artistUrl = attractions.find(a => a?.url && /^https?:\/\//.test(a.url))?.url;
+  if (artistUrl) return artistUrl;
+  // Public search keyed on the headline attraction name (or the event
+  // name as a last resort). encodeURIComponent handles diacritics.
+  const keyword = attractions[0]?.name || e?.name || '';
+  if (keyword) return 'https://www.ticketmaster.com/search?q=' + encodeURIComponent(keyword);
+  return 'https://www.ticketmaster.com/';
+}
+
 function mapTicketmasterEvent(e) {
   const v = e._embedded?.venues?.[0] || {};
   const dates = e.dates?.start || {};
@@ -63,7 +82,7 @@ function mapTicketmasterEvent(e) {
     lat:         v.location?.latitude  ? Number(v.location.latitude)  : null,
     lng:         v.location?.longitude ? Number(v.location.longitude) : null,
     lineup,
-    ticketsUrl:  e.url,
+    ticketsUrl:  buildTicketsUrl(e),
     onSale:      dates.status?.code === 'onsale',
   };
 }
@@ -73,8 +92,9 @@ async function fetchArtistEvents(artistName, sb) {
   const apiKey = process.env.TICKETMASTER_API_KEY;
   if (!apiKey) return { events: [], skipped: 'no_api_key' };
 
-  // Cache key — bumped to v2 to invalidate any stale Bandsintown cache entries
-  const cacheKey = 'tm-v2::' + artistName.toLowerCase().replace(/\s+/g, '_');
+  // Cache key — bumped to v3 to invalidate stale entries with empty
+  // ticketsUrl from before buildTicketsUrl fallback chain landed.
+  const cacheKey = 'tm-v3::' + artistName.toLowerCase().replace(/\s+/g, '_');
 
   // Try cache
   try {

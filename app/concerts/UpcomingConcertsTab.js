@@ -282,8 +282,18 @@ function EventCard({ ev, locale }) {
   const isSoon  = days != null && days <= 14;
   const isToday = days === 0;
 
+  // Guard the href — if Ticketmaster returned a junk/empty URL despite
+  // the buildTicketsUrl fallback chain, render the card as a non-clickable
+  // div instead of an <a> with `href=""` (which would reload the SPA and
+  // 404 against /vault/<currentPath>).
+  const safeUrl = (ev.ticketsUrl && /^https?:\/\//.test(ev.ticketsUrl)) ? ev.ticketsUrl : null;
+  const Wrapper = safeUrl ? 'a' : 'div';
+  const wrapperProps = safeUrl
+    ? { href: safeUrl, target: '_blank', rel: 'noopener noreferrer' }
+    : {};
+
   return (
-    <a href={ev.ticketsUrl} target="_blank" rel="noopener noreferrer"
+    <Wrapper {...wrapperProps}
       style={{
         background: C.bg2, border: '1px solid ' + C.border, borderRadius: 10,
         padding: '12px 14px', textDecoration: 'none',
@@ -339,6 +349,6 @@ function EventCard({ ev, locale }) {
           {ev.lineup.length > 5 ? ' · +' + (ev.lineup.length - 5) : ''}
         </div>
       )}
-    </a>
+    </Wrapper>
   );
 }
