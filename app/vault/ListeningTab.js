@@ -195,13 +195,24 @@ export default function ListeningTab({ user, onAlbumClick }) {
     try {
       const slug = (it.artist + '::' + it.album).toLowerCase()
         .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      // Carry the cover we already resolved from Discogs / eBay into the
+      // watchlist row. Otherwise Watchlist renders a coverless placeholder
+      // and the user has to wait for its own lazy resolver to fill in.
+      const lookupKey   = (it.artist + '::' + it.album).toLowerCase();
+      const resolvedCov = it.cover
+        || lookups[lookupKey]?.cover
+        || ebayLookups[lookupKey]?.image
+        || null;
+      const resolvedDgId = lookups[lookupKey]?.releaseId || null;
       const r = await fetch('/api/watchlist', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          album_id: slug,
-          artist:   it.artist,
-          album:    it.album,
+          album_id:   slug,
+          artist:     it.artist,
+          album:      it.album,
+          cover:      resolvedCov,
+          discogs_id: resolvedDgId,
         }),
       });
       const d = await r.json().catch(() => ({}));

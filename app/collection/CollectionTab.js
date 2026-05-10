@@ -82,6 +82,12 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
   const [alertType, setAlertType]     = useState('PRICE_DROP');  // PRICE_DROP / PERCENT_DROP / LOW_STOCK
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertDone, setAlertDone]     = useState({});
+  // Lazy Discogs lookup map for watchlist rows that didn't ship with a
+  // cover (e.g. wishlist'd from Listening tab before that flow learned
+  // to pass the cover through; also any pre-existing rows). Keyed on
+  // artist::album lower-case. Resolved values pull from the same
+  // server-side 7d cache that powers the Listening tab.
+  const [resolved, setResolved] = useState({});
   // When non-null, the inline form is editing that alert id (PATCH
   // instead of POST). Set when clicking "Alert aktywny" on an item
   // that already has an alert.
@@ -112,6 +118,56 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
       setEditVariant(null);
     } catch {}
   };
+
+  // ── Lazy resolve covers + prices for watchlist rows ───────────
+  // Walks the current watchlist, picks rows without a cover (or never
+  // resolved before), batches them 12 at a time through the album-
+  // lookup endpoint. Server-side 7d cache means second visits are
+  // instant. Same pattern as ListeningTab — covers, prices and the
+  // Discogs URL go straight into a lookup map the render reads from.
+  useEffect(() => {
+    if (!watchlist?.length) return;
+    const targets = watchlist
+      .filter(it => {
+        if (!it.artist || !it.album) return false;
+        const k = (it.artist + '::' + it.album).toLowerCase();
+        if (resolved[k]) return false;          // already resolved this session
+        // Re-resolve if either the cover is missing OR no price/url yet
+        // (a row added with a cover but no Discogs link still benefits
+        // from the price + deep-link).
+        return !it.cover || !resolved[k]?.lowestPrice;
+      })
+      .map(it => ({ artist: it.artist, album: it.album }));
+    if (targets.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      for (let i = 0; i < targets.length && !cancelled; i += 12) {
+        const slice = targets.slice(i, i + 12);
+        let r;
+        try {
+          r = await fetch('/api/discogs/album-lookup', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ items: slice }),
+          });
+        } catch { return; }
+        if (!r.ok) return;
+        let d;
+        try { d = await r.json(); } catch { return; }
+        setResolved(prev => {
+          const next = { ...prev };
+          for (const res of (d.results || [])) {
+            const k = (res.artist + '::' + res.album).toLowerCase();
+            next[k] = res;
+          }
+          return next;
+        });
+        if (i + 12 < targets.length) await new Promise(r => setTimeout(r, 1500));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [watchlist]);   // eslint-disable-line
 
   // Load saved alerts on mount — persists across tab switches.
   // Index by every identifier the watchlist UI might know about
@@ -344,6 +400,15 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
         {sorted.map(album => {
           const id = String(album.album_id || album.id);
           const hasAlert = alertDone[id];
+          // Stitch resolved Discogs cover + price into the row data so
+          // late-arriving lookups update the UI in place. The album
+          // object itself wins when it has a cover (already saved with
+          // the watchlist row); only fall back to resolved lookup when
+          // the stored cover is missing.
+          const lookupKey  = (album.artist + '::' + album.album).toLowerCase();
+          const resv       = resolved[lookupKey];
+          const finalCover = album.cover || resv?.cover || null;
+          const hasPrice   = resv && !resv.notFound && resv.lowestPrice != null;
           return (
             <div key={id} style={{ background: C.bg2, border: '1px solid ' + C.border, borderRadius: 12, overflow: 'hidden' }}>
               {/* CSS Grid: fixed cover | fluid text (truncates) | fixed X button */}
@@ -354,7 +419,7 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
               }}>
                 {/* Cover — clickable */}
                 <div onClick={() => onAlbumClick(album)} style={{ cursor: 'pointer' }}>
-                  {AlbumCover && <AlbumCover src={album.cover} artist={album.artist} size={52} />}
+                  {AlbumCover && <AlbumCover src={finalCover} artist={album.artist} size={52} />}
                 </div>
                 {/* Text column — guaranteed to shrink via minmax(0, 1fr) */}
                 <div onClick={() => onAlbumClick(album)} style={{ cursor: 'pointer', minWidth: 0, overflow: 'hidden' }}>
@@ -377,6 +442,26 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
                       <span style={{ fontSize: 9, color: C.dim, ...MONO }}>
                         {formatDate(album.release_date || album.releaseDate || album.year)}
                       </span>
+                    )}
+                    {/* Discogs marketplace floor — turns the watchlist
+                        into a price-comparison list. Click skips the
+                        row's own onClick (don't open VinylModal) and
+                        deep-links into the Discogs release page where
+                        the user can actually buy. */}
+                    {hasPrice && (
+                      <a href={resv.discogsUrl}
+                        target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          fontSize: 10, fontWeight: 600,
+                          color: '#f97316', textDecoration: 'none',
+                          background: '#3a1a06', border: '1px solid #f9731644',
+                          padding: '2px 7px', borderRadius: 5,
+                          ...MONO, whiteSpace: 'nowrap',
+                        }}>
+                        {(t('listening.priceFrom') || 'od') + ' '}
+                        {Number(resv.lowestPrice).toFixed(0)} {resv.currency || 'USD'}
+                      </a>
                     )}
                   </div>
                   {hasAlert && (
