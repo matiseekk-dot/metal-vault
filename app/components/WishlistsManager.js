@@ -24,19 +24,35 @@ export default function WishlistsManager({ user }) {
   const [open, setOpen]       = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  // 'unknown' until first GET completes; 'ok' after a successful read;
+  // 'missing' if the endpoint returns 503 because migration 037 hasn't
+  // been applied yet. Drives the inline banner below the create form.
+  const [migrationState, setMigrationState] = useState('unknown');
 
-  const refresh = () => {
+  const refresh = async () => {
     if (!user) return;
-    fetch('/api/wishlists')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        setLists(d?.wishlists || []);
-        // Notify WatchlistTab (per-row picker reads the same data) so
-        // freshly created / deleted lists immediately appear / disappear
-        // in the row-level "🎁+" overlay.
-        window.dispatchEvent(new CustomEvent('mv-wishlists-changed'));
-      })
-      .catch(() => {});
+    try {
+      const r = await fetch('/api/wishlists');
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 503) {
+        setMigrationState('missing');
+        setLists([]);
+        return;
+      }
+      if (!r.ok) {
+        // Some other server error — keep state as-is, but surface to console
+        // so we have a trail for debugging.
+        // eslint-disable-next-line no-console
+        console.warn('[wishlists] GET failed', r.status, d);
+        return;
+      }
+      setMigrationState('ok');
+      setLists(d?.wishlists || []);
+      window.dispatchEvent(new CustomEvent('mv-wishlists-changed'));
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[wishlists] GET threw', e);
+    }
   };
 
   useEffect(() => {
@@ -50,7 +66,10 @@ export default function WishlistsManager({ user }) {
 
   const create = async () => {
     const name = newName.trim();
-    if (!name) return;
+    if (!name) {
+      toast.error(t('wishlists.nameRequired') || 'Wpisz nazwę listy');
+      return;
+    }
     setCreating(true);
     try {
       const r = await fetch('/api/wishlists', {
@@ -58,15 +77,29 @@ export default function WishlistsManager({ user }) {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ name }),
       });
-      const d = await r.json();
+      const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        toast.error(d.error || t('wishlists.createFailed') || 'Create failed');
+        // Migration not applied → 503 with a specific message. Surface
+        // it loud and persistent so the user knows what to do.
+        if (r.status === 503) {
+          setMigrationState('missing');
+          toast.error(d.error || 'Apply migration 037 in Supabase to enable wishlists', { duration: 8000 });
+        } else {
+          toast.error(d.error || (t('wishlists.createFailed') || 'Create failed'));
+          // eslint-disable-next-line no-console
+          console.error('[wishlists] POST failed', r.status, d);
+        }
       } else {
         haptic.success();
+        toast.success((t('wishlists.createSuccess', { name }) || ('Stworzono "' + name + '"')));
         setNewName('');
         refresh();
       }
-    } catch (e) { toast.error(e.message); }
+    } catch (e) {
+      toast.error(e.message);
+      // eslint-disable-next-line no-console
+      console.error('[wishlists] POST threw', e);
+    }
     setCreating(false);
   };
 
@@ -125,6 +158,20 @@ export default function WishlistsManager({ user }) {
 
       {open && (
         <div style={{ padding: '0 14px 14px' }}>
+          {/* Migration banner — clear blocker explanation when 037 hasn't
+              been applied. Without this the create button silently 503s
+              and the user just sees "nic się nie dzieje". */}
+          {migrationState === 'missing' && (
+            <div style={{
+              background: '#3a1a06', border: '1px solid #f9731666',
+              borderRadius: 8, padding: 10, marginBottom: 12,
+              fontSize: 11, color: '#fbbf24', ...MONO, lineHeight: 1.5,
+            }}>
+              ⚠ {t('wishlists.migrationNeeded')
+                || 'Funkcja wymaga migracji bazy. Otwórz Supabase → SQL Editor i zaaplikuj plik supabase/migrations/037_shared_wishlists.sql'}
+            </div>
+          )}
+
           {/* Existing lists */}
           {lists.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>

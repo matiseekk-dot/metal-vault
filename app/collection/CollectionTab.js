@@ -463,12 +463,19 @@ export function WatchlistTab({ watchlist, onRemove, onAlbumClick, user, AlbumCov
 
   return (
     <div style={{ padding: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
-        <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+      {/* Toolbar — count on first line, action buttons on a second
+          flex-wrapping line. Mobile (320–360px wide) couldn't fit four
+          buttons + sort + count in one row; the right cluster used to
+          have flexShrink:0 and overflowed off-screen sideways. Now
+          actions wrap to extra rows on narrow displays without
+          horizontal scroll. */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.15em',
+          textTransform: 'uppercase', marginBottom: 8 }}>
           {watchlist.length} {watchlist.length === 1 ? t('watchlist.album') : t('watchlist.albums')}
           {user && <span style={{ color: '#4ade80' }}> {t('watchlist.synced')}</span>}
         </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Pull Discogs wantlist → watchlist. The full /api/sync POST
               already does both collection AND wantlist under type:'both',
               but power users on Discogs add to their wantlist constantly
@@ -1459,6 +1466,7 @@ export function CollectionTab({
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', touchAction: 'pan-x' }}>
             {[
               ['all',       t('vault.filter.all')],
+              ['for_sale',  t('vault.filter.forSale') || '💲 Na sprzedaż'],
               ['vinyl',     t('vault.filter.vinyl')],
               ['cd',        t('vault.filter.cd')],
               ['cassette',  t('vault.filter.cassette')],
@@ -1608,6 +1616,10 @@ export function CollectionTab({
                   if (vaultFilter === 'box_set')  return (item.format || '').toLowerCase().includes('box');
                   if (vaultFilter === 'limited')  return (item.format || '').toLowerCase().includes('limited');
                   if (vaultFilter === 'no_price') return !item.purchase_price;
+                  // For-sale surface: when this filter is active the
+                  // user is asking "show me what I'm currently selling".
+                  // Mirrors the badge rendered on each card below.
+                  if (vaultFilter === 'for_sale') return item.for_sale === true;
                   return true;
                 });
                 if (visibleItems.length === 0) return (
@@ -1657,6 +1669,22 @@ export function CollectionTab({
                             </span>
                           )}
                           {item.format && item.format !== 'Vinyl' && <span style={{ fontSize: 8, color: C.dim, ...MONO, padding: '1px 4px', background: C.bg3, borderRadius: 3 }}>{item.format}</span>}
+                          {/* "💲 LISTED" badge — surfaces items the user
+                              has marked for sale via ForSaleToggle.
+                              Without this badge there's no UI surface
+                              showing what's currently listed; the data
+                              was being saved silently. */}
+                          {item.for_sale && (
+                            <span title={item.asking_price ? '$' + Number(item.asking_price).toFixed(2) : ''}
+                              style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3,
+                                background: '#1a3d1a', color: '#4ade80',
+                                border: '1px solid #4ade8044', ...MONO,
+                                letterSpacing: '0.05em' }}>
+                              💲 {item.asking_price
+                                  ? Number(item.asking_price).toFixed(0) + ' USD'
+                                  : (t('forSale.listedShort') || 'LISTED')}
+                            </span>
+                          )}
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>{formatPrice(paid, cur, fx)}</span>}
                           {now > 0  && <span style={{ fontSize: 9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO }}>→{formatPrice(now, cur, fx)}{gain !== null ? (gain >= 0 ? ' ▲' : ' ▼') : ''}</span>}
                           {now === 0 && paid > 0 && (

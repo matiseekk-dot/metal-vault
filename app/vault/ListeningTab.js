@@ -214,25 +214,45 @@ export default function ListeningTab({ user, onAlbumClick }) {
       return next;
     });
     try {
+      let r;
       if (isFollowing) {
-        await fetch('/api/artists?artist_name=' + encodeURIComponent(artistName), { method: 'DELETE' });
+        r = await fetch('/api/artists?artist_name=' + encodeURIComponent(artistName), { method: 'DELETE' });
       } else {
-        await fetch('/api/artists', {
+        r = await fetch('/api/artists', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ artist_name: artistName }),
         });
+      }
+      if (!r.ok) throw new Error('http_' + r.status);
+      if (!isFollowing) {
         haptic.success();
         track('listening_action', { action: 'follow_artist' });
+        // Confirmation toast tells the user where the change shows up.
+        // Without this they wonder "did anything happen" because the
+        // chip flip is subtle.
+        toast.success(
+          (t('listening.toast.followed', { name: artistName })
+            || ('Obserwujesz ' + artistName + ' — Vault → Zespoły'))
+        );
+      } else {
+        toast(t('listening.toast.unfollowed', { name: artistName })
+          || ('Przestałeś obserwować ' + artistName));
       }
-    } catch {
-      // Network failed — revert the optimistic flip.
+      // Notify the global useCollection hook so BandsTab and any other
+      // consumer of followedArtists refetches and re-renders. Without
+      // this the user would tap follow here and not see the band appear
+      // in Bands tab until a full page reload.
+      window.dispatchEvent(new CustomEvent('mv-artists-changed'));
+    } catch (e) {
+      // Network failed — revert the optimistic flip and surface the error.
       setFollowed(prev => {
         const next = new Set(prev);
         if (isFollowing) next.add(artistName);
         else             next.delete(artistName);
         return next;
       });
+      toast.error(t('listening.toast.followFailed') || 'Nie udało się — spróbuj ponownie');
     }
   };
 

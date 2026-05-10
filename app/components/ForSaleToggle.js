@@ -89,7 +89,14 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Save failed');
       haptic.success();
-      toast.success(t('forSale.listed'));
+      // Tell the user where to find the listing afterwards — without
+      // this they wonder where the record "went" since the listing
+      // doesn't move it out of the collection (it just flags it).
+      toast.success(
+        (t('forSale.listedWithLocation')
+          || 'Wystawione na sprzedaż — Vault → Kolekcja → filtr "💲 Na sprzedaż"'),
+        { duration: 6000 }
+      );
       onUpdated?.(d.item);
       setEditing(false);
     } catch (e) {
