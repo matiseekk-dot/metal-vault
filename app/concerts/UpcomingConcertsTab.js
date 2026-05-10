@@ -222,8 +222,11 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
 
       {/* Missing bands — followed artists with no Ticketmaster events.
           Niche metal bands often aren't in Ticketmaster's database (they
-          favor mainstream tours). For these we offer a deep-link to
-          Bandsintown which has stronger underground/indie coverage. */}
+          favor mainstream tours). For these we offer THREE deep-links —
+          Bandsintown, Songkick, Last.fm — because each has different
+          metal scene coverage and any single source still misses bands.
+          Bandsintown's per-artist URL format requires a slug + numeric
+          ID we don't have, so we deep-link to their search instead. */}
       {!loading && !error && followedArtists.length > 0 && (() => {
         // followedArtists may be either string[] or { artist_name }[] depending on caller.
         // Normalize to plain string array first to avoid .toLowerCase on objects.
@@ -250,25 +253,52 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
               <Icon name="info" size={11} color={C.muted}/> {tn(missing.length, 'plural.bandsWithoutTm')}
             </div>
             <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 10, lineHeight: 1.5 }}>
-              These bands aren&apos;t in Ticketmaster&apos;s database. Check Bandsintown — they often have indie/underground coverage.
+              {t('concerts.missingBandsHint') || 'Tych zespołów nie ma w Ticketmaster. Sprawdź gdzieś indziej — każde źródło ma inną metalową scenę.'}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {missing.map(name => (
-                <a key={name}
-                  href={'https://www.bandsintown.com/a/' + encodeURIComponent(name)}
-                  target="_blank" rel="noopener noreferrer"
-                  style={{
-                    fontSize: 11, ...MONO,
-                    padding: '6px 10px', borderRadius: 6,
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {missing.map(name => {
+                // Bandsintown's `/a/{name}` route doesn't actually work
+                // — their canonical URLs are `/a/{numericId}-{slug}`.
+                // Their search query param IS stable though, and lands
+                // the user on a results page they can pick from.
+                const q = encodeURIComponent(name);
+                return (
+                  <div key={name} style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
                     background: C.bg3, border: '1px solid ' + C.border,
-                    color: C.text, textDecoration: 'none',
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    transition: 'all 150ms',
+                    borderRadius: 6, flexWrap: 'wrap',
                   }}>
-                  <span style={{ color: C.muted, fontSize: 10 }}>🎫</span>
-                  {name}
-                </a>
-              ))}
+                    <span style={{ flex: 1, fontSize: 11, color: C.text, ...MONO,
+                      minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {name}
+                    </span>
+                    <a href={'https://www.bandsintown.com/?query=' + q}
+                      target="_blank" rel="noopener noreferrer"
+                      title="Bandsintown"
+                      style={{
+                        fontSize: 9, ...MONO, padding: '3px 7px', borderRadius: 4,
+                        background: '#0e7c4c', color: '#fff', textDecoration: 'none',
+                        whiteSpace: 'nowrap', letterSpacing: '0.05em',
+                      }}>BIT</a>
+                    <a href={'https://www.songkick.com/search?query=' + q + '&type=artists'}
+                      target="_blank" rel="noopener noreferrer"
+                      title="Songkick"
+                      style={{
+                        fontSize: 9, ...MONO, padding: '3px 7px', borderRadius: 4,
+                        background: '#f80046', color: '#fff', textDecoration: 'none',
+                        whiteSpace: 'nowrap', letterSpacing: '0.05em',
+                      }}>SK</a>
+                    <a href={'https://www.last.fm/music/' + q + '/+events'}
+                      target="_blank" rel="noopener noreferrer"
+                      title="Last.fm events"
+                      style={{
+                        fontSize: 9, ...MONO, padding: '3px 7px', borderRadius: 4,
+                        background: '#d51007', color: '#fff', textDecoration: 'none',
+                        whiteSpace: 'nowrap', letterSpacing: '0.05em',
+                      }}>LFM</a>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
