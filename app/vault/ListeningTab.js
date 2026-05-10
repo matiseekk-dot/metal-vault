@@ -28,6 +28,7 @@ import { haptic } from '@/lib/haptics';
 import { track } from '@/lib/analytics';
 import StreamingDiscoveries from '@/app/components/StreamingDiscoveries';
 import ListenStats from '@/app/components/ListenStats';
+import Recommendations from '@/app/components/Recommendations';
 import { VINYL_SHOPS } from '@/lib/vinyl-shops';
 
 const FILTERS = [
@@ -361,6 +362,16 @@ export default function ListeningTab({ user, onAlbumClick }) {
           counterpart to the vinyl analytics above. */}
       {(filter === 'all' || filter === 'streaming') && (
         <StreamingDiscoveries/>
+      )}
+
+      {/* "You might also like X" — collaborative-filter recs from Last.fm,
+          aggregated across the user's top 5 most-engaged artists. Only
+          shows when there's enough listening data to seed it (the API
+          self-empty-states). Available across all and streaming views;
+          hidden under vinyl-only since recs are about expanding listening
+          horizon, which is more streaming-shaped behaviour. */}
+      {(filter === 'all' || filter === 'streaming') && (
+        <Recommendations/>
       )}
 
       {/* Feed */}
