@@ -178,45 +178,11 @@ export default function ListenStats({ collectionLength = 0 }) {
           {/* Heatmap */}
           <Heatmap heatmap={data.heatmap || {}}/>
 
-          {/* Top played */}
-          {data.topPlayed?.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 9, color: C.accent, ...MONO,
-                letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8 }}>
-                {t('listen.section.top')}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {data.topPlayed.map((it, i) => (
-                  <div key={it.id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0',
-                      borderBottom: i < data.topPlayed.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                    <span style={{ ...BEBAS, fontSize: 14, color: C.dim, width: 22, textAlign: 'right' }}>
-                      {i + 1}.
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, color: C.text, ...MONO,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {it.artist}
-                      </div>
-                      <div style={{ fontSize: 10, color: C.dim, ...MONO,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {it.album}
-                      </div>
-                    </div>
-                    <span style={{ ...BEBAS, fontSize: 16, color: C.accent }}>
-                      {it.play_count}×
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Streaming activity card moved to Vault → Scrobbling tab.
-              Stats stays vinyl-only — streak / dust / top played make
-              sense ONLY for physical interaction. Streaming totals +
-              top streamed live next to the listening feed where
-              they're actionable. */}
+          {/* Top-played section removed — it duplicated the feed below,
+              which already lists albums sorted by play_count desc. The
+              feed IS the top-played view, no point printing it twice on
+              the same screen. data.topPlayed still arrives from the API
+              but goes unused here; not worth a separate request to skip. */}
 
           {/* Dust collection */}
           {data.dust?.length > 0 && (
