@@ -685,6 +685,58 @@ export default function ConcertsTab() {
               e.target.value = '';
             }}/>
           </label>
+          {/* Last.fm historical import — pulls the user's attended gigs
+              from their public Last.fm /user/{name}/events page and
+              inserts each as a user_concerts row. Idempotent by
+              (band+year+venue), so a re-tap on an existing import only
+              brings in NEW events. */}
+          <button onClick={async () => {
+            const ok = await mvConfirm(
+              t('concerts.importLastfmConfirm')
+                || 'Zaimportować historyczne koncerty z twojego profilu Last.fm? To może potrwać chwilę przy długiej historii.',
+              { confirmLabel: t('concerts.importLastfmGo') || 'Importuj' }
+            );
+            if (!ok) return;
+            toast(t('concerts.importLastfmStart') || 'Skanuję Last.fm…');
+            try {
+              const r = await fetch('/api/concerts/import-lastfm', { method: 'POST' });
+              const d = await r.json();
+              if (!r.ok) {
+                toast.error(d.error || 'Import failed');
+                return;
+              }
+              if (d.imported > 0) {
+                haptic.success?.();
+                toast.success(
+                  (t('concerts.importLastfmDone', { n: d.imported, s: d.skipped })
+                    || ('Zaimportowano ' + d.imported + ' koncertów (pominięto ' + d.skipped + ' duplikatów)')),
+                  { duration: 8000 }
+                );
+                // Force a re-fetch of user concerts so the new rows
+                // surface in the list without a full page reload.
+                try {
+                  const r2 = await fetch('/api/user-concerts');
+                  if (r2.ok) {
+                    const j = await r2.json();
+                    if (j.concerts) save(j.concerts);
+                    if (j.venues) {
+                      const sv = [...VENUES, ...j.venues];
+                      setVenues(sv);
+                      saveLS(LS_VENUES, sv);
+                    }
+                  }
+                } catch {}
+              } else {
+                toast(t('concerts.importLastfmEmpty') || 'Brak nowych koncertów — wszystko już masz albo Last.fm nic nie pokazał');
+              }
+            } catch (e) { toast.error(e.message); }
+          }}
+            title={t('concerts.importLastfmTitle') || 'Importuj historię koncertów z Last.fm'}
+            style={{flexShrink:0, background: '#1a0d0d', border: '1px solid #d5100744',
+              borderRadius: 10, color: '#d51007', padding: '12px 14px',
+              cursor: 'pointer', ...MONO, fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap'}}>
+            📻 Last.fm
+          </button>
         </div>
 
         {/* Form */}
