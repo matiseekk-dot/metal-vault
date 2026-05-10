@@ -27,6 +27,7 @@ import { toast } from '@/app/components/Toast';
 import { haptic } from '@/lib/haptics';
 import { track } from '@/lib/analytics';
 import StreamingDiscoveries from '@/app/components/StreamingDiscoveries';
+import ListenStats from '@/app/components/ListenStats';
 import { VINYL_SHOPS } from '@/lib/vinyl-shops';
 
 const FILTERS = [
@@ -247,8 +248,20 @@ export default function ListeningTab({ user, onAlbumClick }) {
         </div>
       )}
 
-      {/* Discovery card on top — "Brak na winylu, może kup" */}
-      <StreamingDiscoveries/>
+      {/* Vinyl-spin analytics — streak, heatmap, top played, dust.
+          Hides itself when there are no plays AND no collection, so
+          first-time users don't see an empty stats block. Gated to
+          'all' / 'vinyl' filters because the data is vinyl-only —
+          showing it under "Cyfrowo" would be misleading. */}
+      {(filter === 'all' || filter === 'vinyl') && (
+        <ListenStats/>
+      )}
+
+      {/* Discovery card — "Brak na winylu, może kup". Streaming-side
+          counterpart to the vinyl analytics above. */}
+      {(filter === 'all' || filter === 'streaming') && (
+        <StreamingDiscoveries/>
+      )}
 
       {/* Feed */}
       {loading ? (

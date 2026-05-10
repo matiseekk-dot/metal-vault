@@ -5,12 +5,11 @@ import { realGenre } from '@/lib/genre-helper';
 import Icon from '@/app/components/Icon';
 import { useT } from '@/lib/i18n';
 import PortfolioChangeCard from '@/app/components/PortfolioChangeCard';
-import ListenStats from '@/app/components/ListenStats';
-// StreamingDiscoveries moved to Vault → Scrobbling tab (ListeningTab) —
+// StreamingDiscoveries lives in Vault → Scrobbling tab (ListeningTab) —
 // "albums you stream but don't own" is action-driving, not analytics.
-// It belongs next to the listening feed where users do something
-// about it. ListenStats stays here for vinyl-only analytics
-// (streak, dust collection, heatmap).
+// ListenStats moved there too, since spinning a vinyl is itself a
+// listening event — putting playback stats next to the listening feed
+// is more discoverable than buried in the Stats analytics page.
 import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 
 const GRADE_COLORS = {M:'#a78bfa',NM:'#4ade80','VG+':'#60a5fa',VG:'#f5c842','G+':'#f97316',G:'#f87171',F:'#888',P:'#555'};
@@ -806,9 +805,10 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
         </div>
       )}
 
-      {/* Listen tracking — vinyl play stats. Renders nothing for users
-          with no plays AND no collection. */}
-      <ListenStats collectionLength={collection.length}/>
+      {/* Vinyl play stats moved to Vault → Słuchaj (filter: Vinyl).
+          Streak / heatmap / top played / dust collection live there
+          now — they share screen real estate with the listening feed
+          which is where users actually engage with this data. */}
 
       {/* Format breakdown — only renders if 2+ formats in collection */}
       <FormatBreakdown collection={collection}/>
