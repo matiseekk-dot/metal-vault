@@ -72,11 +72,12 @@ export default function ListeningTab({ user, onAlbumClick }) {
   const [busyKey, setBusyKey] = useState(null);
 
   const [totals, setTotals] = useState({ items: 0, lastfm: 0, spotify: 0, vinyl: 0 });
-  // Lookup cache keyed on artist::album. Stores { cover, lowestPrice, currency,
-  // discogsUrl, notFound } for unmatched rows that we've resolved against
-  // Discogs. Lives in memory for the session — server-side cache (7d TTL)
-  // covers across-session reuse.
-  const [lookups, setLookups] = useState({});
+  // Lookup caches keyed on artist::album. Discogs gives canonical cover
+  // + a marketplace floor; eBay gives an independent live-listings price
+  // (often very different — auctions vs collector pressings). Both run
+  // in parallel and the UI shows whichever resolved.
+  const [lookups,     setLookups]     = useState({});   // Discogs
+  const [ebayLookups, setEbayLookups] = useState({});   // eBay
 
   const refresh = (currentFilter = filter) => {
     setLoading(true);
@@ -96,48 +97,62 @@ export default function ListeningTab({ user, onAlbumClick }) {
       .catch(() => setLoading(false));
   };
 
-  // ── Background Discogs resolve for unmatched rows ──────────────
-  // Items NOT in collection don't have covers (Last.fm killed image URLs
-  // in 2019) or prices. Hit the lookup endpoint in batches of 12 with
-  // 1.5s spacing — for a typical 200-item discovery slice this finishes
-  // in ~25s. Cached server-side so subsequent loads are instant.
+  // ── Background shop resolve for unmatched rows ────────────────
+  // Items NOT in collection have no cover (Last.fm killed image URLs
+  // in 2019) or price. Hit Discogs + eBay in PARALLEL, batches of 12,
+  // 1.5s spacing per batch. Both endpoints cache server-side (7d TTL)
+  // so subsequent loads are instant.
+  //
+  // Each shop runs as its own background loop — if eBay isn't
+  // configured (503), Discogs still fills covers. If both fail the UI
+  // gracefully shows just the search chips for iMusic / Groovespin.
   useEffect(() => {
     if (!items.length) return;
-    const targets = items.filter(it =>
-      !it.in_collection &&
-      it.kind !== 'vinyl' &&
-      !lookups[(it.artist + '::' + it.album).toLowerCase()]
-    );
-    if (targets.length === 0) return;
 
-    let cancelled = false;
-    (async () => {
-      for (let i = 0; i < targets.length && !cancelled; i += 12) {
+    const fillFrom = async (endpoint, setMap, currentMap) => {
+      const targets = items.filter(it =>
+        !it.in_collection &&
+        it.kind !== 'vinyl' &&
+        !currentMap[(it.artist + '::' + it.album).toLowerCase()]
+      );
+      if (targets.length === 0) return;
+
+      for (let i = 0; i < targets.length; i += 12) {
         const slice = targets.slice(i, i + 12).map(t => ({ artist: t.artist, album: t.album }));
+        let r;
         try {
-          const r = await fetch('/api/discogs/album-lookup', {
+          r = await fetch(endpoint, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ items: slice }),
           });
-          if (!r.ok) break;   // 503 (no Discogs key) or 401 — stop trying
-          const d = await r.json();
-          if (cancelled) return;
-          setLookups(prev => {
-            const next = { ...prev };
-            for (const res of (d.results || [])) {
-              const k = (res.artist + '::' + res.album).toLowerCase();
-              next[k] = res;
-            }
-            return next;
-          });
-        } catch { break; }
-        // Small space between batches so we don't slam Discogs even if
-        // the server pacing fails.
+        } catch { return; }
+        if (!r.ok) return;   // 503 (shop not configured) — stop, don't retry
+        let d;
+        try { d = await r.json(); } catch { return; }
+        setMap(prev => {
+          const next = { ...prev };
+          for (const res of (d.results || [])) {
+            const k = (res.artist + '::' + res.album).toLowerCase();
+            next[k] = res;
+          }
+          return next;
+        });
         if (i + 12 < targets.length) await new Promise(r => setTimeout(r, 1500));
       }
-    })();
-    return () => { cancelled = true; };
+    };
+
+    let cancelled = false;
+    const guard = (fn) => fn().catch(() => {}).finally(() => {});
+
+    // Run both shops in parallel — they don't share rate limits and
+    // the user wants both prices ASAP.
+    Promise.all([
+      guard(() => fillFrom('/api/discogs/album-lookup', setLookups,     lookups)),
+      guard(() => fillFrom('/api/ebay/album-lookup',    setEbayLookups, ebayLookups)),
+    ]).catch(() => {});
+
+    return () => { cancelled = true; };   // eslint-disable-line
   }, [items]);   // eslint-disable-line
 
   useEffect(() => {
@@ -257,10 +272,13 @@ export default function ListeningTab({ user, onAlbumClick }) {
             const badge = KIND_BADGE[it.kind] || KIND_BADGE.vinyl;
             const busy  = busyKey === key;
             const lookupKey = (it.artist + '::' + it.album).toLowerCase();
-            const lookup = !it.in_collection ? lookups[lookupKey] : null;
+            const lookup     = !it.in_collection ? lookups[lookupKey]     : null;
+            const ebayLookup = !it.in_collection ? ebayLookups[lookupKey] : null;
             // Effective cover: collection cover first (most reliable),
-            // then Discogs lookup result.
-            const effectiveCover = it.cover || lookup?.cover || null;
+            // then Discogs lookup result, finally eBay's listing image.
+            const effectiveCover = it.cover || lookup?.cover || ebayLookup?.image || null;
+            const hasDiscogsPrice = lookup     && !lookup.notFound     && lookup.lowestPrice     != null;
+            const hasEbayPrice    = ebayLookup && !ebayLookup.notFound && ebayLookup.lowestPrice != null;
             const clickable = !!it.collection_id;
             return (
               <div key={key}
@@ -350,18 +368,18 @@ export default function ListeningTab({ user, onAlbumClick }) {
                     </span>
                   )}
 
-                  {/* "Where to buy" row — only for unowned streaming
-                      rows. Discogs gets a fat pill with the marketplace
-                      price (when resolved). Other shops get tiny abbr
-                      chips that deep-search the shop for this album.
-                      Tap.stopPropagation so the chip click doesn't also
-                      trigger the row's own onClick. */}
+                  {/* "Where to buy" row — only for unowned streaming rows.
+                      Two visual tiers:
+                        • Priced pills (orange Discogs, blue eBay) when
+                          we resolved a real marketplace number.
+                        • Tiny abbr chips for shops without API (iMusic,
+                          Groovespin) that deep-search the shop's site.
+                      stopPropagation on each click so the chip doesn't
+                      also fire the row's onClick. */}
                   {!it.in_collection && it.kind !== 'vinyl' && (
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap',
-                      justifyContent: 'flex-end' }}>
-                      {/* Discogs — with price if we resolved it, otherwise
-                          a search chip like the other shops. */}
-                      {lookup && !lookup.notFound && lookup.lowestPrice != null ? (
+                      justifyContent: 'flex-end', maxWidth: 180 }}>
+                      {hasDiscogsPrice && (
                         <a href={lookup.discogsUrl} target="_blank" rel="noopener noreferrer"
                           onClick={e => { e.stopPropagation(); track('listening_action', { action: 'price_click', shop: 'discogs' }); }}
                           style={{
@@ -371,13 +389,28 @@ export default function ListeningTab({ user, onAlbumClick }) {
                             padding: '3px 7px', borderRadius: 6,
                             whiteSpace: 'nowrap',
                           }}>
-                          {(t('listening.priceFrom') || 'od') + ' '}
+                          DG {(t('listening.priceFrom') || 'od') + ' '}
                           {Number(lookup.lowestPrice).toFixed(0)} {lookup.currency || 'USD'}
                         </a>
-                      ) : null}
-                      {/* Other shops — abbr chips. Skip Discogs here when
-                          we already rendered it as a fat priced pill. */}
-                      {VINYL_SHOPS.filter(s => s.id !== 'discogs' || !(lookup && !lookup.notFound && lookup.lowestPrice != null))
+                      )}
+                      {hasEbayPrice && (
+                        <a href={ebayLookup.itemUrl} target="_blank" rel="noopener noreferrer"
+                          onClick={e => { e.stopPropagation(); track('listening_action', { action: 'price_click', shop: 'ebay' }); }}
+                          style={{
+                            ...MONO, fontSize: 11, fontWeight: 600,
+                            color: '#60a5fa', textDecoration: 'none',
+                            background: '#0a1830', border: '1px solid #60a5fa44',
+                            padding: '3px 7px', borderRadius: 6,
+                            whiteSpace: 'nowrap',
+                          }}>
+                          eBay {(t('listening.priceFrom') || 'od') + ' '}
+                          {Number(ebayLookup.lowestPrice).toFixed(0)} {ebayLookup.currency || 'USD'}
+                        </a>
+                      )}
+                      {/* Search-only shop chips. Skip Discogs here when
+                          we already rendered the priced Discogs pill. */}
+                      {VINYL_SHOPS
+                        .filter(s => !(s.id === 'discogs' && hasDiscogsPrice))
                         .map(shop => (
                           <a key={shop.id}
                             href={shop.searchUrl(it.artist, it.album)}
