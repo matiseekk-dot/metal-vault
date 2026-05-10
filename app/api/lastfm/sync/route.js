@@ -99,16 +99,6 @@ export async function POST() {
     return NextResponse.json({ error: 'Last.fm not connected' }, { status: 400 });
   }
 
-  // Every sync = full replace — getTopAlbums(overall) returns the
-  // canonical top-of-all-time, so an old subset would just be stale.
-  // No incremental path; this is a periodic full refresh model.
-  try {
-    await admin.from('streaming_history')
-      .delete()
-      .eq('user_id', user.id)
-      .eq('source', 'lastfm');
-  } catch {}
-
   // 1) Pull RAW scrobbles via getRecentTracks paginated to all-time.
   //
   // Why not getTopAlbums? Because Last.fm's server-side aggregator
@@ -127,24 +117,31 @@ export async function POST() {
   // 500 pages × 200 tracks = 100k scrobble cap. Most users top out
   // well below this; the cap exists for the most extreme histories.
   // Vercel maxDuration=300s headroom: 500 × 220ms = 110s, plenty.
+  // Serialize the two API calls — running them in parallel doubles
+  // the effective rate against Last.fm's 5 req/sec ceiling and we were
+  // hitting silent throttle errors mid-pagination (causing only ~190
+  // tracks to land instead of thousands).
   let tracks = [];
   let topAlbums = [];
   try {
-    [tracks, topAlbums] = await Promise.all([
-      lastfmRecentTracksAll({
-        user:      tokenRow.username,
-        maxPages:  500,
-        pacingMs:  220,
-      }),
-      lastfmTopAlbumsAll({
-        user:      tokenRow.username,
-        period:    'overall',
-        maxPages:  30,
-        pacingMs:  250,
-      }).catch(() => []),   // backstop is optional
-    ]);
+    tracks = await lastfmRecentTracksAll({
+      user:      tokenRow.username,
+      maxPages:  250,        // 250 × 200 = 50k scrobble cap (most users)
+      pacingMs:  240,        // ~4 req/sec, comfortably under 5/sec limit
+      deadlineMs: 200_000,   // 200s soft cap → leaves headroom for inserts
+    });
   } catch (e) {
-    return NextResponse.json({ error: 'Last.fm fetch failed: ' + e.message }, { status: 502 });
+    return NextResponse.json({ error: 'Last.fm getRecentTracks failed: ' + e.message }, { status: 502 });
+  }
+  try {
+    topAlbums = await lastfmTopAlbumsAll({
+      user:      tokenRow.username,
+      period:    'overall',
+      maxPages:  30,
+      pacingMs:  240,
+    });
+  } catch {
+    topAlbums = [];   // backstop is optional, swallow errors
   }
 
   // 2) Build collection index.
@@ -251,8 +248,20 @@ export async function POST() {
     i++;
   }
 
-  // 4) Bulk insert in chunks. 30k rows × ~250 bytes = ~7.5 MB total —
+  // 4) Atomic-ish swap: DELETE old data immediately before INSERT, so
+  // the user's listening tab stays populated through the slow Last.fm
+  // fetch above and only flickers empty for the brief insert window
+  // (typically <2s for 2k rows).
+  try {
+    await admin.from('streaming_history')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('source', 'lastfm');
+  } catch {}
+
+  // 5) Bulk insert in chunks. 30k rows × ~250 bytes = ~7.5 MB total —
   //    easily fits chunked at 500/insert.
+  let inserted = 0;
   const CHUNK = 500;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const slice = rows.slice(i, i + CHUNK);
@@ -265,7 +274,11 @@ export async function POST() {
       const r2 = await admin.from('streaming_history').insert(stripped);
       insErr = r2.error;
     }
-    if (insErr) errors.push('hist:' + (insErr.message || '').slice(0, 60));
+    if (insErr) {
+      errors.push('hist:' + (insErr.message || '').slice(0, 60));
+    } else {
+      inserted += slice.length;
+    }
   }
 
   await admin.from('lastfm_tokens')
@@ -279,10 +292,18 @@ export async function POST() {
     // raw scrobble stream count goes in `scrobbles` for diagnostics
     // (helps the user understand why an active scrobbler with 100k
     // tracks ends up with ~2k albums after grouping).
-    total:     rows.length,
-    scrobbles: tracks.length,
-    rawCount:  topAlbums.length,
-    errors:    errors.slice(0, 5),
+    total:        rows.length,
+    inserted,
+    scrobbles:    tracks.length,
+    rawCount:     topAlbums.length,
+    // Pagination diagnostics — if pagesProcessed is much smaller than
+    // totalPagesAvailable, Last.fm has more data we didn't reach (raise
+    // maxPages or deadlineMs). If pagesProcessed === totalPagesAvailable
+    // and scrobbles is still small, the user genuinely has that many.
+    pagesProcessed:      tracks.__pages         || 0,
+    totalPagesAvailable: tracks.__totalPages    || 0,
+    elapsedMs:           tracks.__elapsedMs     || 0,
+    errors:              errors.slice(0, 5),
   });
 }
 

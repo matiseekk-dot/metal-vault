@@ -82,17 +82,21 @@ export default function LastfmSyncCard() {
         const unmatched = d.unmatched ?? 0;
         const total     = d.total     ?? 0;
         const scrobbles = d.scrobbles ?? 0;
+        const pages     = d.pagesProcessed      ?? 0;
+        const totalPages= d.totalPagesAvailable ?? 0;
         if (total === 0) {
           toast(t('lastfm.syncNone') || 'No top albums — scrobble more first.');
         } else {
-          // "1,247 albums (45,231 scrobbles) · 47 in collection · 1,200 for Discovery"
+          // "1,247 albums (45,231 scrobbles, 230/500 pages) · 47 in collection · 1,200 for Discovery"
           const scrobbleNote = scrobbles > 0
-            ? ' (' + scrobbles.toLocaleString() + ' ' + (t('lastfm.toastScrobbles') || 'scrobbles') + ')'
+            ? ' (' + scrobbles.toLocaleString() + ' ' + (t('lastfm.toastScrobbles') || 'scrobbles') +
+              (totalPages > 0 ? ', ' + pages + '/' + totalPages + ' pages' : '') + ')'
             : '';
           toast.success(
             total.toLocaleString() + ' ' + (t('lastfm.toastAlbums') || 'albums') + scrobbleNote +
             ' · ' + matched + ' ' + (t('lastfm.toastInCol') || 'in collection') +
-            ' · ' + unmatched + ' ' + (t('lastfm.toastForDiscovery') || 'for Discovery')
+            ' · ' + unmatched + ' ' + (t('lastfm.toastForDiscovery') || 'for Discovery'),
+            { duration: 8000 }
           );
           window.dispatchEvent(new CustomEvent('mv-streaming-changed'));
           window.dispatchEvent(new CustomEvent('mv-watchlist-changed'));
