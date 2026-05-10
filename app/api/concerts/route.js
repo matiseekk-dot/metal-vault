@@ -40,19 +40,57 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 // Map Ticketmaster event JSON → our internal schema (compatible with
 // existing UpcomingConcertsTab.js, no UI changes needed).
 //
-// ticketsUrl fallback chain — `e.url` is preferred but the Discovery
-// API occasionally returns it empty for events imported via partner
-// feeds (festivals, regional promoters), and even when present the
-// URL sometimes 404s for users in a different country than the event.
-// Walk down: event URL → artist's Ticketmaster page → public search.
-// Never returns empty (last resort = global TM search by artist name).
+// Known-working Ticketmaster regional sites. The Discovery API also
+// returns URLs for region-specific TM sub-brands that have since shut
+// down (ticketmaster.pl was discontinued in 2022 and now serves a
+// hard 404 / mismatched redirect; possibly others). Anything not on
+// this list falls back to the universal search URL on ticketmaster.com
+// which always resolves.
+const TM_WORKING_DOMAINS = [
+  'ticketmaster.com',
+  'ticketmaster.ca',
+  'ticketmaster.co.uk',
+  'ticketmaster.de',
+  'ticketmaster.at',
+  'ticketmaster.ch',
+  'ticketmaster.es',
+  'ticketmaster.fr',
+  'ticketmaster.it',
+  'ticketmaster.nl',
+  'ticketmaster.be',
+  'ticketmaster.ie',
+  'ticketmaster.dk',
+  'ticketmaster.fi',
+  'ticketmaster.no',
+  'ticketmaster.se',
+  'ticketmaster.com.au',
+  'ticketmaster.co.nz',
+  'ticketmaster.com.mx',
+  // Livenation is TM's sister brand for some markets where the TM
+  // domain was retired (Poland → livenation.pl).
+  'livenation.pl',
+  'livenation.com',
+];
+
+function isWorkingTmUrl(url) {
+  if (!url || !/^https?:\/\//.test(url)) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    return TM_WORKING_DOMAINS.some(d => host === d || host.endsWith('.' + d));
+  } catch { return false; }
+}
+
+// ticketsUrl fallback chain — prefer the event URL only when it points
+// at a known-live Ticketmaster region. Empty / dead-domain URLs fall
+// through to the artist's TM page → universal search. The search URL
+// at ticketmaster.com always resolves regardless of the user's country,
+// landing them on a list of the artist's events they can pick from.
 function buildTicketsUrl(e) {
-  if (e?.url && /^https?:\/\//.test(e.url)) return e.url;
+  if (isWorkingTmUrl(e?.url)) return e.url;
   const attractions = e?._embedded?.attractions || [];
-  const artistUrl = attractions.find(a => a?.url && /^https?:\/\//.test(a.url))?.url;
+  const artistUrl = attractions.find(a => isWorkingTmUrl(a?.url))?.url;
   if (artistUrl) return artistUrl;
-  // Public search keyed on the headline attraction name (or the event
-  // name as a last resort). encodeURIComponent handles diacritics.
+  // Universal search — works in every region, never 404s.
   const keyword = attractions[0]?.name || e?.name || '';
   if (keyword) return 'https://www.ticketmaster.com/search?q=' + encodeURIComponent(keyword);
   return 'https://www.ticketmaster.com/';
@@ -92,9 +130,10 @@ async function fetchArtistEvents(artistName, sb) {
   const apiKey = process.env.TICKETMASTER_API_KEY;
   if (!apiKey) return { events: [], skipped: 'no_api_key' };
 
-  // Cache key — bumped to v3 to invalidate stale entries with empty
-  // ticketsUrl from before buildTicketsUrl fallback chain landed.
-  const cacheKey = 'tm-v3::' + artistName.toLowerCase().replace(/\s+/g, '_');
+  // Cache key — bumped to v4 to invalidate stale ticketsUrl values that
+  // pointed at retired regional TM domains (ticketmaster.pl shut down
+  // in 2022, etc). v3 cached those as if they were valid.
+  const cacheKey = 'tm-v4::' + artistName.toLowerCase().replace(/\s+/g, '_');
 
   // Try cache
   try {

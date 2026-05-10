@@ -98,6 +98,11 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
         { duration: 6000 }
       );
       onUpdated?.(d.item);
+      // Global refresh signal — parent's onUpdated only updates photos
+      // (it's wired to onPhotosChange), so without this event the
+      // collection state in the rest of the app wouldn't reflect the
+      // new for_sale flag until full reload.
+      window.dispatchEvent(new CustomEvent('mv-collection-changed'));
       setEditing(false);
     } catch (e) {
       toast.error(e.message);
@@ -126,6 +131,10 @@ export default function ForSaleToggle({ item, premium, onUpgrade, onUpdated }) {
       haptic.tap();
       toast.success(t('forSale.removed'));
       onUpdated?.(d.item);
+      // Same global-refresh signal as the listing-create path — the
+      // for_sale=false update needs to propagate to the collection
+      // surface (filter chip + LISTED badge) which lives in CollectionTab.
+      window.dispatchEvent(new CustomEvent('mv-collection-changed'));
     } catch (e) {
       toast.error(e.message);
     }
