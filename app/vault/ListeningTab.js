@@ -27,6 +27,7 @@ import { toast } from '@/app/components/Toast';
 import { haptic } from '@/lib/haptics';
 import { track } from '@/lib/analytics';
 import StreamingDiscoveries from '@/app/components/StreamingDiscoveries';
+import { VINYL_SHOPS } from '@/lib/vinyl-shops';
 
 const FILTERS = [
   { id: 'all',       i18n: 'listening.filter.all'       },
@@ -349,23 +350,52 @@ export default function ListeningTab({ user, onAlbumClick }) {
                     </span>
                   )}
 
-                  {/* Discogs price — only for unowned streaming rows that
-                      we resolved against the marketplace. Click → opens
-                      the Discogs release page in a new tab so the user
-                      can buy. Implies "this would cost ~X to add". */}
-                  {lookup && !lookup.notFound && lookup.lowestPrice != null && (
-                    <a href={lookup.discogsUrl} target="_blank" rel="noopener noreferrer"
-                      onClick={e => { e.stopPropagation(); track('listening_action', { action: 'price_click', kind: it.kind }); }}
-                      style={{
-                        ...MONO, fontSize: 11, fontWeight: 600,
-                        color: '#f97316', textDecoration: 'none',
-                        background: '#3a1a06', border: '1px solid #f9731644',
-                        padding: '3px 7px', borderRadius: 6,
-                        whiteSpace: 'nowrap',
-                      }}>
-                      {(t('listening.priceFrom') || 'od') + ' '}
-                      {Number(lookup.lowestPrice).toFixed(0)} {lookup.currency || 'USD'}
-                    </a>
+                  {/* "Where to buy" row — only for unowned streaming
+                      rows. Discogs gets a fat pill with the marketplace
+                      price (when resolved). Other shops get tiny abbr
+                      chips that deep-search the shop for this album.
+                      Tap.stopPropagation so the chip click doesn't also
+                      trigger the row's own onClick. */}
+                  {!it.in_collection && it.kind !== 'vinyl' && (
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap',
+                      justifyContent: 'flex-end' }}>
+                      {/* Discogs — with price if we resolved it, otherwise
+                          a search chip like the other shops. */}
+                      {lookup && !lookup.notFound && lookup.lowestPrice != null ? (
+                        <a href={lookup.discogsUrl} target="_blank" rel="noopener noreferrer"
+                          onClick={e => { e.stopPropagation(); track('listening_action', { action: 'price_click', shop: 'discogs' }); }}
+                          style={{
+                            ...MONO, fontSize: 11, fontWeight: 600,
+                            color: '#f97316', textDecoration: 'none',
+                            background: '#3a1a06', border: '1px solid #f9731644',
+                            padding: '3px 7px', borderRadius: 6,
+                            whiteSpace: 'nowrap',
+                          }}>
+                          {(t('listening.priceFrom') || 'od') + ' '}
+                          {Number(lookup.lowestPrice).toFixed(0)} {lookup.currency || 'USD'}
+                        </a>
+                      ) : null}
+                      {/* Other shops — abbr chips. Skip Discogs here when
+                          we already rendered it as a fat priced pill. */}
+                      {VINYL_SHOPS.filter(s => s.id !== 'discogs' || !(lookup && !lookup.notFound && lookup.lowestPrice != null))
+                        .map(shop => (
+                          <a key={shop.id}
+                            href={shop.searchUrl(it.artist, it.album)}
+                            target="_blank" rel="noopener noreferrer"
+                            onClick={e => { e.stopPropagation(); track('listening_action', { action: 'shop_click', shop: shop.id }); }}
+                            title={shop.name + ' — ' + (t('listening.searchAt') || 'search')}
+                            style={{
+                              ...MONO, fontSize: 9, fontWeight: 700,
+                              color: shop.color, background: shop.bg,
+                              padding: '3px 6px', borderRadius: 4,
+                              textDecoration: 'none',
+                              letterSpacing: '0.04em',
+                              minWidth: 22, textAlign: 'center',
+                            }}>
+                            {shop.abbr}
+                          </a>
+                        ))}
+                    </div>
                   )}
 
                   {/* Wishlist if NOT owned + streaming source */}
