@@ -2113,7 +2113,16 @@ export function CollectionTab({
                                     c.id === item.id ? { ...c, ...body.item } : c);
                                   onUpdate(merged);
                                 }
-                                try { window.dispatchEvent(new Event('mv-collection-changed')); } catch {}
+                                // DON'T dispatch mv-collection-changed —
+                                // useCollection's listener does a full
+                                // /api/collection GET which can hit a
+                                // stale Supabase read replica and OVERWRITE
+                                // the price we just saved with the
+                                // pre-PATCH value. That was the actual
+                                // "needs two saves" root cause. Local
+                                // state is already up-to-date from the
+                                // PATCH-response merge above; no broadcast
+                                // needed.
                               } catch {
                                 const reverted = collection.map(c =>
                                   c.id === item.id ? { ...c, purchase_price: prevPrice } : c);
@@ -2299,7 +2308,11 @@ export function CollectionTab({
                   c.id === priceModalItem.id ? { ...c, purchase_price: n } : c);
                 onUpdate(merged);
               }
-              try { window.dispatchEvent(new Event('mv-collection-changed')); } catch {}
+              // No mv-collection-changed broadcast — see inline note in
+              // the inline form above. Triggering useCollection's listener
+              // here would refetch /api/collection from a possibly-stale
+              // Supabase replica and overwrite the price we just saved
+              // (root cause of the "needs two saves" complaint).
             } catch {
               toast.error(t('vault.priceModal.saveFailed'));
             }
