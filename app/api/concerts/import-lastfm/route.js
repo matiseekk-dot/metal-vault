@@ -207,6 +207,33 @@ export async function POST() {
   // PLUS belt-and-braces keyword scan on the event title AND venue
   // name — useful for old data where Last.fm migrated festivals into
   // /event/ URLs or where the title is just a year ("Wacken 2024").
+  // Extract the headliner band name from an event title.
+  // On Last.fm's user-events listing, the title cell shows the
+  // headliner band name as a hyperlink while the lineup cell shows
+  // ONLY the support bands. Without prepending the title we'd lose
+  // every headliner — e.g. "Katatonia" event with lineup "Agent
+  // Fresco, VOLA" imported as just Agent Fresco + VOLA, Katatonia
+  // dropped.
+  //
+  // Tour-titled events ("Mayhem - World Tour 2026") get split on
+  // " - " and the first segment used. Festival titles ("Brutal
+  // Assault XXI", "Hellfest 2026") are recognised separately via
+  // isFestivalEvent above and skipped here.
+  function extractHeadlinerFromTitle(title) {
+    if (!title) return null;
+    let head = String(title).split(' - ')[0].trim();
+    // Strip trailing year + tour suffix words.
+    head = head.replace(/\s+\d{4}\s*$/, '').trim();
+    head = head.replace(/\s+(Tour|Europe|UK|World|North America|Asia|South America)\s*$/i, '').trim();
+    // Reject anything that's clearly a festival/show name even after
+    // stripping. "European Metal Festival" etc.
+    if (/\b(festival|fest|open air|tour|live)\b/i.test(head)) return null;
+    // Reject if too long (band names rarely > 60 chars; festival
+    // descriptions often are).
+    if (!head || head.length > 60) return null;
+    return head;
+  }
+
   function isFestivalEvent(ev) {
     if (ev?.ticketsUrl && /\/festival\//i.test(ev.ticketsUrl)) return true;
     const haystack = (
@@ -272,6 +299,21 @@ export async function POST() {
         }
       } catch {}
       await new Promise(rr => setTimeout(rr, 200));
+    }
+
+    // Non-festival events: prepend the headliner from title to lineup.
+    // (Festivals titled "Wacken Open Air 2024" etc. don't get a band-
+    // prepend — the title is the festival name, not a band.)
+    if (!isFest) {
+      const headliner = extractHeadlinerFromTitle(ev.title);
+      if (headliner) {
+        const already = (ev.lineup || []).some(n =>
+          String(n || '').toLowerCase().trim() === headliner.toLowerCase()
+        );
+        if (!already) {
+          ev.lineup = [headliner, ...(ev.lineup || [])];
+        }
+      }
     }
     const venueNorm = normaliseVenueName(venueName);
     let venueId = venueByName.get(venueNorm);
