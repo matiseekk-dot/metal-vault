@@ -243,11 +243,24 @@ export async function GET(request) {
     if (i + 10 < artists.length) await new Promise(r => setTimeout(r, 50));
   }
 
-  // Optional location filter
+  // Optional location filter.
+  //
+  // IMPORTANT: events without coordinates (every event from the Last.fm
+  // HTML scrape — Last.fm doesn't expose lat/lng on event pages) are
+  // KEPT regardless of radius. Otherwise the location filter would wipe
+  // 100% of our results and the user would see "Live empty" or have to
+  // forever choose Worldwide to see anything.
+  //
+  // Behaviour:
+  //   • events WITH coords    → distance-filtered against user's point
+  //   • events WITHOUT coords → always pass through (we can't filter)
+  // Future: reverse-geocode user lat/lng → country, then country-match
+  // against ev.country for a coarser fallback. For now we'd rather show
+  // a distant gig the user can self-filter than hide everything.
   let filtered = allEvents;
   if (lat != null && lng != null && radiusKm != null) {
     filtered = allEvents.filter(ev => {
-      if (ev.lat == null || ev.lng == null) return false;
+      if (ev.lat == null || ev.lng == null) return true;
       return distanceKm(lat, lng, ev.lat, ev.lng) <= radiusKm;
     });
   }

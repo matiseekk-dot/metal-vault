@@ -104,15 +104,30 @@ export async function POST() {
     last_status:     rawEvents.__debug?.lastStatus || 'unknown',
   };
 
+  // Cleanup pass — earlier broken parser runs inserted '<unknown>'
+  // band rows when the title fell back through an empty lineup. Strip
+  // those before computing dedup so they don't haunt the journal.
+  try {
+    await admin.from('user_concerts')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('band', '<unknown>');
+  } catch {}
+
   if (scrapedEvents.length === 0) {
     return NextResponse.json({ imported: 0, skipped: 0, scanned: 0, diag });
   }
 
   // Existing user_concerts rows — build a dedup index by (band_norm,
-  // year, venue_norm) so repeat imports don't duplicate.
+  // year, venue_norm) so repeat imports don't duplicate. CRITICAL:
+  // .eq('user_id', user.id) — the admin client bypasses RLS and the
+  // default 1000-row Supabase select cap could otherwise eat THIS
+  // user's rows when other users have a lot of concerts, causing
+  // existingKeys to be empty → every band re-inserted → multiplication.
   const { data: existing } = await admin
     .from('user_concerts')
-    .select('band, year, venue_id, client_id');
+    .select('band, year, venue_id, client_id')
+    .eq('user_id', user.id);
   const { data: venues } = await admin
     .from('user_venues')
     .select('client_id, name')
@@ -143,16 +158,22 @@ export async function POST() {
 
   // Heuristic: Last.fm itself classifies events vs festivals by URL
   // path. /festival/N+Name = festival, /event/N+Name = concert.
-  // Plus belt-and-braces keyword scan on the event title for cases
-  // where Last.fm got it wrong or the data was migrated badly
-  // (matches "Festival", "Fest", "Open Air", "Fesztivál" etc).
+  // PLUS belt-and-braces keyword scan on the event title AND venue
+  // name — useful for old data where Last.fm migrated festivals into
+  // /event/ URLs or where the title is just a year ("Wacken 2024").
   function isFestivalEvent(ev) {
     if (ev?.ticketsUrl && /\/festival\//i.test(ev.ticketsUrl)) return true;
-    const t = String(ev?.title || '').toLowerCase();
-    if (/\b(festival|fest|open air|openair)\b/.test(t))     return true;
-    // Known Polish/German metal festival keywords that don't match
-    // the generic patterns above.
-    if (/\b(graspop|hellfest|wacken|mystic|summer breeze|with full force|brutal assault|metaldays|inferno|tons of rock|exit|sweden rock|nova rock|copenhell|alcatraz)\b/.test(t)) return true;
+    const haystack = (
+      String(ev?.title || '') + ' ' +
+      String(ev?.venue || '')
+    ).toLowerCase();
+    // Generic festival vocabulary.
+    if (/\b(festival|fest|open air|openair|fesztivál|fesztival)\b/.test(haystack)) return true;
+    // Curated list of well-known European + global metal festivals
+    // — extend liberally; false positives here are cheap (a festival
+    // tagged Festival behaves correctly even if the actual gig was
+    // a club show — the aggregator still groups it).
+    if (/\b(graspop|hellfest|wacken|mystic|summer breeze|with full force|brutal assault|metaldays|inferno|tons of rock|sweden rock|nova rock|copenhell|alcatraz|pol[' ]?and[' ]?rock|metalmania|knock out|knock-out|woodstock|nuclear blast|metal church|mind over matter|nidrosian|midgardsblot|tuska|ruisrock|provinssi|metallsvenskan|gefle metal|maryland deathfest|psycho las vegas|netherlands deathfest|party san|rock in rio|download festival|donington|reading|leeds|glastonbury|coachella|lollapalooza|riot fest)\b/.test(haystack)) return true;
     return false;
   }
 
@@ -266,6 +287,10 @@ export async function POST() {
     scanned: scrapedEvents.length,
     venues_created: newVenues.length,
     venues_upgraded,
-    diag,
+    diag: {
+      ...diag,
+      existing_before: (existing || []).length,
+      existing_keys:   existingKeys.size,
+    },
   });
 }
