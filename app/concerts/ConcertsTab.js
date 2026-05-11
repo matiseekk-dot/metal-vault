@@ -240,7 +240,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   const fx  = useFx();
   const [concerts,setConcerts] = useState([]);
   const [venues,setVenues]     = useState(VENUES);
-  const [tab,setTab]           = useState('list'); // list | ranking
+  const [tab,setTab]           = useState('list'); // list | festivals | ranking
   const [showForm,setShowForm] = useState(false);
   const [editId,setEditId]     = useState(null);
   const [search,setSearch]     = useState('');
@@ -722,7 +722,11 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
       <div style={{padding:'12px 16px 0'}}>
         {/* Subtabs */}
         <div style={{display:'flex',marginBottom:12,borderBottom:`1px solid ${C.border}`}}>
-          {[['list','📋 ' + t('concerts.tab.list')],['ranking','🏆 ' + t('concerts.tab.ranking')]].map(([k,l])=>(
+          {[
+            ['list',      '📋 ' + (t('concerts.tab.list')      || 'Koncerty')],
+            ['festivals', '🎪 ' + (t('concerts.tab.festivals') || 'Festiwale')],
+            ['ranking',   '🏆 ' + (t('concerts.tab.ranking')   || 'Ranking')],
+          ].map(([k,l])=>(
             <button key={k} onClick={()=>setTab(k)}
               style={{padding:'8px 16px',background:'none',border:'none',cursor:'pointer',
                 borderBottom:tab===k?`2px solid ${C.accent}`:'2px solid transparent',
@@ -1481,12 +1485,12 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
           </div>
         )}
 
-        {/* List tab.
-            Display flow: group consecutive concerts that share venue+year
-            AND whose venue is categorised as Festival. Renders each group
-            as a single expandable card with the full lineup. Non-festival
-            rows render as standalone cards (existing behaviour). */}
-        {tab==='list'&&(
+        {/* List / Festivals tabs. Same rendering machinery — the
+            'tab' value below decides whether singles or festival
+            aggregates surface, so a venue+year that's tagged Festival
+            appears in the "Festiwale" tab; everything else lives in
+            "Koncerty". */}
+        {(tab==='list' || tab==='festivals') && (
           filtered.length===0
             ?<div style={{textAlign:'center',padding:'50px 0',color:C.dim,...MONO}}>
                <div style={{fontSize:44,marginBottom:10}}>🎸</div>
@@ -1494,21 +1498,21 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
              </div>
             :<div style={{display:'flex',flexDirection:'column',gap:8}}>
                {(() => {
-                 // Build the display list — interleave festival groups
-                 // with non-festival singles, preserving the user's
-                 // sortBy choice for the "first row" of each group.
+                 // Build display list. Tab semantics:
+                 //   • 'list'      → ONLY non-festival concerts (no aggregated cards)
+                 //   • 'festivals' → ONLY festival aggregates
+                 // Ranking has its own block below and counts everything.
                  const items = [];
                  const groupKey = (c) => {
                    const v = findVenue(c.venueId);
                    if (!v || v.cat !== 'Festival' || !c.year) return null;
                    return c.venueId + '::' + c.year;
                  };
-                 const groupOrder = [];      // first-seen order
-                 const groupMap = new Map(); // key → { venue, year, items }
+                 const groupMap = new Map();
                  for (const c of filtered) {
                    const k = groupKey(c);
                    if (!k) {
-                     items.push({ type: 'single', concert: c });
+                     if (tab === 'list') items.push({ type: 'single', concert: c });
                      continue;
                    }
                    const existing = groupMap.get(k);
@@ -1516,10 +1520,18 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                    const fresh = { type: 'festival', key: k, venue: findVenue(c.venueId),
                      year: c.year, items: [c] };
                    groupMap.set(k, fresh);
-                   groupOrder.push(k);
-                   items.push(fresh);
+                   if (tab === 'festivals') items.push(fresh);
                  }
-                 // Render each item — festival group OR single concert.
+                 if (items.length === 0) {
+                   return (
+                     <div style={{textAlign: 'center', padding: '40px 0',
+                       color: C.dim, ...MONO, fontSize: 12}}>
+                       {tab === 'festivals'
+                         ? (t('concerts.noFestivals') || 'Brak festiwali — wszystko trafiło do "Koncerty"')
+                         : (t('concerts.noConcerts')  || 'Brak pojedynczych koncertów')}
+                     </div>
+                   );
+                 }
                  return items.map(it => {
                    if (it.type === 'festival') {
                      const v = it.venue;

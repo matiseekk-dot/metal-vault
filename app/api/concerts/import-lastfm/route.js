@@ -173,7 +173,7 @@ export async function POST() {
     // — extend liberally; false positives here are cheap (a festival
     // tagged Festival behaves correctly even if the actual gig was
     // a club show — the aggregator still groups it).
-    if (/\b(graspop|hellfest|wacken|mystic|summer breeze|with full force|brutal assault|metaldays|inferno|tons of rock|sweden rock|nova rock|copenhell|alcatraz|pol[' ]?and[' ]?rock|metalmania|knock out|knock-out|woodstock|nuclear blast|metal church|mind over matter|nidrosian|midgardsblot|tuska|ruisrock|provinssi|metallsvenskan|gefle metal|maryland deathfest|psycho las vegas|netherlands deathfest|party san|rock in rio|download festival|donington|reading|leeds|glastonbury|coachella|lollapalooza|riot fest)\b/.test(haystack)) return true;
+    if (/\b(graspop|hellfest|wacken|mystic|summer breeze|with full force|brutal assault|metaldays|inferno|tons of rock|sweden rock|nova rock|copenhell|alcatraz|pol[' ]?and[' ]?rock|metalmania|knock out|knock-out|woodstock|nuclear blast|metal church|mind over matter|nidrosian|midgardsblot|tuska|ruisrock|provinssi|metallsvenskan|gefle metal|maryland deathfest|psycho las vegas|netherlands deathfest|party san|rock in rio|download festival|donington|reading|leeds|glastonbury|coachella|lollapalooza|riot fest|metal hammer|impact festival|impact fest|carnage|asgardsrei|under the black sun|kilkim ž[au]ibu|fall of summer|kaltenbach|dong open air|sweden rock|hammer of doom)\b/.test(haystack)) return true;
     return false;
   }
 
@@ -267,9 +267,7 @@ export async function POST() {
   }
 
   // Upgrade existing 'Other' venues that this import recognised as
-  // festivals. Per-id update (Supabase JS doesn't have multi-row
-  // conditional UPDATE in one call without an RPC) — list is tiny
-  // in practice (few festivals per user) so the loop is cheap.
+  // festivals via name/URL heuristic. Per-id update.
   let venues_upgraded = 0;
   for (const v of venuesToUpgrade) {
     try {
@@ -280,6 +278,61 @@ export async function POST() {
       if (!error) venues_upgraded++;
     } catch {}
   }
+
+  // ── Density-based auto-promote ─────────────────────────────
+  // Real-world catch-all: any venue+year combination that ended up
+  // with ≥4 distinct bands MUST be a festival in practice (a single-
+  // night club show never has that many headliners). This rescues
+  // events the keyword heuristic misses — e.g. Metal Hammer Festival
+  // at Spodek Katowice 2018 where Spodek is a generic arena venue.
+  //
+  // Threshold of 4 is conservative: 3-band billings happen at clubs;
+  // 4+ is festival territory. Only promotes 'Other' → 'Festival'
+  // (preserves user-tagged Arena/Klub/Hall).
+  let density_upgraded = 0;
+  try {
+    const { data: allRows } = await admin
+      .from('user_concerts')
+      .select('venue_id, year, band')
+      .eq('user_id', user.id)
+      .not('venue_id', 'is', null)
+      .not('year', 'is', null);
+
+    // Group: venue_id+year → Set<band lowercased>
+    const groups = new Map();
+    for (const r of (allRows || [])) {
+      const k = r.venue_id + '::' + r.year;
+      const s = groups.get(k) || new Set();
+      s.add((r.band || '').toLowerCase().trim());
+      groups.set(k, s);
+    }
+
+    // Pick venue_ids that appear with ≥4 bands in ANY year.
+    const denseVenues = new Set();
+    for (const [k, bands] of groups) {
+      if (bands.size >= 4) denseVenues.add(k.split('::')[0]);
+    }
+
+    if (denseVenues.size > 0) {
+      // Load current cats for those venues — only upgrade 'Other'.
+      const { data: vRows } = await admin
+        .from('user_venues')
+        .select('client_id, cat')
+        .eq('user_id', user.id)
+        .in('client_id', [...denseVenues]);
+      const toFlip = (vRows || []).filter(v => v.cat === 'Other').map(v => v.client_id);
+      for (const cid of toFlip) {
+        try {
+          const { error } = await admin.from('user_venues')
+            .update({ cat: 'Festival' })
+            .eq('user_id', user.id)
+            .eq('client_id', cid);
+          if (!error) density_upgraded++;
+        } catch {}
+      }
+    }
+  } catch {}
+  venues_upgraded += density_upgraded;
 
   return NextResponse.json({
     imported,

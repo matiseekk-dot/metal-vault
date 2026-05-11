@@ -243,25 +243,55 @@ export async function GET(request) {
     if (i + 10 < artists.length) await new Promise(r => setTimeout(r, 50));
   }
 
-  // Optional location filter.
+  // Optional location filter — two-tier strategy.
   //
-  // IMPORTANT: events without coordinates (every event from the Last.fm
-  // HTML scrape — Last.fm doesn't expose lat/lng on event pages) are
-  // KEPT regardless of radius. Otherwise the location filter would wipe
-  // 100% of our results and the user would see "Live empty" or have to
-  // forever choose Worldwide to see anything.
+  // Tier 1 (precise): events WITH coords get a proper distance check.
+  //   Used by the legacy TM cache entries that had lat/lng.
+  // Tier 2 (coarse, default for Last.fm): event has city + country but
+  //   no coords. We approximate "near the user" by inferring the
+  //   user's CONTINENT from their lat/lng via hardcoded bboxes, then
+  //   keeping only events whose country falls into the same continent.
+  //   This drops US-only events for a Polish user without erasing every
+  //   coord-less LFM scrape (which was the previous over-correction).
   //
-  // Behaviour:
-  //   • events WITH coords    → distance-filtered against user's point
-  //   • events WITHOUT coords → always pass through (we can't filter)
-  // Future: reverse-geocode user lat/lng → country, then country-match
-  // against ev.country for a coarser fallback. For now we'd rather show
-  // a distant gig the user can self-filter than hide everything.
+  // Continent buckets keep the list short and forgiving — no need for
+  // a full reverse-geocode service when "show me Europe vs USA vs the
+  // rest" is the actual user intent.
+  const CONTINENT = {
+    EU: { latMin: 35, latMax: 72, lngMin: -15, lngMax: 45,
+          countries: new Set(['PL','DE','CZ','SK','HU','AT','CH','GB','UK','IE','FR','ES','PT','IT','NL','BE','LU','DK','SE','NO','FI','EE','LV','LT','BG','RO','GR','HR','SI','RS','BA','MK','AL','UA','BY','RU','TR','IS','MT','CY','MC','LI','SM','VA','AD','MD']) },
+    NA: { latMin: 14, latMax: 72, lngMin: -170, lngMax: -50,
+          countries: new Set(['US','USA','CA','MX']) },
+    SA: { latMin: -60, latMax: 14, lngMin: -82, lngMax: -34,
+          countries: new Set(['BR','AR','CL','CO','PE','VE','UY','PY','BO','EC']) },
+    AS: { latMin: 5, latMax: 55, lngMin: 45, lngMax: 180,
+          countries: new Set(['JP','KR','CN','TW','HK','SG','TH','MY','ID','PH','VN','IN','IL','AE','SA']) },
+    OC: { latMin: -50, latMax: -5, lngMin: 110, lngMax: 180,
+          countries: new Set(['AU','NZ']) },
+  };
+  function inferContinent(la, lo) {
+    for (const [code, b] of Object.entries(CONTINENT)) {
+      if (la >= b.latMin && la <= b.latMax && lo >= b.lngMin && lo <= b.lngMax) {
+        return { code, countries: b.countries };
+      }
+    }
+    return null;
+  }
+
   let filtered = allEvents;
   if (lat != null && lng != null && radiusKm != null) {
+    const cont = inferContinent(lat, lng);
     filtered = allEvents.filter(ev => {
-      if (ev.lat == null || ev.lng == null) return true;
-      return distanceKm(lat, lng, ev.lat, ev.lng) <= radiusKm;
+      if (ev.lat != null && ev.lng != null) {
+        // Precise — distance check.
+        return distanceKm(lat, lng, ev.lat, ev.lng) <= radiusKm;
+      }
+      // Coarse — same-continent fallback when coords are missing.
+      // No continent inferred (poles, ocean) → keep everything.
+      if (!cont) return true;
+      const c = String(ev.country || '').toUpperCase();
+      if (!c) return true;   // unknown country → safer to show
+      return cont.countries.has(c);
     });
   }
 
