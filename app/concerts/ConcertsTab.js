@@ -240,6 +240,12 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   // Editing context — when set, submitFest does additive merge
   // (don't duplicate existing band rows) instead of pure insert.
   const [editingFest,setEditingFest] = useState(null);
+  // Inline custom-venue add inside the festival form. Mirrors the
+  // pattern in the regular concert form but defaults cat to 'Festival'
+  // so a typed venue lands in the right opt-group for future selects.
+  const [festNewVenue,setFestNewVenue] = useState('');
+  const [festNewVenueCity,setFestNewVenueCity] = useState('');
+  const [showFestVenueAdd,setShowFestVenueAdd] = useState(false);
   const [suggestions,setSugg]  = useState([]);
   const [error,setError]       = useState('');
   const [newVenue,setNewVenue] = useState('');
@@ -511,6 +517,30 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
     const v={id:crypto.randomUUID(),name:newVenue.trim(),city:'',cat:'Other'};
     const nv=[...venues,v]; setVenues(nv); saveLS(LS_VENUES,nv);
     setForm(f=>({...f,venueId:v.id})); setNewVenue(''); setShowVenueAdd(false);
+    syncVenue(v);
+  };
+
+  // Festival-specific custom venue add. Pre-tagged cat='Festival' so
+  // the new venue lands in the right opt-group everywhere it's
+  // referenced from. Also accepts a city since festivals are
+  // location-tagged (Wacken / Clisson / Dessel etc) more often than
+  // clubs.
+  const addFestVenue = () => {
+    const name = festNewVenue.trim();
+    if (!name) return;
+    const v = {
+      id:   crypto.randomUUID(),
+      name,
+      city: festNewVenueCity.trim(),
+      cat:  'Festival',
+    };
+    const nv = [...venues, v];
+    setVenues(nv);
+    saveLS(LS_VENUES, nv);
+    setFestForm(f => ({ ...f, venueId: v.id }));
+    setFestNewVenue('');
+    setFestNewVenueCity('');
+    setShowFestVenueAdd(false);
     syncVenue(v);
   };
 
@@ -1023,6 +1053,50 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                   ))}
                 </optgroup>
               </select>
+              {/* "+ Custom festival" — typeable fallback when the user's
+                  fest isn't in the canonical list (regional / one-off /
+                  obscure DIY). New venue gets cat='Festival' so it
+                  appears in the right opt-group next time. */}
+              <div style={{marginTop: 6}}>
+                {!showFestVenueAdd ? (
+                  <button type="button" onClick={() => setShowFestVenueAdd(true)}
+                    style={{background: 'transparent', border: '1px dashed ' + C.border,
+                      borderRadius: 6, color: '#f5c842', padding: '6px 10px',
+                      cursor: 'pointer', ...MONO, fontSize: 11, width: '100%'}}>
+                    + {t('concerts.festAddCustomVenue') || 'Dodaj własny festiwal'}
+                  </button>
+                ) : (
+                  <div style={{display: 'flex', gap: 6, marginTop: 4}}>
+                    <input value={festNewVenue}
+                      onChange={e => setFestNewVenue(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && addFestVenue()}
+                      placeholder={t('concerts.festVenuePlaceholder') || 'Nazwa festiwalu'}
+                      autoFocus
+                      style={{...inputSt, flex: 2, padding: '8px 10px'}}/>
+                    <input value={festNewVenueCity}
+                      onChange={e => setFestNewVenueCity(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && addFestVenue()}
+                      placeholder={t('concerts.cityPlaceholder') || 'Miasto'}
+                      style={{...inputSt, flex: 1, padding: '8px 10px'}}/>
+                    <button type="button" onClick={addFestVenue}
+                      style={{background: '#f5c842', border: 'none', borderRadius: 8,
+                        color: '#1a0f00', padding: '0 14px', cursor: 'pointer',
+                        ...BEBAS, fontSize: 14, letterSpacing: '0.05em'}}>
+                      {(t('concerts.form.add') || 'Dodaj').toUpperCase()}
+                    </button>
+                    <button type="button" onClick={() => {
+                        setShowFestVenueAdd(false);
+                        setFestNewVenue('');
+                        setFestNewVenueCity('');
+                      }}
+                      style={{background: 'transparent', border: '1px solid ' + C.border,
+                        borderRadius: 8, color: C.dim, padding: '0 10px',
+                        cursor: 'pointer', ...MONO, fontSize: 11}}>
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Year + genre */}

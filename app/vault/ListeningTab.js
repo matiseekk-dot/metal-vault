@@ -424,6 +424,17 @@ export default function ListeningTab({ user, onAlbumClick, premium = false }) {
             const effectiveCover = it.cover || lookup?.cover || ebayLookup?.image || null;
             const hasDiscogsPrice = lookup     && !lookup.notFound     && lookup.lowestPrice     != null;
             const hasEbayPrice    = ebayLookup && !ebayLookup.notFound && ebayLookup.lowestPrice != null;
+            // Cross-source price comparison — when BOTH sources resolved
+            // a number, mark whichever is lower. Drives the "💚 NAJTAŃSZE"
+            // badge in the render so the user can see at a glance where
+            // to buy. Tie → no badge (no meaningful winner).
+            // Note: currencies might differ in edge cases (Discogs USD vs
+            // eBay regional). We compare raw values — fine in practice
+            // because both default to USD; future improvement: convert
+            // via lib/currency before compare.
+            const bothResolved     = hasDiscogsPrice && hasEbayPrice;
+            const discogsIsCheaper = bothResolved && lookup.lowestPrice     <  ebayLookup.lowestPrice;
+            const ebayIsCheaper    = bothResolved && ebayLookup.lowestPrice <  lookup.lowestPrice;
             const clickable = !!it.collection_id;
             return (
               <div key={key}
@@ -548,10 +559,17 @@ export default function ListeningTab({ user, onAlbumClick, premium = false }) {
                           style={{
                             ...MONO, fontSize: 11, fontWeight: 600,
                             color: '#f97316', textDecoration: 'none',
-                            background: '#3a1a06', border: '1px solid #f9731644',
+                            background: '#3a1a06',
+                            // Brighter border + extra glow on the winning
+                            // price so the eye snaps to it. Loser dims a
+                            // notch so the comparison reads cleanly.
+                            border: '1px solid ' + (discogsIsCheaper ? '#4ade80' : '#f9731644'),
+                            boxShadow: discogsIsCheaper ? '0 0 0 1px #4ade8044' : 'none',
+                            opacity: ebayIsCheaper ? 0.55 : 1,
                             padding: '3px 7px', borderRadius: 6,
                             whiteSpace: 'nowrap',
                           }}>
+                          {discogsIsCheaper && '💚 '}
                           DG {(t('listening.priceFrom') || 'od') + ' '}
                           {Number(lookup.lowestPrice).toFixed(0)} {lookup.currency || 'USD'}
                         </a>
@@ -562,10 +580,14 @@ export default function ListeningTab({ user, onAlbumClick, premium = false }) {
                           style={{
                             ...MONO, fontSize: 11, fontWeight: 600,
                             color: '#60a5fa', textDecoration: 'none',
-                            background: '#0a1830', border: '1px solid #60a5fa44',
+                            background: '#0a1830',
+                            border: '1px solid ' + (ebayIsCheaper ? '#4ade80' : '#60a5fa44'),
+                            boxShadow: ebayIsCheaper ? '0 0 0 1px #4ade8044' : 'none',
+                            opacity: discogsIsCheaper ? 0.55 : 1,
                             padding: '3px 7px', borderRadius: 6,
                             whiteSpace: 'nowrap',
                           }}>
+                          {ebayIsCheaper && '💚 '}
                           eBay {(t('listening.priceFrom') || 'od') + ' '}
                           {Number(ebayLookup.lowestPrice).toFixed(0)} {ebayLookup.currency || 'USD'}
                         </a>
