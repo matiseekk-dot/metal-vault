@@ -17,7 +17,7 @@ import { createClient } from '@/lib/supabase-server';
 function clean(item) {
   // Coerce to expected types and trim. Values that don't fit the column
   // schema get neutered so a malformed payload can't crash the upsert.
-  return {
+  const out = {
     band:     String(item.band || '').trim().slice(0, 200),
     venue_id: item.venueId ? String(item.venueId).slice(0, 80) : null,
     year:     item.year ? String(item.year).slice(0, 8) : null,
@@ -26,6 +26,16 @@ function clean(item) {
     price:    String(item.price ?? '').slice(0, 40),
     note:     String(item.note ?? '').slice(0, 2000),
   };
+  // Optional planned-concert fields. Only include them when the client
+  // explicitly sent them — keeps PATCH-like partial updates from
+  // silently flipping a past gig to upcoming.
+  if (item.is_planned !== undefined)     out.is_planned     = !!item.is_planned;
+  if (item.tickets_bought !== undefined) out.tickets_bought = !!item.tickets_bought;
+  if (item.planned_date !== undefined) {
+    // Accept ISO date strings (YYYY-MM-DD); null clears.
+    out.planned_date = item.planned_date ? String(item.planned_date).slice(0, 10) : null;
+  }
+  return out;
 }
 
 export async function GET() {
@@ -53,6 +63,12 @@ export async function GET() {
       rating: c.rating,
       price: c.price,
       note: c.note,
+      // Planned-concert fields. Defensive defaults so the UI keeps
+      // rendering past gigs unchanged when migration 038 hasn't been
+      // applied yet (column simply absent → undefined → falsy).
+      is_planned:     !!c.is_planned,
+      tickets_bought: !!c.tickets_bought,
+      planned_date:   c.planned_date || null,
     })),
     venues: (venues || []).map(v => ({
       id: v.client_id,

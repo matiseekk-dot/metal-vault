@@ -224,7 +224,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   const [editId,setEditId]     = useState(null);
   const [search,setSearch]     = useState('');
   const [sortBy,setSortBy]     = useState('year_desc');
-  const [form,setForm]         = useState({band:'',venueId:null,year:String(new Date().getFullYear()),genre:'Metal',rating:0,price:'',note:''});
+  const [form,setForm]         = useState({band:'',venueId:null,year:String(new Date().getFullYear()),genre:'Metal',rating:0,price:'',note:'',is_planned:false,tickets_bought:false,planned_date:''});
   // Festival mode — captures one venue+year and many bands in a single
   // pass so the user doesn't add Wacken 2024 twelve times by hand.
   // `bands` is a multi-line string; on submit we split + trim + filter
@@ -391,7 +391,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
     }).catch(() => {});
   };
 
-  const resetForm = () => { setForm({band:'',venueId:null,year:String(new Date().getFullYear()),genre:'Metal',rating:0,price:'',note:''});setEditId(null);setSugg([]);setError(''); };
+  const resetForm = () => { setForm({band:'',venueId:null,year:String(new Date().getFullYear()),genre:'Metal',rating:0,price:'',note:'',is_planned:false,tickets_bought:false,planned_date:''});setEditId(null);setSugg([]);setError(''); };
 
   const handleBand = v => {
     setForm(f=>({...f,band:v}));
@@ -503,7 +503,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   };
 
   const del    = id => { save(concerts.filter(c=>c.id!==id)); syncDeleteConcert(id); };
-  const edit   = c  => { setForm({band:c.band,venueId:c.venueId||null,year:c.year||'',genre:c.genre||'Metal',rating:c.rating||0,price:c.price||'',note:c.note||''});setEditId(c.id);setShowForm(true);setSugg([]);setTimeout(()=>inputRef.current?.focus(),80); };
+  const edit   = c  => { setForm({band:c.band,venueId:c.venueId||null,year:c.year||'',genre:c.genre||'Metal',rating:c.rating||0,price:c.price||'',note:c.note||'',is_planned:!!c.is_planned,tickets_bought:!!c.tickets_bought,planned_date:c.planned_date||''});setEditId(c.id);setShowForm(true);setSugg([]);setTimeout(()=>inputRef.current?.focus(),80); };
   const copy   = c  => { setForm({band:'',venueId:c.venueId,year:c.year||'',genre:c.genre,rating:0,price:c.price||'',note:''});setShowForm(true);setSugg([]);setTimeout(()=>inputRef.current?.focus(),80); };
 
   const addVenue = () => {
@@ -526,17 +526,34 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   // type-agnostic.
   const findVenue = (id) => venues.find(v => String(v.id) === String(id));
 
-  const filtered = concerts.filter(c=>{
+  // Split concerts into "upcoming" (is_planned=true with a date still
+  // ahead) and "history" (everything else, including past planned
+  // events that have rolled past their date). History list keeps the
+  // user-chosen sort; upcoming list always sorts by planned_date ASC
+  // (next show on top).
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const isUpcoming = (c) =>
+    c.is_planned && c.planned_date && c.planned_date >= todayIso;
+
+  const allFiltered = concerts.filter(c=>{
     const q=search.toLowerCase();
     const v=findVenue(c.venueId);
     return c.band.toLowerCase().includes(q)||(v?.name||'').toLowerCase().includes(q);
-  }).sort((a,b)=>{
-    if(sortBy==='year_desc')return (b.year||'0').localeCompare(a.year||'0');
-    if(sortBy==='year_asc') return (a.year||'0').localeCompare(b.year||'0');
-    if(sortBy==='band')     return a.band.localeCompare(b.band);
-    if(sortBy==='rating')   return (b.rating||0)-(a.rating||0);
-    return 0;
   });
+
+  const upcoming = allFiltered
+    .filter(isUpcoming)
+    .sort((a, b) => String(a.planned_date).localeCompare(String(b.planned_date)));
+
+  const filtered = allFiltered
+    .filter(c => !isUpcoming(c))
+    .sort((a,b)=>{
+      if(sortBy==='year_desc')return (b.year||'0').localeCompare(a.year||'0');
+      if(sortBy==='year_asc') return (a.year||'0').localeCompare(b.year||'0');
+      if(sortBy==='band')     return a.band.localeCompare(b.band);
+      if(sortBy==='rating')   return (b.rating||0)-(a.rating||0);
+      return 0;
+    });
 
   const ranked = Object.entries(bandMap)
     .filter(([b])=>b.toLowerCase().includes(search.toLowerCase()))
@@ -648,6 +665,27 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               borderRadius:10, color: showFestForm ? C.muted : '#1a0f00', cursor:'pointer',
               ...BEBAS, fontSize:15, letterSpacing:'0.08em'}}>
             🎪 {showFestForm ? (t('concerts.festCancel') || 'Anuluj festiwal') : (t('concerts.festAdd') || 'Festiwal')}
+          </button>
+          {/* Planned concert mode — re-uses the regular form but
+              flips is_planned=true on entry so the date + tickets-
+              bought controls become visible. Visual: blue gradient so
+              the user knows they're in "I'm going" mode rather than
+              "I was at" mode. */}
+          <button onClick={() => {
+              if (showForm && form.is_planned) { resetForm(); setShowForm(false); return; }
+              resetForm();
+              setForm(f => ({ ...f, is_planned: true, year: '' }));
+              setShowForm(true);
+              if (showFestForm) resetFest();
+            }}
+            style={{flex:1,minWidth:120,padding:'12px',
+              background: (showForm && form.is_planned) ? C.bg3 : 'linear-gradient(135deg,#3b82f6,#1e40af)',
+              border: (showForm && form.is_planned) ? `1px solid ${C.border}` : 'none',
+              borderRadius:10, color: (showForm && form.is_planned) ? C.muted : '#fff', cursor:'pointer',
+              ...BEBAS, fontSize:15, letterSpacing:'0.08em'}}>
+            📅 {(showForm && form.is_planned)
+                  ? (t('concerts.plannedCancel') || 'Anuluj')
+                  : (t('concerts.plannedAdd') || 'Idę na koncert')}
           </button>
           {concerts.length > 0 && (
             <button onClick={()=>{
@@ -854,11 +892,42 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               )}
             </div>
 
-            {/* Year + Genre */}
+            {/* Planned-mode banner — shown only when form.is_planned is
+                true. Reminds the user they're scheduling, not logging
+                history, and gives them a quick toggle back. */}
+            {form.is_planned && (
+              <div style={{background:'#0d1f3a', border:'1px solid #3b82f666',
+                borderRadius:8, padding:'8px 10px',
+                fontSize:11, color:'#93c5fd', ...MONO, lineHeight:1.4}}>
+                📅 {t('concerts.plannedBanner')
+                     || 'Tryb: idę na koncert (jeszcze nie odbył się). Po dacie zostaje w historii.'}
+              </div>
+            )}
+
+            {/* Year (history) OR Date (planned) + Genre.
+                The planned-date field replaces the year input when in
+                planned mode — datetime-local input keeps both day and
+                time so the upcoming list can sort precisely. On the
+                day of the show we automatically demote the planned
+                row to history by the cron (future work). */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <div>
-                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.year')}</label>
-                <input type="number" inputMode="numeric" min="1950" max="2099" value={form.year} onChange={e=>setForm(f=>({...f,year:e.target.value}))} style={inputSt}/>
+                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>
+                  {form.is_planned ? (t('concerts.form.plannedDate') || 'Data koncertu')
+                                   : t('concerts.form.year')}
+                </label>
+                {form.is_planned ? (
+                  <input type="date" value={form.planned_date || ''}
+                    onChange={e => setForm(f => ({ ...f,
+                      planned_date: e.target.value,
+                      year:         e.target.value ? e.target.value.slice(0, 4) : f.year,
+                    }))}
+                    style={inputSt}/>
+                ) : (
+                  <input type="number" inputMode="numeric" min="1950" max="2099"
+                    value={form.year} onChange={e=>setForm(f=>({...f,year:e.target.value}))}
+                    style={inputSt}/>
+                )}
               </div>
               <div>
                 <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.genre')}</label>
@@ -867,6 +936,22 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                 </select>
               </div>
             </div>
+
+            {/* Tickets-bought toggle — only in planned mode. Separate
+                checkbox row so it's not buried in another grid. */}
+            {form.is_planned && (
+              <label style={{display:'flex', alignItems:'center', gap:10, cursor:'pointer',
+                padding:'8px 10px', background:C.bg3, border:'1px solid ' + C.border, borderRadius:8}}>
+                <input type="checkbox" checked={!!form.tickets_bought}
+                  onChange={e => setForm(f => ({ ...f, tickets_bought: e.target.checked }))}
+                  style={{width:18, height:18, cursor:'pointer'}}/>
+                <span style={{fontSize:12, color:form.tickets_bought ? '#4ade80' : C.muted, ...MONO}}>
+                  {form.tickets_bought
+                    ? '🎟 ' + (t('concerts.ticketsBought') || 'Bilet kupiony')
+                    : '❓ ' + (t('concerts.ticketsNot')   || 'Bilet jeszcze nie kupiony')}
+                </span>
+              </label>
+            )}
 
             {/* Rating + Price */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -1105,6 +1190,99 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
             <option value="rating">{t('concerts.sort.rating')}</option>
           </select>
         </div>
+
+        {/* Upcoming planned concerts — separate section above the
+            history list. Always visible when there are any (regardless
+            of which sub-tab we're on, because "what's coming up" is
+            different action class than "what I attended"). Sorted by
+            planned_date ascending. Each row shows the date + tickets-
+            bought status + venue + edit/delete. */}
+        {tab === 'list' && upcoming.length > 0 && (
+          <div style={{marginBottom: 16}}>
+            <div style={{fontSize: 10, color: '#60a5fa', ...MONO,
+              letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8}}>
+              📅 {t('concerts.upcoming') || 'Nadchodzące'} ({upcoming.length})
+            </div>
+            <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+              {upcoming.map(c => {
+                const v = findVenue(c.venueId);
+                const daysUntil = c.planned_date
+                  ? Math.ceil((new Date(c.planned_date) - new Date()) / 86400000)
+                  : null;
+                return (
+                  <div key={c.id} style={{background: '#0d1f3a',
+                    border: '1px solid #3b82f644', borderLeft: '4px solid #3b82f6',
+                    borderRadius: 10, padding: '12px 14px',
+                    display: 'flex', alignItems: 'center', gap: 10}}>
+                    <div style={{flex: 1, minWidth: 0}}>
+                      <div style={{...BEBAS, fontSize: 18, color: C.text,
+                        letterSpacing: '0.04em', lineHeight: 1.1}}>
+                        {c.band}
+                      </div>
+                      <div style={{display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap'}}>
+                        <span style={{fontSize: 11, color: C.dim, ...MONO}}>
+                          📅 {c.planned_date}
+                          {daysUntil != null && daysUntil >= 0 && (
+                            <span style={{marginLeft: 4, color: daysUntil <= 7 ? '#f5c842' : C.dim}}>
+                              {daysUntil === 0 ? ' · ' + (t('concerts.today') || 'DZIŚ')
+                                : daysUntil === 1 ? ' · ' + (t('concerts.tomorrow') || 'JUTRO')
+                                : ' · za ' + daysUntil + 'd'}
+                            </span>
+                          )}
+                        </span>
+                        {v && <span style={{fontSize: 11, color: C.dim, ...MONO}}>
+                          📍 {v.name}{v.city ? ' · ' + v.city : ''}
+                        </span>}
+                        <span style={{fontSize: 11, ...MONO,
+                          color: c.tickets_bought ? '#4ade80' : '#f5c842'}}>
+                          {c.tickets_bought
+                            ? '🎟 ' + (t('concerts.ticketsBought') || 'Bilet kupiony')
+                            : '❓ ' + (t('concerts.ticketsNot')   || 'Bilet jeszcze nie kupiony')}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Quick toggle for ticket status — saves a full
+                        edit-form round trip when the user just bought
+                        their ticket and wants to flip the badge. */}
+                    <button onClick={() => {
+                      const updated = { ...c, tickets_bought: !c.tickets_bought };
+                      save(concerts.map(x => x.id === c.id ? updated : x));
+                      syncConcert(updated);
+                    }}
+                      title={c.tickets_bought
+                        ? (t('concerts.markUnbought') || 'Zaznacz jako bez biletu')
+                        : (t('concerts.markBought')   || 'Zaznacz że bilet kupiony')}
+                      style={{background: c.tickets_bought ? '#1a3d1a' : '#3a2906',
+                        border: '1px solid ' + (c.tickets_bought ? '#4ade8088' : '#f5c84288'),
+                        borderRadius: 6,
+                        color: c.tickets_bought ? '#4ade80' : '#f5c842',
+                        padding: '6px 10px', cursor: 'pointer',
+                        fontSize: 12, ...MONO}}>
+                      {c.tickets_bought ? '✓' : '🎟'}
+                    </button>
+                    <button onClick={() => edit(c)}
+                      style={{background: 'none', border: '1px solid ' + C.border,
+                        borderRadius: 6, color: C.dim, cursor: 'pointer',
+                        padding: '6px 10px', fontSize: 12, ...MONO}}>
+                      ✏
+                    </button>
+                    <button onClick={async () => {
+                      if (await mvConfirm(t('concerts.deleteConfirm', { band: c.band }),
+                          { kind: 'danger', confirmLabel: t('common.delete') })) {
+                        del(c.id);
+                      }
+                    }}
+                      style={{background: 'none', border: '1px solid #7f1d1d',
+                        borderRadius: 6, color: '#f87171', cursor: 'pointer',
+                        padding: '6px 10px', fontSize: 12, ...MONO}}>
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* List tab.
             Display flow: group consecutive concerts that share venue+year
