@@ -38,6 +38,14 @@ export async function GET(request) {
   // Time the walk so the user knows whether it timed out vs returned
   // few-but-quickly (the latter points at parser; the former at
   // network/throttle).
+  // Also probe the URL with the canonical "+ instead of space" form so we
+  // know whether the caller passed a raw "festival/N Name" (which Node
+  // fetch will %20-encode) vs the "festival/N+Name" form Last.fm itself
+  // uses. The walker normalises spaces to + internally, but seeing the
+  // raw URL the caller sent is useful diag.
+  const urlSpacesNormalised = url.replace(/\s+/g, '+');
+  const hadSpaces = url !== urlSpacesNormalised;
+
   const t0 = Date.now();
   const names = await lastfmEventFullLineup(url, {
     timeoutMs: 10000,
@@ -45,11 +53,22 @@ export async function GET(request) {
   });
   const elapsedMs = Date.now() - t0;
 
+  // The walker attaches per-page diagnostics as a non-enumerable
+  // __debug property: { trace: [{page, url, status, bytes, raw, fresh}],
+  // cleanedBase }. Surface it so a single curl reveals exactly why the
+  // walk terminated (rate-limit page 2? regex stopped matching? hit
+  // duplicate-only page?).
+  const dbg = names && names.__debug ? names.__debug : null;
+
   return NextResponse.json({
     url,
-    total:     names.length,
+    urlSpacesNormalised,
+    hadSpaces,
+    cleanedBase: dbg?.cleanedBase || null,
+    total:       names.length,
     elapsedMs,
-    sample:    names.slice(0, 30),
-    full:      names,
+    pageTrace:   dbg?.trace || [],
+    sample:      names.slice(0, 30),
+    full:        names,
   });
 }
