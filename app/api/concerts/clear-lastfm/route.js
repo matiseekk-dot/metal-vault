@@ -42,5 +42,22 @@ export async function POST() {
     .eq('note', 'Imported from Last.fm');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, deleted: count_before });
+  // Clear-then-reimport is the user's "fresh start" gesture. Wipe
+  // the exclusion tombstones too so the next import brings back the
+  // FULL lineup — otherwise users who once pruned a festival down
+  // to "bands I saw" couldn't ever recover the full lineup short of
+  // SQL surgery. (Per-row × delete still adds tombstones; this is
+  // only the full-reset path.)
+  let excludes_cleared = 0;
+  try {
+    const { count: ec } = await sb.from('user_concert_excludes')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+    excludes_cleared = ec || 0;
+    await sb.from('user_concert_excludes')
+      .delete()
+      .eq('user_id', user.id);
+  } catch {}
+
+  return NextResponse.json({ ok: true, deleted: count_before, excludes_cleared });
 }

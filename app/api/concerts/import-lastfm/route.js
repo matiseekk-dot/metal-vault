@@ -200,6 +200,22 @@ export async function POST() {
     return NextResponse.json({ imported: 0, skipped: 0, scanned: 0, diag });
   }
 
+  // ── User-explicit exclusions (migration 039) ────────────────
+  // Bands the user previously DELETED from an LFM-imported festival.
+  // The user said: "nobody saw every band at a 200-act festival — let
+  // me prune the lineup and have it stick." When the user × a row,
+  // /api/user-concerts records an exclude_key here. We load that Set
+  // now and merge it into existingKeys so the insert phase silently
+  // skips those (band, year, venue) tuples.
+  let excludeKeys = new Set();
+  try {
+    const { data: excl } = await admin
+      .from('user_concert_excludes')
+      .select('exclude_key')
+      .eq('user_id', user.id);
+    excludeKeys = new Set((excl || []).map(r => r.exclude_key));
+  } catch {}
+
   // Existing user_concerts rows — build a dedup index by (band_norm,
   // year, venue_norm) so repeat imports don't duplicate. CRITICAL:
   // .eq('user_id', user.id) — the admin client bypasses RLS and the
@@ -430,6 +446,9 @@ export async function POST() {
       const bandStr = String(band || '').trim();
       if (!bandStr) continue;
       const dedupKey = bandStr.toLowerCase() + '::' + year + '::' + venueNorm;
+      // User explicitly removed this band from this event in the
+      // past — respect their pruning. (Migration 039 tombstones.)
+      if (excludeKeys.has(dedupKey)) { skipped++; continue; }
       if (existingKeys.has(dedupKey)) { skipped++; continue; }
       existingKeys.add(dedupKey);
       concertRows.push({
@@ -731,6 +750,7 @@ export async function POST() {
     pre_dedup_killed,
     post_dedup_killed,
     title_band_cleaned,
+    excludes_active: excludeKeys.size,
     diag: {
       ...diag,
       existing_before: (existing || []).length,

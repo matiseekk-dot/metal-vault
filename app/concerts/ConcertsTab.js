@@ -519,13 +519,30 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
     }
 
     setFestSaving(true);
-    // Edit mode: skip bands already in the original lineup, only
-    // INSERT new rows. We also patch existing rows when shared
-    // metadata (genre/rating/price/note) changed so the festival's
-    // top-line stats refresh.
+    // Edit mode: three-way diff against the original lineup.
+    //   • bands in NEW only        → INSERT
+    //   • bands in OLD only        → DELETE (writes exclusion tombstone)
+    //   • bands in BOTH            → PATCH shared metadata
+    // Without the DELETE half, removing bands from the textarea did
+    // nothing (the import re-added them on next 📻 click). With it,
+    // the user can prune a festival down to "bands I actually saw"
+    // and have it stick.
     const isEdit = !!editingFest;
     const existingLower = new Set(editingFest?.originalBands || []);
     const newBands = bands.filter(b => !existingLower.has(b.toLowerCase()));
+    // Bands the user removed from the textarea. Find the matching
+    // original concert ids so we can fire syncDeleteConcert on each
+    // (which records an exclude_key in user_concert_excludes server-
+    // side, so a subsequent LFM re-import doesn't bring the band back).
+    const newBandsLower = new Set(bands.map(b => String(b || '').toLowerCase().trim()));
+    const removedConcertIds = [];
+    if (isEdit) {
+      for (const c of concerts) {
+        if (!editingFest.originalIds.includes(c.id)) continue;
+        const bk = String(c.band || '').toLowerCase().trim();
+        if (!newBandsLower.has(bk)) removedConcertIds.push(c.id);
+      }
+    }
 
     // Price model: festival ticket = single number for the whole event,
     // not per band. To avoid summing N×price in the header (which made
@@ -579,15 +596,29 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
         if (editingFest.originalIds.includes(c.id)) syncConcert(c);
       }
     }
+    // Apply removals locally + sync to server (each delete writes a
+    // tombstone via /api/user-concerts so re-import respects the pruning).
+    if (removedConcertIds.length > 0) {
+      const idSet = new Set(removedConcertIds);
+      updated = updated.filter(c => !idSet.has(c.id));
+    }
     save([...entries, ...updated]);
-    await Promise.all(entries.map(e => syncConcert(e)));
+    await Promise.all([
+      ...entries.map(e => syncConcert(e)),
+      ...removedConcertIds.map(id => syncDeleteConcert(id)),
+    ]);
     setFestSaving(false);
     haptic.success?.();
     if (isEdit) {
+      const addedN   = newBands.length;
+      const removedN = removedConcertIds.length;
+      const parts = [];
+      if (addedN > 0)   parts.push('+' + addedN);
+      if (removedN > 0) parts.push('−' + removedN);
       toast.success(
-        newBands.length > 0
-          ? (t('concerts.festUpdatedAdded', { n: newBands.length })
-              || ('Zaktualizowano festiwal — dodano ' + newBands.length + ' nowych zespołów'))
+        parts.length > 0
+          ? ((t('concerts.festUpdatedDiff', { diff: parts.join(' / ') })
+              || 'Zaktualizowano festiwal') + ' (' + parts.join(' / ') + ' zespołów)')
           : (t('concerts.festUpdated') || 'Zaktualizowano festiwal')
       );
     } else {
@@ -704,7 +735,6 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
       if(sortBy==='year_desc')return (b.year||'0').localeCompare(a.year||'0');
       if(sortBy==='year_asc') return (a.year||'0').localeCompare(b.year||'0');
       if(sortBy==='band')     return a.band.localeCompare(b.band);
-      if(sortBy==='rating')   return (b.rating||0)-(a.rating||0);
       return 0;
     });
 
@@ -1263,34 +1293,30 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               </label>
             )}
 
-            {/* Rating + Price */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <div>
-                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:6}}>{t('concerts.form.rating')}</label>
-                <Stars value={form.rating} onChange={v=>setForm(f=>({...f,rating:v}))}/>
-              </div>
-              <div>
-                <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.price')}</label>
-                {/* Price + currency split. Stored as "150 PLN" in the
-                    text column so we don't need a schema change. */}
-                {(() => {
-                  const { amount, currency } = parsePrice(form.price);
-                  return (
-                    <div style={{display:'flex', gap:4}}>
-                      <input type="number" inputMode="decimal" min="0"
-                        value={amount}
-                        onChange={e => setForm(f => ({ ...f, price: formatPriceStored(e.target.value, currency) }))}
-                        placeholder={t('concerts.form.pricePlaceholder')}
-                        style={{...inputSt, flex:1}}/>
-                      <select value={currency}
-                        onChange={e => setForm(f => ({ ...f, price: formatPriceStored(amount, e.target.value) }))}
-                        style={{...inputSt, width:74, cursor:'pointer'}}>
-                        {PRICE_CURRENCIES.map(c => <option key={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  );
-                })()}
-              </div>
+            {/* Price (rating field deliberately omitted — user feedback:
+                "ratings add nothing to the journal, the band+venue+year
+                are the data points that matter"). */}
+            <div>
+              <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.price')}</label>
+              {/* Price + currency split. Stored as "150 PLN" in the
+                  text column so we don't need a schema change. */}
+              {(() => {
+                const { amount, currency } = parsePrice(form.price);
+                return (
+                  <div style={{display:'flex', gap:4}}>
+                    <input type="number" inputMode="decimal" min="0"
+                      value={amount}
+                      onChange={e => setForm(f => ({ ...f, price: formatPriceStored(e.target.value, currency) }))}
+                      placeholder={t('concerts.form.pricePlaceholder')}
+                      style={{...inputSt, flex:1}}/>
+                    <select value={currency}
+                      onChange={e => setForm(f => ({ ...f, price: formatPriceStored(amount, e.target.value) }))}
+                      style={{...inputSt, width:74, cursor:'pointer'}}>
+                      {PRICE_CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Note */}
@@ -1527,16 +1553,9 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               })()}
             </div>
 
-            {/* Optional shared metadata — applied to every band row. */}
-            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
-              <div>
-                <label style={{fontSize:10, color:C.dim, ...MONO, letterSpacing:'0.06em',
-                  textTransform:'uppercase', display:'block', marginBottom:4}}>
-                  {t('concerts.form.rating') || 'Ocena (cały festiwal)'}
-                </label>
-                <Stars value={festForm.rating}
-                  onChange={v => setFestForm(f => ({ ...f, rating: v }))}/>
-              </div>
+            {/* Shared festival metadata — price only (rating removed
+                per user feedback). */}
+            <div>
               <div>
                 <label style={{fontSize:10, color:C.dim, ...MONO, letterSpacing:'0.06em',
                   textTransform:'uppercase', display:'block', marginBottom:4}}>
@@ -1597,7 +1616,6 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
             <option value="year_desc">{t('concerts.sort.yearDesc')}</option>
             <option value="year_asc">{t('concerts.sort.yearAsc')}</option>
             <option value="band">{t('concerts.sort.band')}</option>
-            <option value="rating">{t('concerts.sort.rating')}</option>
           </select>
         </div>
 
@@ -1790,7 +1808,6 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                      const pricedRow = it.items.find(c => Number(parsePrice(c.price).amount) > 0);
                      const totalPrice  = pricedRow ? Number(parsePrice(pricedRow.price).amount) : 0;
                      const festCurrency = pricedRow ? parsePrice(pricedRow.price).currency : 'PLN';
-                     const avgRating = it.items.reduce((s, c) => s + (Number(c.rating) || 0), 0) / it.items.length;
                      return (
                        <div key={it.key} style={{background: '#1a1408',
                          border: '1px solid ' + col + '44', borderLeft: '4px solid ' + col,
@@ -1836,11 +1853,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                    🎟 {totalPrice.toFixed(0)} {festCurrency}
                                  </span>
                                )}
-                               {avgRating > 0 && (
-                                 <span style={{fontSize: 11, color: '#f5c842', ...MONO}}>
-                                   ★ {avgRating.toFixed(1)}
-                                 </span>
-                               )}
+                               {/* rating removed — user feedback */}
                              </div>
                            </div>
                            {/* Festival-level edit/delete. Edit opens the
@@ -1927,7 +1940,6 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                      {seenN}×
                                    </span>
                                  )}
-                                 <Stars value={c.rating || 0}/>
                                  <button onClick={(e) => { e.stopPropagation(); edit(c); }}
                                    style={{background: 'none', border: 'none', color: C.dim,
                                      cursor: 'pointer', fontSize: 14, padding: '4px 8px'}}>✏</button>
@@ -1989,7 +2001,6 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                            })()}
                          </div>
                          {c.note&&<p style={{margin:'7px 0 0',fontSize:12,color:C.muted,fontFamily:'Georgia,serif',fontStyle:'italic',lineHeight:1.5}}>"{c.note}"</p>}
-                         <div style={{marginTop:6}}><Stars value={c.rating||0}/></div>
                          <div style={{display:'flex',gap:6,marginTop:8}}>
                            <button onClick={()=>edit(c)} style={{flex:1,padding:'6px',background:C.bg3,border:`1px solid ${C.border}`,borderRadius:7,color:C.muted,cursor:'pointer',fontSize:11,...MONO}}>✏ Edit</button>
                            <button onClick={()=>copy(c)} style={{flex:1,padding:'6px',background:C.bg3,border:`1px solid ${C.border}`,borderRadius:7,color:C.muted,cursor:'pointer',fontSize:11,...MONO}}>⧉ Copy</button>
@@ -2051,9 +2062,6 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
             ?<div style={{textAlign:'center',padding:'50px 0',color:C.dim,...MONO}}><div style={{fontSize:44}}>🏆</div></div>
             :<div style={{display:'flex',flexDirection:'column',gap:8}}>
                {ranked.map(([band,cs],i)=>{
-                 const avg = cs.filter(c=>c.rating).length
-                   ? (cs.filter(c=>c.rating).reduce((s,c)=>s+c.rating,0)/cs.filter(c=>c.rating).length).toFixed(1)
-                   : null;
                  const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':null;
                  const photo = bandPhotos[band.toLowerCase()];
                  // Circular avatar with letter fallback — identical to
@@ -2086,7 +2094,6 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                        <div style={{...BEBAS,fontSize:19,color:C.text,lineHeight:1}}>{band}</div>
                        <div style={{display:'flex',gap:12,marginTop:3}}>
                          <span style={{fontSize:11,color:C.dim,...MONO}}>{cs.length}× live</span>
-                         {avg&&<span style={{fontSize:11,color:'#f5c842',...MONO}}>★ {avg} avg</span>}
                        </div>
                      </div>
                    </div>

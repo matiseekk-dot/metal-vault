@@ -101,6 +101,18 @@ export async function POST(request) {
   return NextResponse.json({ ok: true });
 }
 
+// Normalised venue name — must match the importer's helper. Lowercase,
+// strip non-alphanumerics, collapse whitespace. We duplicate the
+// function here rather than import the route module (Next would refuse
+// to bundle a route handler into another route).
+function _normaliseVenueName(s) {
+  return String(s || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
 export async function DELETE(request) {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
@@ -109,6 +121,47 @@ export async function DELETE(request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
+  // Before deleting, peek at the row. If it was an LFM-imported row,
+  // record an exclusion tombstone so the next 📻 Last.fm click doesn't
+  // bring the band back. (User said: "nobody saw every band at a
+  // festival — let me prune the lineup and have it stick.")
+  //
+  // Failure to write the tombstone shouldn't block the delete — the
+  // delete is idempotent and the user wants the row gone NOW; the
+  // exclude is a nice-to-have that gets retried on the next delete
+  // of a similar row.
+  try {
+    const { data: row } = await sb
+      .from('user_concerts')
+      .select('band, year, venue_id, note')
+      .eq('user_id', user.id)
+      .eq('client_id', id)
+      .maybeSingle();
+    if (row && row.note === 'Imported from Last.fm') {
+      // Resolve venue name → normalised key segment.
+      let venueNorm = '';
+      if (row.venue_id) {
+        const { data: v } = await sb
+          .from('user_venues')
+          .select('name')
+          .eq('user_id', user.id)
+          .eq('client_id', row.venue_id)
+          .maybeSingle();
+        venueNorm = _normaliseVenueName(v?.name || '');
+      }
+      const key = (row.band || '').toLowerCase().trim() + '::' +
+                  (row.year || '') + '::' + venueNorm;
+      // Upsert via on-conflict-do-nothing: harmless to attempt twice.
+      await sb.from('user_concert_excludes').upsert({
+        user_id:     user.id,
+        exclude_key: key,
+        band:        row.band || '',
+        year:        row.year || '',
+        venue_norm:  venueNorm,
+      }, { onConflict: 'user_id,exclude_key' });
+    }
+  } catch {}
 
   const { error } = await sb
     .from('user_concerts')
