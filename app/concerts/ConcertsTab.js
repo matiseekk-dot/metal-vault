@@ -573,11 +573,39 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   // Stats
   const bandMap = {};
   concerts.forEach(c=>{bandMap[c.band]=(bandMap[c.band]||[]);bandMap[c.band].push(c);});
-  // totalSpent ignores currency mixing — sums raw amounts across PLN
-  // and EUR rows alike. Good enough for "total tickets bought" stat;
-  // multi-currency split would need lib/currency FX conversion which
-  // we save for later.
-  const totalSpent = concerts.reduce((s,c)=>s+(Number(parsePrice(c.price).amount)||0),0);
+  // Cross-currency total: normalise every row to USD via fx rates,
+  // then formatPrice() renders the sum in the user's chosen display
+  // currency. Without this step, a PLN row got summed AS IF it were
+  // USD ("150 PLN" treated like "$150") which inflated the lifetime
+  // total by ~4× for Polish users. The fx hook returns rate=null
+  // until the first fetch completes — in that window we still sum
+  // raw amounts so the chip isn't blank.
+  const totalSpentUsd = concerts.reduce((s, c) => {
+    const { amount, currency } = parsePrice(c.price);
+    const n = Number(amount);
+    if (!Number.isFinite(n) || n <= 0) return s;
+    if (currency === 'USD') return s + n;
+    const rate = fx?.rates?.[currency];
+    if (!rate || !Number.isFinite(rate)) return s + n;  // fx not loaded yet
+    return s + (n / rate);    // local → USD
+  }, 0);
+  // Legacy name kept so the stats strip render below doesn't need
+  // a separate edit.
+  const totalSpent = totalSpentUsd;
+
+  // Band → live appearances count. Includes EVERY user_concerts row
+  // for that band — solo gigs and festival appearances both count
+  // (each band line in a festival is its own row by design).
+  // Lower-cased key so "Mayhem" and "MAYHEM" merge into one.
+  const bandSeenCount = (() => {
+    const m = {};
+    for (const c of concerts) {
+      const k = (c.band || '').toLowerCase().trim();
+      if (!k) continue;
+      m[k] = (m[k] || 0) + 1;
+    }
+    return m;
+  })();
   const mostSeen   = Object.entries(bandMap).sort((a,b)=>b[1].length-a[1].length)[0];
 
   // Compare venue ids as strings — built-ins use numeric ids, user-added
@@ -1595,10 +1623,18 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                            <div style={{marginTop: 12, paddingTop: 10,
                              borderTop: '1px solid ' + col + '33',
                              display: 'flex', flexDirection: 'column', gap: 6}}>
-                             {it.items.map(c => (
+                             {it.items.map(c => {
+                               const seenN = bandSeenCount[(c.band || '').toLowerCase().trim()] || 1;
+                               return (
                                <div key={c.id} style={{display: 'flex', alignItems: 'center', gap: 8,
                                  padding: '6px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 6}}>
                                  <span style={{flex: 1, fontSize: 13, color: C.text, ...MONO}}>{c.band}</span>
+                                 {seenN >= 2 && (
+                                   <span style={{fontSize: 9, ...MONO, padding: '1px 6px', borderRadius: 10,
+                                     background: '#1a3d1a', color: '#4ade80'}}>
+                                     {seenN}×
+                                   </span>
+                                 )}
                                  <Stars value={c.rating || 0}/>
                                  <button onClick={(e) => { e.stopPropagation(); edit(c); }}
                                    style={{background: 'none', border: 'none', color: C.dim,
@@ -1613,7 +1649,8 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                    style={{background: 'none', border: 'none', color: '#666',
                                      cursor: 'pointer', fontSize: 16, padding: '4px 8px'}}>×</button>
                                </div>
-                             ))}
+                               );
+                             })}
                            </div>
                          )}
                        </div>
@@ -1632,6 +1669,22 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                            <span style={{...BEBAS,fontSize:20,letterSpacing:'0.05em',color:C.text,lineHeight:1}}>{c.band}</span>
                            <span style={{fontSize:9,...MONO,padding:'2px 7px',borderRadius:20,
                              background:`${col}22`,color:col,border:`1px solid ${col}44`}}>{c.genre}</span>
+                           {/* Seen-count badge — includes festival
+                               appearances (each festival lineup row
+                               counts) so "Mayhem ×5" reflects total
+                               lifetime live encounters across both
+                               headlining gigs and festival sets. Only
+                               renders when ≥2 to avoid pointless 1× noise. */}
+                           {(() => {
+                             const n = bandSeenCount[(c.band || '').toLowerCase().trim()] || 1;
+                             if (n < 2) return null;
+                             return (
+                               <span style={{fontSize: 9, ...MONO, padding: '2px 7px', borderRadius: 20,
+                                 background: '#1a3d1a', color: '#4ade80', border: '1px solid #4ade8044'}}>
+                                 {n}× {t('concerts.seenLabel') || 'widziane'}
+                               </span>
+                             );
+                           })()}
                          </div>
                          <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
                            {v&&<span style={{fontSize:11,color:C.dim,...MONO}}>📍{v.name}{v.city?` · ${v.city}`:''}</span>}
