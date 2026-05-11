@@ -21,7 +21,12 @@ import { createClient, getAdminClient } from '@/lib/supabase-server';
 import { lastfmUserEventsAll } from '@/lib/lastfm';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+// Long deadline — historical archive walks ~10 year-tabs sequentially
+// (one HTTP per year, then potentially multiple pages per year).
+// For matiskura with 2010..2018 + Upcoming + ~1-2 pages/year = ~20
+// requests at 250ms pacing + 400ms inter-year = ~9s + scrape time.
+// 120s gives plenty of headroom for users with deeper archives.
+export const maxDuration = 120;
 
 // Country code → ISO-2 just for the common European countries the
 // matched-venue-name lookup needs. Kept narrow because user venues
@@ -57,30 +62,27 @@ export async function POST() {
     }, { status: 400 });
   }
 
-  // Pull the user's events. Try TWO passes:
-  //   1. ?past=1 (just attended past gigs)
-  //   2. no filter (everything — captures rows the past filter misses
-  //      because Last.fm's "past vs upcoming" UI flag has been buggy
-  //      for years; events from before the user's signup or that
-  //      pre-date their first scrobble sometimes hide in the unfiltered
-  //      stream)
-  // Merge by (artist + venue + date prefix) so a hit in both passes
-  // doesn't duplicate.
-  let pastEvents = [];
-  let allEvents  = [];
+  // Walk EVERY year tab on the user's events page + the upcoming
+  // tab. lastfmUserEventsAll first detects which years they have
+  // archive content for (Last.fm renders tabs only for years with
+  // events) then scrapes each /events/{YYYY} archive plus /events
+  // for upcoming. Past/?past=1 was a dead-end from an older UI;
+  // the year tabs are the canonical archive surface.
+  let rawEvents = [];
   try {
-    pastEvents = await lastfmUserEventsAll(username, {
-      past: true, maxPages: 60, pacingMs: 350,
-    });
-    // Second pass is cheap if first was empty; pace short.
-    allEvents = await lastfmUserEventsAll(username, {
-      past: false, maxPages: 60, pacingMs: 350,
+    rawEvents = await lastfmUserEventsAll(username, {
+      maxPages:    60,
+      maxYears:    60,
+      pacingMs:    250,
+      yearDelayMs: 400,
     });
   } catch (e) {
     return NextResponse.json({ error: 'Scrape failed: ' + e.message }, { status: 502 });
   }
 
-  // Merge — dedupe by (date prefix, venue lowercased, lineup-first lowercased)
+  // Dedupe by (date prefix, venue, headline performer) so two passes
+  // touching the same event under different year tabs (rare but
+  // possible at year boundaries) only land one row.
   const mergeMap = new Map();
   const mergeKey = (e) => {
     const d = (e.datetime || '').slice(0, 10);
@@ -88,19 +90,18 @@ export async function POST() {
     const a = (e.lineup?.[0] || '').toLowerCase().trim();
     return d + '|' + v + '|' + a;
   };
-  for (const e of pastEvents) mergeMap.set(mergeKey(e), e);
-  for (const e of allEvents)  { const k = mergeKey(e); if (!mergeMap.has(k)) mergeMap.set(k, e); }
+  for (const e of rawEvents) {
+    const k = mergeKey(e);
+    if (!mergeMap.has(k)) mergeMap.set(k, e);
+  }
   const scrapedEvents = [...mergeMap.values()];
 
-  // Diagnostic trace — surfaced in response so the client toast can
-  // explain "scraped 124 events from 7 pages of past + 14 pages of all".
   const diag = {
-    past_pages:  pastEvents.__debug?.trace?.length || 0,
-    past_count:  pastEvents.length,
-    all_pages:   allEvents.__debug?.trace?.length  || 0,
-    all_count:   allEvents.length,
-    merged:      scrapedEvents.length,
-    last_status: pastEvents.__debug?.lastStatus || allEvents.__debug?.lastStatus || 'unknown',
+    targets_scanned: rawEvents.__debug?.targets?.length || 0,
+    pages_scanned:   rawEvents.__debug?.trace?.length || 0,
+    raw_count:       rawEvents.length,
+    merged:          scrapedEvents.length,
+    last_status:     rawEvents.__debug?.lastStatus || 'unknown',
   };
 
   if (scrapedEvents.length === 0) {
