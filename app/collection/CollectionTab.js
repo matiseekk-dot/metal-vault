@@ -2040,15 +2040,21 @@ export function CollectionTab({
                           // keyboard (input loses focus → blur fires) and the
                           // user had to tap OK twice.
                           (() => {
-                            // Reads the input value DIRECTLY from the DOM on
-                            // submit rather than from React state. Without
-                            // this the "save twice" bug fires on mobile:
-                            // last keystroke fires onChange asynchronously,
-                            // the tap on OK fires before React commits the
-                            // state update, so submitPrice reads stale
-                            // priceInputVal. Reading via form-event target
-                            // is sync — whatever the user just typed is
-                            // already in the DOM <input value>.
+                            // Two anti-flakiness measures:
+                            //   (a) Read the input value DIRECTLY from the DOM
+                            //       on submit — mobile keyboards commit the
+                            //       final keystroke asynchronously and the tap
+                            //       on OK can fire before React state catches
+                            //       up. DOM value is always current.
+                            //   (b) DON'T refetch after PATCH. Supabase read-
+                            //       replica lag can return the stale (pre-PATCH)
+                            //       row even seconds after a successful write.
+                            //       That caused the "save twice" bug: PATCH
+                            //       succeeded, refetch read the stale replica,
+                            //       UI flipped back to the OLD price, user
+                            //       thought save failed and re-entered. Now we
+                            //       trust the PATCH response (authoritative)
+                            //       and merge that single row into local state.
                             const submitPrice = async (rawValue) => {
                               const n = parseFloat(String(rawValue ?? '').trim().replace(',','.'));
                               if (isNaN(n) || n < 0) {
@@ -2056,6 +2062,8 @@ export function CollectionTab({
                                 return;
                               }
                               const prevPrice = item.purchase_price;
+                              // Optimistic + close form immediately. If PATCH
+                              // succeeds we just overwrite with the server row.
                               const optimistic = collection.map(c =>
                                 c.id === item.id ? { ...c, purchase_price: n } : c);
                               onUpdate(optimistic);
@@ -2068,12 +2076,17 @@ export function CollectionTab({
                                   body: JSON.stringify({ purchase_price: n }),
                                 });
                                 if (!r.ok) throw new Error('PATCH failed');
-                                // Authoritative refetch keeps median_price etc fresh too.
-                                // Broadcast the change so other tabs/listeners
-                                // (useCollection's mv-collection-changed) re-pull
-                                // and don't render stale prices on other devices.
-                                const fresh = await fetch('/api/collection').then(r => r.json());
-                                if (fresh.items) onUpdate(fresh.items);
+                                const body = await r.json().catch(() => ({}));
+                                // Use the row returned by PATCH directly. The
+                                // SAME request that wrote it returns it — no
+                                // replica round-trip, no race. If for some
+                                // reason the body lacks .item, fall back to
+                                // the optimistic state (already applied above).
+                                if (body && body.item) {
+                                  const merged = collection.map(c =>
+                                    c.id === item.id ? { ...c, ...body.item } : c);
+                                  onUpdate(merged);
+                                }
                                 try { window.dispatchEvent(new Event('mv-collection-changed')); } catch {}
                               } catch {
                                 const reverted = collection.map(c =>
@@ -2237,13 +2250,33 @@ export function CollectionTab({
           item={priceModalItem}
           onClose={() => setPriceModalItem(null)}
           onSave={async (n) => {
-            await fetch('/api/collection?id=' + priceModalItem.id, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ purchase_price: n }),
-            });
-            const fresh = await fetch('/api/collection').then(r => r.json());
-            if (fresh.items) onUpdate(fresh.items);
+            // Same anti-flakiness as the inline editor above: use the
+            // PATCH response directly instead of refetching the full
+            // collection. Refetch hit Supabase read-replicas with lag
+            // and returned the pre-PATCH row, flipping the UI back to
+            // the old price → user thought save failed → re-entered.
+            try {
+              const r = await fetch('/api/collection?id=' + priceModalItem.id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ purchase_price: n }),
+              });
+              if (!r.ok) throw new Error('PATCH failed');
+              const body = await r.json().catch(() => ({}));
+              if (body && body.item) {
+                const merged = collection.map(c =>
+                  c.id === priceModalItem.id ? { ...c, ...body.item } : c);
+                onUpdate(merged);
+              } else {
+                // Fallback: optimistic patch on this one field.
+                const merged = collection.map(c =>
+                  c.id === priceModalItem.id ? { ...c, purchase_price: n } : c);
+                onUpdate(merged);
+              }
+              try { window.dispatchEvent(new Event('mv-collection-changed')); } catch {}
+            } catch {
+              toast.error(t('vault.priceModal.saveFailed'));
+            }
             setPriceModalItem(null);
           }}
         />
