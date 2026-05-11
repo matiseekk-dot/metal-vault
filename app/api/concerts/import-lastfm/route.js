@@ -57,21 +57,54 @@ export async function POST() {
     }, { status: 400 });
   }
 
-  // Pull the user's past events. 30 pages × ~20 events/page = up to
-  // 600 historic gigs, more than any single human's Last.fm history.
-  let scrapedEvents = [];
+  // Pull the user's events. Try TWO passes:
+  //   1. ?past=1 (just attended past gigs)
+  //   2. no filter (everything — captures rows the past filter misses
+  //      because Last.fm's "past vs upcoming" UI flag has been buggy
+  //      for years; events from before the user's signup or that
+  //      pre-date their first scrobble sometimes hide in the unfiltered
+  //      stream)
+  // Merge by (artist + venue + date prefix) so a hit in both passes
+  // doesn't duplicate.
+  let pastEvents = [];
+  let allEvents  = [];
   try {
-    scrapedEvents = await lastfmUserEventsAll(username, {
-      past:     true,
-      maxPages: 30,
-      pacingMs: 350,
+    pastEvents = await lastfmUserEventsAll(username, {
+      past: true, maxPages: 60, pacingMs: 350,
+    });
+    // Second pass is cheap if first was empty; pace short.
+    allEvents = await lastfmUserEventsAll(username, {
+      past: false, maxPages: 60, pacingMs: 350,
     });
   } catch (e) {
     return NextResponse.json({ error: 'Scrape failed: ' + e.message }, { status: 502 });
   }
 
+  // Merge — dedupe by (date prefix, venue lowercased, lineup-first lowercased)
+  const mergeMap = new Map();
+  const mergeKey = (e) => {
+    const d = (e.datetime || '').slice(0, 10);
+    const v = (e.venue || '').toLowerCase().trim();
+    const a = (e.lineup?.[0] || '').toLowerCase().trim();
+    return d + '|' + v + '|' + a;
+  };
+  for (const e of pastEvents) mergeMap.set(mergeKey(e), e);
+  for (const e of allEvents)  { const k = mergeKey(e); if (!mergeMap.has(k)) mergeMap.set(k, e); }
+  const scrapedEvents = [...mergeMap.values()];
+
+  // Diagnostic trace — surfaced in response so the client toast can
+  // explain "scraped 124 events from 7 pages of past + 14 pages of all".
+  const diag = {
+    past_pages:  pastEvents.__debug?.trace?.length || 0,
+    past_count:  pastEvents.length,
+    all_pages:   allEvents.__debug?.trace?.length  || 0,
+    all_count:   allEvents.length,
+    merged:      scrapedEvents.length,
+    last_status: pastEvents.__debug?.lastStatus || allEvents.__debug?.lastStatus || 'unknown',
+  };
+
   if (scrapedEvents.length === 0) {
-    return NextResponse.json({ imported: 0, skipped: 0, scanned: 0 });
+    return NextResponse.json({ imported: 0, skipped: 0, scanned: 0, diag });
   }
 
   // Existing user_concerts rows — build a dedup index by (band_norm,
@@ -178,5 +211,6 @@ export async function POST() {
     skipped,
     scanned: scrapedEvents.length,
     venues_created: newVenues.length,
+    diag,
   });
 }

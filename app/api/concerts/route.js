@@ -1,28 +1,18 @@
-// ── Concerts integration — Last.fm primary, Ticketmaster fallback ──
+// ── Concerts integration — Last.fm only ─────────────────────────
 //
-// User-visible empirics: Last.fm covers the metal scene FAR better
-// than Ticketmaster, including small clubs, festivals, and DIY shows.
+// Ticketmaster removed. User feedback: TM is effectively US-centric,
+// app is European-focused, and Last.fm has dramatically better metal
+// scene coverage (small clubs, DIY shows, European festivals).
+//
 // Last.fm shut down their public events API in 2018 but the events
 // PAGES at /music/{artist}/+events still render structured JSON-LD
 // (schema.org/MusicEvent). We scrape that — same data Last.fm shows
 // in the UI, no auth dance, no rate-limiting risk that breaks the app.
 //
-// Strategy:
-//   1. Pull from Last.fm scraper (lib/lastfm.lastfmArtistEvents).
-//   2. If Last.fm returns 0 events for an artist AND Ticketmaster is
-//      configured, query TM as a backstop. Niche bands sometimes ARE
-//      on TM (festival lineups) but missing from Last.fm.
-//   3. Merge results, dedupe by (venue + date), return.
-//
-// Why scrape and not skip TM entirely: the union of both sources is
-// strictly bigger than either alone, and the cost of an extra TM call
-// per missing-band-on-LFM is negligible (cached 24h).
-//
 // Migration history kept for posterity:
 //   - Bandsintown (2018-2022) — REST API closed to non-partners
-//   - Ticketmaster (2022-2026) — too sparse for metal niche
-//   - Last.fm scrape + TM fallback (this) — covers ~90% of user
-//     followed bands in PL/DE/UK pilot data.
+//   - Ticketmaster (2022-2026) — too sparse for metal in Europe
+//   - Last.fm scrape (current) — primary and only source
 //
 // Query params:
 //   ?lat=50.27&lng=19.02&radius_km=300   — optional location filter
@@ -180,60 +170,10 @@ async function fetchLastfmEvents(artistName, sb) {
   return events;
 }
 
-// Ticketmaster fallback path. Same shape, separate cache.
-async function fetchTicketmasterEvents(artistName, sb) {
-  const apiKey = process.env.TICKETMASTER_API_KEY;
-  if (!apiKey) return [];
-
-  const cacheKey = 'tm-v4::' + artistName.toLowerCase().replace(/\s+/g, '_');
-  const cached = await readEventsCache(sb, cacheKey);
-  if (cached) return cached;
-
-  let events = [];
-  try {
-    const params = new URLSearchParams({
-      apikey:             apiKey,
-      keyword:            artistName,
-      classificationName: 'Music',
-      size:               '20',
-      sort:               'date,asc',
-    });
-    const url = TICKETMASTER_BASE + '/events.json?' + params.toString();
-    const r = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-    if (r.ok) {
-      const raw = await r.json();
-      const tmEvents = raw._embedded?.events || [];
-      events = tmEvents
-        .map(mapTicketmasterEvent)
-        .filter(ev => ev.datetime)
-        .map(ev => ({ ...ev, source: 'ticketmaster' }));
-    }
-  } catch { events = []; }
-  await writeEventsCache(sb, cacheKey, events);
-  return events;
-}
-
-// Public: combine both sources, dedupe by (date + venue), Last.fm
-// wins ties because it's the primary signal for our metal audience.
+// Public: single-source events fetch via Last.fm scraping.
 async function fetchArtistEvents(artistName, sb) {
-  const lfm = await fetchLastfmEvents(artistName, sb);
-  // Only burn the TM call when Last.fm came back empty — saves API
-  // quota and is fine because LFM has higher metal recall.
-  let tm = [];
-  if (lfm.length === 0) {
-    tm = await fetchTicketmasterEvents(artistName, sb);
-  }
-  // Dedupe key: ISO date prefix + lowercased venue. Two sources
-  // reporting the same gig under slightly different names get one row.
-  const seen = new Map();
-  const dedupeKey = (ev) =>
-    (ev.datetime || '').slice(0, 10) + '|' + (ev.venue || '').toLowerCase().trim();
-  for (const ev of lfm) seen.set(dedupeKey(ev), ev);
-  for (const ev of tm) {
-    const k = dedupeKey(ev);
-    if (!seen.has(k)) seen.set(k, ev);
-  }
-  return { events: [...seen.values()] };
+  const events = await fetchLastfmEvents(artistName, sb);
+  return { events };
 }
 
 export async function GET(request) {
@@ -313,9 +253,6 @@ export async function GET(request) {
     total:            deduped.length,
     artistsTotal:     artists.length,
     locationApplied:  lat != null && lng != null,
-    // Per-event source is on ev.source ('lastfm' | 'ticketmaster').
-    // The header-level provider name reflects which we lean on for the
-    // bulk of results — Last.fm with TM as backstop.
-    provider:         'lastfm+ticketmaster',
+    provider:         'lastfm',
   });
 }

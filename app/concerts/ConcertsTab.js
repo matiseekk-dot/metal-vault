@@ -727,7 +727,23 @@ export default function ConcertsTab() {
                   }
                 } catch {}
               } else {
-                toast(t('concerts.importLastfmEmpty') || 'Brak nowych koncertów — wszystko już masz albo Last.fm nic nie pokazał');
+                // Distinguish "Last.fm has 0 events on your profile" from
+                // "everything already imported". The diag block tells us
+                // which one. Without this the user sees an ambiguous
+                // "nothing new" and doesn't know if the scrape worked.
+                const scanned = d.scanned || 0;
+                if (scanned === 0) {
+                  toast.error(
+                    (t('concerts.importLastfmZeroScanned')
+                      || 'Last.fm nie pokazał żadnych koncertów na twoim profilu — możliwe że dane historyczne zostały usunięte w 2018 (gdy LFM wyłączył eventy).'),
+                    { duration: 9000 }
+                  );
+                } else {
+                  toast(
+                    (t('concerts.importLastfmAllSkipped', { n: scanned })
+                      || ('Wszystkie ' + scanned + ' koncertów z LFM już masz w bazie.'))
+                  );
+                }
               }
             } catch (e) { toast.error(e.message); }
           }}
