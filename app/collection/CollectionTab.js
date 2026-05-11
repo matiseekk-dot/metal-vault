@@ -1907,14 +1907,40 @@ export function CollectionTab({
                             🔍 {t('collection.openAllVariants') || 'View all variants + market'}
                           </button>
                         )}
-                        {/* Price + gain */}
-                        {(paid > 0 || now > 0) && (
-                          <div style={{ display: 'flex', gap: 12, marginBottom: 10, padding: '8px 10px', background: C.bg3, borderRadius: 8 }}>
-                            {paid > 0 && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Paid</div><div style={{ ...BEBAS, fontSize: 18, color: '#f5c842' }}>{formatPrice(paid, cur, fx)}</div></div>}
-                            {now > 0  && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Market</div><div style={{ ...BEBAS, fontSize: 18, color: '#4ade80' }}>{formatPrice(now, cur, fx)}</div></div>}
-                            {gain !== null && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Gain</div><div style={{ ...BEBAS, fontSize: 18, color: gain >= 0 ? '#4ade80' : '#f87171' }}>{formatChange(gain, cur, fx)}<span style={{ fontSize: 11 }}> ({gainPct >= 0 ? '+' : ''}{gainPct?.toFixed(0)}%)</span></div></div>}
-                          </div>
-                        )}
+                        {/* Price + gain. The "Market" value is Discogs'
+                            lowest_price across ALL variants of this
+                            release — when the user owns a limited /
+                            coloured / gold variant priced 5× higher than
+                            the standard pressing, comparing PAID to that
+                            single floor price produces a misleading
+                            "-51% gain" reading.
+                            Heuristic: hide GAIN entirely when paid and
+                            now diverge by >2× (signal that we're
+                            comparing different variants). Also relabel
+                            "Market" as "Rynek od" so the user knows it
+                            represents a price floor, not their variant. */}
+                        {(paid > 0 || now > 0) && (() => {
+                          const variantsLikelyDiffer = paid > 0 && now > 0
+                            && (now < paid / 2 || now > paid * 2);
+                          return (
+                            <div style={{ display: 'flex', gap: 12, marginBottom: 10, padding: '8px 10px', background: C.bg3, borderRadius: 8 }}>
+                              {paid > 0 && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Paid</div><div style={{ ...BEBAS, fontSize: 18, color: '#f5c842' }}>{formatPrice(paid, cur, fx)}</div></div>}
+                              {now > 0  && <div title={variantsLikelyDiffer ? 'Najniższa cena na rynku Discogs — różne warianty mogą mieć inne ceny, sprawdź listę wariantów' : 'Aktualna cena rynkowa'}>
+                                <div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>
+                                  {variantsLikelyDiffer ? 'Rynek od' : 'Market'}
+                                </div>
+                                <div style={{ ...BEBAS, fontSize: 18, color: variantsLikelyDiffer ? C.muted : '#4ade80' }}>{formatPrice(now, cur, fx)}</div>
+                              </div>}
+                              {/* Gain hidden when variants likely differ
+                                  — the percentage there is comparing
+                                  apples to oranges and was the source of
+                                  user confusion ("paid 119 zł, market
+                                  58 zł, gain -51%" when the actual
+                                  variant they own is worth ~140 zł). */}
+                              {gain !== null && !variantsLikelyDiffer && <div><div style={{ fontSize: 8, color: C.dim, ...MONO, textTransform: 'uppercase', marginBottom: 2 }}>Gain</div><div style={{ ...BEBAS, fontSize: 18, color: gain >= 0 ? '#4ade80' : '#f87171' }}>{formatChange(gain, cur, fx)}<span style={{ fontSize: 11 }}> ({gainPct >= 0 ? '+' : ''}{gainPct?.toFixed(0)}%)</span></div></div>}
+                            </div>
+                          );
+                        })()}
                         {/* Grade */}
                         <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           <span style={{ fontSize: 9, color: C.dim, ...MONO, marginRight: 2 }}>Grade:</span>
