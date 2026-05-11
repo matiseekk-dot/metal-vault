@@ -998,6 +998,114 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               cursor: 'pointer', ...MONO, fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap'}}>
             📻 Last.fm
           </button>
+          {/* Clear + re-import — wipes all rows marked
+              "Imported from Last.fm" so the next 📻 click can repopulate
+              from scratch. Necessary because the importer's dedup means
+              earlier truncated lineups (festivals with only 9 bands
+              before the paginated walker landed) survive subsequent
+              imports — the existing rows match and the new 100+ rows
+              get inserted alongside, but festival aggregation may end
+              up wrong. Clean slate fixes that. */}
+          <button onClick={async () => {
+            const ok = await mvConfirm(
+              t('concerts.clearLastfmConfirm')
+                || 'Usunąć wszystkie koncerty zaimportowane z Last.fm i pobrać od nowa? Twoje ręcznie dodane wpisy zostaną zachowane.',
+              { kind: 'danger', confirmLabel: t('concerts.clearLastfmGo') || 'Wyczyść i pobierz' }
+            );
+            if (!ok) return;
+            toast(t('concerts.clearLastfmRunning') || 'Czyszczę…');
+            try {
+              const rd = await fetch('/api/concerts/clear-lastfm', { method: 'POST' });
+              const dd = await rd.json();
+              if (!rd.ok) { toast.error(dd.error || 'Clear failed'); return; }
+              // Re-fetch local state immediately so the user sees the
+              // wipe happen, then chain into the import.
+              try {
+                const r2 = await fetch('/api/user-concerts');
+                if (r2.ok) {
+                  const j = await r2.json();
+                  if (j.concerts) save(j.concerts);
+                  if (j.venues) {
+                    const sv = [...VENUES, ...j.venues];
+                    setVenues(sv);
+                    saveLS(LS_VENUES, sv);
+                  }
+                }
+              } catch {}
+              toast.success(
+                (t('concerts.clearLastfmDone', { n: dd.deleted || 0 })
+                  || ('Usunięto ' + (dd.deleted || 0) + ' wpisów — zaczynam ponowny import')),
+                { duration: 4000 }
+              );
+              // Chain to import — same flow as the 📻 button but
+              // without a second confirm dialog.
+              try {
+                const ri = await fetch('/api/concerts/import-lastfm', { method: 'POST' });
+                const di = await ri.json();
+                if (!ri.ok) { toast.error(di.error || 'Import failed'); return; }
+                const festNote = (di.venues_upgraded || 0) > 0
+                  ? ' · ' + di.venues_upgraded + ' fest'
+                  : '';
+                const lineupNote = (di.lineups_expanded || 0) > 0
+                  ? ' · ' + di.lineups_expanded + ' lineupów'
+                  : '';
+                toast.success(
+                  (t('concerts.importLastfmDone', { n: di.imported, s: di.skipped })
+                    || ('Zaimportowano ' + di.imported + ' (pominięto ' + di.skipped + ')'))
+                  + festNote + lineupNote,
+                  { duration: 9000 }
+                );
+                // Pull fresh local state.
+                const r3 = await fetch('/api/user-concerts');
+                if (r3.ok) {
+                  const j = await r3.json();
+                  if (j.concerts) save(j.concerts);
+                  if (j.venues) {
+                    const sv = [...VENUES, ...j.venues];
+                    setVenues(sv);
+                    saveLS(LS_VENUES, sv);
+                  }
+                }
+                haptic.success?.();
+              } catch (e) { toast.error(e.message); }
+            } catch (e) { toast.error(e.message); }
+          }}
+            title={t('concerts.clearLastfmTitle') || 'Wyczyść i pobierz od nowa z Last.fm'}
+            style={{flexShrink:0, background: '#1a0d0d', border: '1px solid #d5100744',
+              borderRadius: 10, color: '#f87171', padding: '12px 12px',
+              cursor: 'pointer', ...MONO, fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap'}}>
+            🔄 Wyczyść
+          </button>
+          {/* Force pull from server — pulls latest user_concerts +
+              user_venues from the database without the import flow.
+              Useful when the same user added concerts on another
+              device (phone) and wants to see them on web. Sync is
+              already automatic on mount but a manual refresh button
+              is a clearer mental model than "reload the page". */}
+          <button onClick={async () => {
+            toast(t('concerts.syncRefresh') || 'Pobieram z serwera…');
+            try {
+              const r = await fetch('/api/user-concerts');
+              if (!r.ok) { toast.error('Sync failed'); return; }
+              const j = await r.json();
+              if (j.concerts) save(j.concerts);
+              if (j.venues) {
+                const sv = [...VENUES, ...j.venues];
+                setVenues(sv);
+                saveLS(LS_VENUES, sv);
+              }
+              toast.success(
+                (t('concerts.syncRefreshDone', { n: (j.concerts || []).length })
+                  || ('Zsynchronizowano: ' + (j.concerts || []).length + ' wpisów'))
+              );
+            } catch (e) { toast.error(e.message); }
+          }}
+            title={t('concerts.syncRefreshTitle') || 'Pobierz najnowszy stan z serwera (sync z innymi urządzeniami)'}
+            style={{flexShrink:0, background: C.bg3, border: '1px solid ' + C.border,
+              borderRadius: 10, color: C.muted, padding: '12px 12px',
+              cursor: 'pointer', ...MONO, fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap'}}>
+            ↻
+          </button>
         </div>
 
         {/* Form */}

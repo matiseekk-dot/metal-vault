@@ -214,18 +214,20 @@ export async function POST() {
       || (Array.isArray(ev.lineup) && ev.lineup.length <= 1 && ev.venue);
     if (looksTruncated && ev.ticketsUrl) {
       try {
-        // 12s timeout — festival /lineup walk does up to 12 page
-        // fetches internally, each ~500ms + 250ms throttle. The
-        // helper itself caps at 200 acts / 12 pages to bound this.
+        // timeoutMs here is PER-PAGE inside the helper (it iterates
+        // /lineup?page=N internally). Big festivals like Brutal
+        // Assault have 8+ pages with ~115 bands; each page takes
+        // 500-1500ms from EU edge depending on LFM load.
+        // 8s per page is generous; helper returns whatever it managed
+        // to scrape if a later page times out (partial-result discipline).
         const full = await lastfmEventFullLineup(ev.ticketsUrl, {
-          timeoutMs: 12000, maxPages: 10,
+          timeoutMs: 8000, maxPages: 12,
         });
         if (full.length > (ev.lineup?.length || 0)) {
           ev.lineup = full;
           lineups_expanded++;
         }
       } catch {}
-      // Inter-event throttle (between distinct festivals).
       await new Promise(rr => setTimeout(rr, 200));
     }
     const venueNorm = normaliseVenueName(venueName);
