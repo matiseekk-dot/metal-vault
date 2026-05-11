@@ -21,12 +21,15 @@ import { createClient, getAdminClient } from '@/lib/supabase-server';
 import { lastfmUserEventsAll, lastfmEventFullLineup } from '@/lib/lastfm';
 
 export const dynamic = 'force-dynamic';
-// Long deadline — historical archive walks ~10 year-tabs sequentially
-// (one HTTP per year, then potentially multiple pages per year).
-// For matiskura with 2010..2018 + Upcoming + ~1-2 pages/year = ~20
-// requests at 250ms pacing + 400ms inter-year = ~9s + scrape time.
-// 120s gives plenty of headroom for users with deeper archives.
-export const maxDuration = 120;
+// Vercel max — 300s on Pro plan. Big imports now do TWO layers of
+// scraping:
+//   1) Year-tab walk (~10 years × 1-2 pages × 250ms pacing = ~10s)
+//   2) Per-festival lineup expansion (~7 lineup pages × 7 festivals
+//      × 250ms = ~12s minimum, 30s worst case for power users)
+// Plus actual HTTP latency (Last.fm = 200-800ms / req from EU edge).
+// 240s gives comfortable headroom; failing imports time out cleanly
+// instead of dying mid-INSERT and leaving a half-imported journal.
+export const maxDuration = 240;
 
 // Country code → ISO-2 just for the common European countries the
 // matched-venue-name lookup needs. Kept narrow because user venues
@@ -211,14 +214,19 @@ export async function POST() {
       || (Array.isArray(ev.lineup) && ev.lineup.length <= 1 && ev.venue);
     if (looksTruncated && ev.ticketsUrl) {
       try {
-        const full = await lastfmEventFullLineup(ev.ticketsUrl, { timeoutMs: 4500 });
+        // 12s timeout — festival /lineup walk does up to 12 page
+        // fetches internally, each ~500ms + 250ms throttle. The
+        // helper itself caps at 200 acts / 12 pages to bound this.
+        const full = await lastfmEventFullLineup(ev.ticketsUrl, {
+          timeoutMs: 12000, maxPages: 10,
+        });
         if (full.length > (ev.lineup?.length || 0)) {
           ev.lineup = full;
           lineups_expanded++;
         }
       } catch {}
-      // Throttle to ~3 req/sec against Last.fm — gentle on their box.
-      await new Promise(rr => setTimeout(rr, 300));
+      // Inter-event throttle (between distinct festivals).
+      await new Promise(rr => setTimeout(rr, 200));
     }
     const venueNorm = normaliseVenueName(venueName);
     let venueId = venueByName.get(venueNorm);
