@@ -384,18 +384,25 @@ export async function POST() {
       await new Promise(rr => setTimeout(rr, 200));
     }
 
-    // Non-festival events: prepend the headliner from title to lineup.
-    // (Festivals titled "Wacken Open Air 2024" etc. don't get a band-
-    // prepend — the title is the festival name, not a band.)
+    // Non-festival events: maybe prepend the title-extracted headliner.
+    //
+    // ONLY prepend when the lineup is EMPTY (the original Katatonia bug
+    // — title = "Katatonia", lineup = "Agent Fresco, VOLA"; without
+    // prepend Katatonia is lost). When the lineup already has ≥1 band
+    // we TRUST the lineup cell — earlier broken titles like
+    // "Sounds Of A Playground Fading" (an In Flames album, not a band)
+    // or "Polish Satanist" (event promo title, not a band) ended up in
+    // the journal because we blindly prepended even when In Flames was
+    // already in the lineup cell.
+    //
+    // Threshold: lineup.length === 0 only. Single-band lineup that
+    // DOESN'T match the title-extracted headliner is fine — the cell
+    // probably has the right band already and the title is promo noise.
     if (!isFest) {
-      const headliner = extractHeadlinerFromTitle(ev.title);
-      if (headliner) {
-        const already = (ev.lineup || []).some(n =>
-          String(n || '').toLowerCase().trim() === headliner.toLowerCase()
-        );
-        if (!already) {
-          ev.lineup = [headliner, ...(ev.lineup || [])];
-        }
+      const lineupLen = (ev.lineup || []).length;
+      if (lineupLen === 0) {
+        const headliner = extractHeadlinerFromTitle(ev.title);
+        if (headliner) ev.lineup = [headliner];
       }
     }
     const venueNorm = normaliseVenueName(venueName);
@@ -570,6 +577,13 @@ export async function POST() {
   // Threshold of 4 stays conservative: 3-band billings happen at clubs;
   // 4+ on the same date = festival. Only promotes 'Other' → 'Festival'.
   let density_upgraded = 0;
+  // Lifted out of try-block so the downgrade pass below can read it.
+  // Built inside the try-block on success; stays an empty Set on
+  // failure so the downgrade pass treats every Festival-tagged venue
+  // as a candidate (which is the safe-conservative outcome — we'd
+  // rather under-downgrade than reclassify festivals based on a
+  // partial density computation).
+  let denseVenues = new Set();
   try {
     const { data: allRows } = await admin
       .from('user_concerts')
@@ -577,21 +591,27 @@ export async function POST() {
       .eq('user_id', user.id)
       .not('venue_id', 'is', null);
 
-    // Group: venue_id+date → Set<band lowercased>. Falls back to
-    // venue+year for legacy rows without planned_date (pre this commit)
-    // so they keep their existing festival classification.
+    // Group: venue_id+EXACT date → Set<band lowercased>.
+    //
+    // No year-fallback: rows without planned_date are SKIPPED. Legacy
+    // pre-038 rows where planned_date is null get year-fallback-grouped
+    // would otherwise wrongly promote STODOŁA / SPODEK / DEKOMPRESJA
+    // (mid-size clubs hosting many separate single-band gigs across the
+    // year — 3-4 events × 1-2 bands = ≥4 distinct bands per year-bucket
+    // → promoted to Festival even though no single date had 4 bands).
+    // Strict same-DATE check eliminates the false-positive.
     const groups = new Map();
     for (const r of (allRows || [])) {
-      const dateKey = r.planned_date || r.year;
-      if (!dateKey) continue;
-      const k = r.venue_id + '::' + dateKey;
+      if (!r.planned_date) continue;        // strict: same-date required
+      const k = r.venue_id + '::' + r.planned_date;
       const s = groups.get(k) || new Set();
       s.add((r.band || '').toLowerCase().trim());
       groups.set(k, s);
     }
 
     // Pick venue_ids that have ≥4 bands ON THE SAME DATE in any group.
-    const denseVenues = new Set();
+    // (denseVenues declared at the outer scope so the downgrade pass
+    // below can use it.)
     for (const [k, bands] of groups) {
       if (bands.size >= 4) denseVenues.add(k.split('::')[0]);
     }
@@ -616,6 +636,69 @@ export async function POST() {
     }
   } catch {}
   venues_upgraded += density_upgraded;
+
+  // ── DOWNGRADE pass — undo earlier broken Festival promotions ─
+  // Earlier importer revisions used venue+YEAR density which falsely
+  // upgraded clubs like STODOŁA and SPODEK to Festival when they
+  // hosted >4 distinct single-band gigs across a year. The strict
+  // venue+DATE density above no longer makes that mistake, but
+  // existing wrongly-flagged venues stay Festival until something
+  // sets them back. This pass downgrades any venue currently marked
+  // Festival that has NO single date with ≥4 bands AND isn't matched
+  // by the URL/keyword festival detector via its name.
+  //
+  // We only touch venues that were created by Last.fm imports (rows
+  // exist in user_concerts with note='Imported from Last.fm') so
+  // manually-tagged "Festival" venues stay untouched — the user
+  // might want a custom venue category override.
+  let venues_downgraded = 0;
+  try {
+    // Build a set of venues that DO have ≥4 same-date bands (the
+    // legitimately festival-shaped ones from the densitymap above).
+    const goodFestivalVenues = new Set(denseVenues);
+
+    // Match the festival-name keyword used by isFestivalEvent —
+    // venues called "Wacken Open Air" etc. should NOT be downgraded
+    // even if their lineup looks sparse (festival in name = festival).
+    const festNameRx = /\b(festival|fest|open air|openair|graspop|hellfest|wacken|mystic|summer breeze|brutal assault|metaldays|inferno|tons of rock|sweden rock|nova rock|copenhell|metalmania|woodstock|pol[' ]?and[' ]?rock|impact festival|impact fest)\b/i;
+
+    // Find every Festival-tagged venue the user has.
+    const { data: festVenues } = await admin
+      .from('user_venues')
+      .select('client_id, name, cat')
+      .eq('user_id', user.id)
+      .eq('cat', 'Festival');
+
+    // Only touch venues that have LFM-imported rows — manual venues
+    // tagged Festival by the user stay (they may have categorised a
+    // multi-stage warehouse as "Festival" for their own taxonomy).
+    const { data: lfmConcerts } = await admin
+      .from('user_concerts')
+      .select('venue_id')
+      .eq('user_id', user.id)
+      .eq('note', 'Imported from Last.fm');
+    const lfmVenueIds = new Set((lfmConcerts || []).map(r => r.venue_id).filter(Boolean));
+
+    // Of those, which ones (a) are NOT in the legit set AND (b) don't
+    // have a festival-flavoured name AND (c) were touched by LFM →
+    // downgrade to 'Other'.
+    const downgradeCandidates = (festVenues || []).filter(v => {
+      if (goodFestivalVenues.has(v.client_id)) return false;
+      if (festNameRx.test(v.name || '')) return false;
+      if (!lfmVenueIds.has(v.client_id))   return false;
+      return true;
+    });
+
+    for (const v of downgradeCandidates) {
+      try {
+        const { error } = await admin.from('user_venues')
+          .update({ cat: 'Other' })
+          .eq('user_id', user.id)
+          .eq('client_id', v.client_id);
+        if (!error) venues_downgraded++;
+      } catch {}
+    }
+  } catch {}
 
   // ── One-time cleanup: title-as-band rows ───────────────────
   // Legacy from before extractHeadlinerFromTitle handled colon and
@@ -744,6 +827,7 @@ export async function POST() {
     scanned: scrapedEvents.length,
     venues_created: newVenues.length,
     venues_upgraded,
+    venues_downgraded,
     promoted_upcoming,
     lineups_attempted,
     lineups_expanded,
