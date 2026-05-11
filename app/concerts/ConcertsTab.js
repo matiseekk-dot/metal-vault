@@ -1046,8 +1046,13 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                 const festNote = (di.venues_upgraded || 0) > 0
                   ? ' · ' + di.venues_upgraded + ' fest'
                   : '';
-                const lineupNote = (di.lineups_expanded || 0) > 0
-                  ? ' · ' + di.lineups_expanded + ' lineupów'
+                // Show "5/12 lineups expanded" — if attempted >> expanded
+                // the walker is failing somewhere (rate limit, timeout)
+                // and the user knows to ping us for diagnostics.
+                const att = di.lineups_attempted || 0;
+                const exp = di.lineups_expanded  || 0;
+                const lineupNote = att > 0
+                  ? ' · ' + exp + '/' + att + ' lineupów'
                   : '';
                 toast.success(
                   (t('concerts.importLastfmDone', { n: di.imported, s: di.skipped })
@@ -1682,10 +1687,18 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                  // of a festival group sets the group's display position
                  // so the user's sortBy choice still applies.
                  const items = [];
+                 // Festival grouping key: venue+DATE when we have the
+                 // exact date (LFM imports), venue+year as fallback
+                 // for legacy rows. Splitting by date stops a busy
+                 // club's whole year being merged into one festival
+                 // card (Mega Club hosting 6 distinct gigs got
+                 // wrongly collapsed before this).
                  const groupKey = (c) => {
                    const v = findVenue(c.venueId);
-                   if (!v || v.cat !== 'Festival' || !c.year) return null;
-                   return c.venueId + '::' + c.year;
+                   if (!v || v.cat !== 'Festival') return null;
+                   const dateKey = c.planned_date || c.year;
+                   if (!dateKey) return null;
+                   return c.venueId + '::' + dateKey;
                  };
                  const groupMap = new Map();
                  for (const c of filtered) {
@@ -1697,7 +1710,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                    const existing = groupMap.get(k);
                    if (existing) { existing.items.push(c); continue; }
                    const fresh = { type: 'festival', key: k, venue: findVenue(c.venueId),
-                     year: c.year, items: [c] };
+                     year: c.year, date: c.planned_date || null, items: [c] };
                    groupMap.set(k, fresh);
                    items.push(fresh);
                  }
@@ -1727,7 +1740,9 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                              </div>
                              <div style={{display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap',
                                alignItems: 'center'}}>
-                               <span style={{fontSize: 11, color: C.dim, ...MONO}}>📅 {it.year}</span>
+                               <span style={{fontSize: 11, color: C.dim, ...MONO}}>
+                                 📅 {it.date || it.year}
+                               </span>
                                <span style={{fontSize: 11, color: C.dim, ...MONO}}>
                                  🎸 {it.items.length} {it.items.length === 1
                                        ? (t('concerts.bandCount.one') || 'zespół')

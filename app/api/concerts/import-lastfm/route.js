@@ -190,10 +190,15 @@ export async function POST() {
   const concertRows = [];
   const newVenues   = [];
 
-  // Track how many events got their lineup enriched from event-detail
-  // pages — surfaces in toast so the user knows the import wasn't just
-  // grabbing the 3-band preview from the list view.
-  let lineups_expanded = 0;
+  // Diag counters for the lineup-expansion pass.
+  // `lineups_attempted` = how many events even triggered the /lineup
+  //   walk (festival or apparently-truncated). If this stays 0 across
+  //   a big import the heuristic isn't recognising festivals at all.
+  // `lineups_expanded` = how many of those got back MORE bands than
+  //   the listing-view originally had. Big gap between these two →
+  //   /lineup walker is failing somewhere (rate limit, timeout, regex).
+  let lineups_attempted = 0;
+  let lineups_expanded  = 0;
 
   for (const ev of scrapedEvents) {
     const venueName = ev.venue || '';
@@ -213,13 +218,8 @@ export async function POST() {
     const looksTruncated = isFest
       || (Array.isArray(ev.lineup) && ev.lineup.length <= 1 && ev.venue);
     if (looksTruncated && ev.ticketsUrl) {
+      lineups_attempted++;
       try {
-        // timeoutMs here is PER-PAGE inside the helper (it iterates
-        // /lineup?page=N internally). Big festivals like Brutal
-        // Assault have 8+ pages with ~115 bands; each page takes
-        // 500-1500ms from EU edge depending on LFM load.
-        // 8s per page is generous; helper returns whatever it managed
-        // to scrape if a later page times out (partial-result discipline).
         const full = await lastfmEventFullLineup(ev.ticketsUrl, {
           timeoutMs: 8000, maxPages: 12,
         });
@@ -290,12 +290,15 @@ export async function POST() {
         rating:    0,
         price:     '',
         note:      'Imported from Last.fm',
-        // Upcoming-tracking fields populated only for future dates.
-        // Past rows keep is_planned=false (schema default), so they
-        // continue rendering in the history list / ranking as before.
         is_planned:     isUpcoming,
-        tickets_bought: false,        // user marks this when they buy
-        planned_date:   isUpcoming ? evDateIso : null,
+        tickets_bought: false,
+        // ALWAYS store the full event date, not just for upcoming.
+        // Migration 038 named the column planned_date but it accepts
+        // any date — we re-use it as "exact event date" for every
+        // LFM-imported row. Lets the density heuristic below tell
+        // a one-day festival apart from 4 separate gigs at the same
+        // club spread across a year.
+        planned_date:   evDateIso || null,
       });
       imported++;
     }
@@ -384,34 +387,39 @@ export async function POST() {
   }
 
   // ── Density-based auto-promote ─────────────────────────────
-  // Real-world catch-all: any venue+year combination that ended up
-  // with ≥4 distinct bands MUST be a festival in practice (a single-
-  // night club show never has that many headliners). This rescues
-  // events the keyword heuristic misses — e.g. Metal Hammer Festival
-  // at Spodek Katowice 2018 where Spodek is a generic arena venue.
+  // Real-world catch-all: any venue+DATE combination with ≥4 distinct
+  // bands is a festival. We previously grouped by venue+YEAR which
+  // collapsed every gig at a busy club (Mega Club hosting 20+ concerts
+  // a year with 2-3 bands each totals >4 across the year → wrongly
+  // flagged as festival, merged everything into one card).
   //
-  // Threshold of 4 is conservative: 3-band billings happen at clubs;
-  // 4+ is festival territory. Only promotes 'Other' → 'Festival'
-  // (preserves user-tagged Arena/Klub/Hall).
+  // Now: only same-DATE clusters count. Past LFM imports get their
+  // planned_date populated above, so this works for history too.
+  //
+  // Threshold of 4 stays conservative: 3-band billings happen at clubs;
+  // 4+ on the same date = festival. Only promotes 'Other' → 'Festival'.
   let density_upgraded = 0;
   try {
     const { data: allRows } = await admin
       .from('user_concerts')
-      .select('venue_id, year, band')
+      .select('venue_id, planned_date, year, band')
       .eq('user_id', user.id)
-      .not('venue_id', 'is', null)
-      .not('year', 'is', null);
+      .not('venue_id', 'is', null);
 
-    // Group: venue_id+year → Set<band lowercased>
+    // Group: venue_id+date → Set<band lowercased>. Falls back to
+    // venue+year for legacy rows without planned_date (pre this commit)
+    // so they keep their existing festival classification.
     const groups = new Map();
     for (const r of (allRows || [])) {
-      const k = r.venue_id + '::' + r.year;
+      const dateKey = r.planned_date || r.year;
+      if (!dateKey) continue;
+      const k = r.venue_id + '::' + dateKey;
       const s = groups.get(k) || new Set();
       s.add((r.band || '').toLowerCase().trim());
       groups.set(k, s);
     }
 
-    // Pick venue_ids that appear with ≥4 bands in ANY year.
+    // Pick venue_ids that have ≥4 bands ON THE SAME DATE in any group.
     const denseVenues = new Set();
     for (const [k, bands] of groups) {
       if (bands.size >= 4) denseVenues.add(k.split('::')[0]);
@@ -445,6 +453,7 @@ export async function POST() {
     venues_created: newVenues.length,
     venues_upgraded,
     promoted_upcoming,
+    lineups_attempted,
     lineups_expanded,
     diag: {
       ...diag,
