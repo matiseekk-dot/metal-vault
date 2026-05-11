@@ -963,7 +963,20 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
             toast(t('concerts.importLastfmStart') || 'Skanuję Last.fm…');
             try {
               const r = await fetch('/api/concerts/import-lastfm', { method: 'POST' });
-              const d = await r.json();
+              // Vercel returns its generic HTML error page on 504/500
+              // (function timeout or uncaught crash). Trying to JSON.parse
+              // that HTML produces a confusing "Unexpected token 'A'" toast
+              // ("An error occurred…"). Detect and surface a clearer
+              // message that hints at the actual cause + recovery path.
+              const ct = r.headers.get('content-type') || '';
+              if (!ct.includes('application/json')) {
+                const txt = await r.text().catch(() => '');
+                const truncated = String(txt).slice(0, 80);
+                toast.error('Import przerwany (Vercel timeout / błąd). Spróbuj ponownie — częściowe dane mogły już się zapisać, dedup nie pozwoli na duplikaty. ' + (truncated ? '[' + truncated + '…]' : ''),
+                  { duration: 10000 });
+                return;
+              }
+              const d = await r.json().catch(() => ({}));
               if (!r.ok) {
                 toast.error(d.error || 'Import failed');
                 return;
@@ -1093,7 +1106,14 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               // without a second confirm dialog.
               try {
                 const ri = await fetch('/api/concerts/import-lastfm', { method: 'POST' });
-                const di = await ri.json();
+                const cti = ri.headers.get('content-type') || '';
+                if (!cti.includes('application/json')) {
+                  const txt = await ri.text().catch(() => '');
+                  toast.error('Import przerwany (Vercel timeout). Spróbuj 📻 jeszcze raz — partial dane się zapisały, dedup pozwoli dokleić resztę. ' + (String(txt).slice(0, 80)),
+                    { duration: 10000 });
+                  return;
+                }
+                const di = await ri.json().catch(() => ({}));
                 if (!ri.ok) { toast.error(di.error || 'Import failed'); return; }
                 const festNote = (di.venues_upgraded || 0) > 0
                   ? ' · ' + di.venues_upgraded + ' fest'

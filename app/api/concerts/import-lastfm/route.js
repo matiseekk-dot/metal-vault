@@ -74,10 +74,10 @@ export async function POST() {
   let rawEvents = [];
   try {
     rawEvents = await lastfmUserEventsAll(username, {
-      maxPages:    60,
+      maxPages:    10,    // 60 was wasteful — typical user has 1-3 pages per year
       maxYears:    60,
-      pacingMs:    250,
-      yearDelayMs: 400,
+      pacingMs:    150,   // halved from 250ms — tight enough to stay under Vercel 240s
+      yearDelayMs: 250,   // halved from 400ms
     });
   } catch (e) {
     return NextResponse.json({ error: 'Scrape failed: ' + e.message }, { status: 502 });
@@ -354,8 +354,14 @@ export async function POST() {
     if (looksTruncated && ev.ticketsUrl) {
       lineups_attempted++;
       try {
+        // Cap maxPages at 6 (was 12). On a deep archive walk with N
+        // festivals × 12 pages × ~1s = ~84s for lineups alone, easily
+        // pushing the route past Vercel 240s when combined with the
+        // year-tab walk + Supabase passes. 6 pages = ~50 bands per fest,
+        // covers all but the very largest festivals; the rest can be
+        // grabbed by re-running the import (idempotent, dedup-aware).
         const full = await lastfmEventFullLineup(ev.ticketsUrl, {
-          timeoutMs: 8000, maxPages: 12,
+          timeoutMs: 6000, maxPages: 6,
         });
         // UNION not REPLACE — the user-events page cell sometimes
         // contains bands the /lineup walker doesn't see (Last.fm
