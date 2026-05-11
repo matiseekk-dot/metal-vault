@@ -140,28 +140,50 @@ export async function POST() {
   } catch {}
 
   // Pre-import duplicate sweep — earlier importer revisions could
-  // insert the same (band, year, venue) twice (concurrent click on
-  // 📻 Last.fm before the deploy of the mergeKey fix, or merge dedup
-  // missing because lineup ordering differed across year-tabs vs
-  // upcoming-tab). Keep the OLDEST row of each (band, year, venue_id)
-  // group; delete the rest. Bounded to LFM-imported rows so manual
-  // adds aren't touched.
+  // insert the same (band, year, venue) twice or more (concurrent
+  // 📻 Last.fm clicks, race-conditions, broken pre-mergeKey runs,
+  // duplicate venue rows created across imports). Keep the OLDEST
+  // row of each (band, year, venue_NORMALIZED-NAME) group; delete
+  // the rest. We key on the normalised VENUE NAME, not venue_id —
+  // earlier runs sometimes created two venue rows for the same
+  // physical venue (e.g. "Stocznia Cesarska" vs "Stocznia Cesarska
+  // (B90)") and a venue-id-based dedup would miss those.
   let pre_dedup_killed = 0;
   try {
+    // Load venues first so we can resolve venue_id → normalised name.
+    const { data: allVenues } = await admin
+      .from('user_venues')
+      .select('client_id, name')
+      .eq('user_id', user.id);
+    const venueNormById = new Map();
+    for (const v of (allVenues || [])) {
+      venueNormById.set(v.client_id, normaliseVenueName(v.name));
+    }
     const { data: lfmRows } = await admin
       .from('user_concerts')
-      .select('client_id, band, year, venue_id, created_at')
+      .select('client_id, band, year, venue_id, planned_date, created_at')
       .eq('user_id', user.id)
       .eq('note', 'Imported from Last.fm')
       .order('created_at', { ascending: true });
-    const seen = new Map();   // (band+year+venue) → first client_id
+    const seen = new Map();   // (band+year+venue_norm[+date]) → first client_id
     const toDelete = [];
     for (const r of (lfmRows || [])) {
-      const key = (r.band || '').toLowerCase().trim() + '::' +
-                  (r.year || '') + '::' +
-                  (r.venue_id || '');
-      if (seen.has(key)) toDelete.push(r.client_id);
-      else seen.set(key, r.client_id);
+      const venueNorm = venueNormById.get(r.venue_id) || '';
+      // Two keys to catch BOTH: same-band-same-year-same-venue
+      // (loose) AND same-band-same-exact-date-same-venue (strict,
+      // matches LFM event id semantics). Either match counts as dup.
+      const keyYear = (r.band || '').toLowerCase().trim() + '::' +
+                      (r.year || '') + '::' + venueNorm;
+      const keyDate = r.planned_date
+        ? (r.band || '').toLowerCase().trim() + '::date::' +
+          r.planned_date + '::' + venueNorm
+        : null;
+      if (seen.has(keyYear) || (keyDate && seen.has(keyDate))) {
+        toDelete.push(r.client_id);
+      } else {
+        seen.set(keyYear, r.client_id);
+        if (keyDate) seen.set(keyDate, r.client_id);
+      }
     }
     for (const cid of toDelete) {
       try {
@@ -235,7 +257,19 @@ export async function POST() {
   // isFestivalEvent above and skipped here.
   function extractHeadlinerFromTitle(title) {
     if (!title) return null;
-    let head = String(title).split(' - ')[0].trim();
+    let head = String(title).trim();
+    // Strip everything after a tour/album separator. Last.fm titles
+    // come in many flavours; we slice off the suffix for ALL of these:
+    //   • "Mayhem - World Tour 2026"      → "Mayhem"
+    //   • "Kreator: Krushers of the World"→ "Kreator"
+    //   • "Behemoth — Opvs Contra Natvram" → "Behemoth"
+    //   • "Amon Amarth ft. Carcass"       → "Amon Amarth"
+    //   • "Metallica with Mammoth WVH"    → "Metallica"
+    //   • "Ghost (Re-Imperatour)"         → "Ghost"
+    head = head.split(/\s+[–—-]\s+/)[0].trim();   // any dash with spaces
+    head = head.split(':')[0].trim();             // colon-separator suffix
+    head = head.split(/\s+(?:feat\.?|ft\.?|with|w\/|presents)\s+/i)[0].trim();
+    head = head.replace(/\s*\([^)]*\)\s*$/, '').trim();   // trailing (...)
     // Strip trailing year + tour suffix words.
     head = head.replace(/\s+\d{4}\s*$/, '').trim();
     head = head.replace(/\s+(Tour|Europe|UK|World|North America|Asia|South America)\s*$/i, '').trim();
@@ -564,6 +598,127 @@ export async function POST() {
   } catch {}
   venues_upgraded += density_upgraded;
 
+  // ── One-time cleanup: title-as-band rows ───────────────────
+  // Legacy from before extractHeadlinerFromTitle handled colon and
+  // em-dash separators — rows like "Kreator: Krushers of the World"
+  // or "Mayhem — Daemonic Rites Tour" were inserted as BAND names.
+  // Re-extract the clean headliner; if a row with that clean name
+  // already exists in the same (year, venue) bucket, drop the dirty
+  // row. Otherwise rename it in-place. Idempotent — clean rows pass
+  // through untouched.
+  let title_band_cleaned = 0;
+  try {
+    const { data: titleVenues } = await admin
+      .from('user_venues')
+      .select('client_id, name')
+      .eq('user_id', user.id);
+    const venueNormById3 = new Map();
+    for (const v of (titleVenues || [])) {
+      venueNormById3.set(v.client_id, normaliseVenueName(v.name));
+    }
+    const { data: dirtyRows } = await admin
+      .from('user_concerts')
+      .select('client_id, band, year, venue_id, planned_date')
+      .eq('user_id', user.id)
+      .eq('note', 'Imported from Last.fm');
+    // Build a set of "clean" (band, year, venue) keys that already
+    // exist so we can detect when renaming would create a duplicate.
+    const cleanIndex = new Set();
+    for (const r of (dirtyRows || [])) {
+      const venueNorm = venueNormById3.get(r.venue_id) || '';
+      cleanIndex.add((r.band || '').toLowerCase().trim() + '::' +
+                     (r.year || '') + '::' + venueNorm);
+    }
+    for (const r of (dirtyRows || [])) {
+      const b = String(r.band || '');
+      // Trigger only for rows whose band name has a separator that
+      // suggests it's actually a title: colon, em/en dash, or trailing
+      // parenthetical (e.g. "(Re-Imperatour)").
+      if (!/[:—–]|\s+-\s+|\s+\([^)]+\)\s*$/.test(b)) continue;
+      const cleaned = extractHeadlinerFromTitle(b);
+      if (!cleaned || cleaned.toLowerCase() === b.toLowerCase()) continue;
+      const venueNorm = venueNormById3.get(r.venue_id) || '';
+      const cleanKey = cleaned.toLowerCase().trim() + '::' +
+                       (r.year || '') + '::' + venueNorm;
+      if (cleanIndex.has(cleanKey)) {
+        // Clean variant exists at this event — drop the dirty row.
+        try {
+          const { error } = await admin.from('user_concerts')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('client_id', r.client_id);
+          if (!error) title_band_cleaned++;
+        } catch {}
+      } else {
+        // Rename in place. Update cleanIndex so a subsequent dirty row
+        // with the same cleaned name dedups against this one.
+        try {
+          const { error } = await admin.from('user_concerts')
+            .update({ band: cleaned })
+            .eq('user_id', user.id)
+            .eq('client_id', r.client_id);
+          if (!error) {
+            title_band_cleaned++;
+            cleanIndex.add(cleanKey);
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
+  // ── Post-import dedup sweep ─────────────────────────────────
+  // Same logic as pre-dedup but runs AFTER inserts so it catches
+  // race conditions (user clicks 📻 Last.fm twice in rapid succession
+  // and both requests proceed concurrently — each sees an empty DB
+  // at pre-dedup time, both insert the same lineup → duplicates).
+  //
+  // Key uses normalised VENUE NAME, not venue_id — covers the case
+  // where the same physical venue exists with multiple slightly-
+  // different name variants in user_venues.
+  let post_dedup_killed = 0;
+  try {
+    const { data: postVenues } = await admin
+      .from('user_venues')
+      .select('client_id, name')
+      .eq('user_id', user.id);
+    const venueNormById2 = new Map();
+    for (const v of (postVenues || [])) {
+      venueNormById2.set(v.client_id, normaliseVenueName(v.name));
+    }
+    const { data: postRows } = await admin
+      .from('user_concerts')
+      .select('client_id, band, year, venue_id, planned_date, created_at')
+      .eq('user_id', user.id)
+      .eq('note', 'Imported from Last.fm')
+      .order('created_at', { ascending: true });
+    const seen2 = new Map();
+    const toDel2 = [];
+    for (const r of (postRows || [])) {
+      const venueNorm = venueNormById2.get(r.venue_id) || '';
+      const keyYear = (r.band || '').toLowerCase().trim() + '::' +
+                      (r.year || '') + '::' + venueNorm;
+      const keyDate = r.planned_date
+        ? (r.band || '').toLowerCase().trim() + '::date::' +
+          r.planned_date + '::' + venueNorm
+        : null;
+      if (seen2.has(keyYear) || (keyDate && seen2.has(keyDate))) {
+        toDel2.push(r.client_id);
+      } else {
+        seen2.set(keyYear, r.client_id);
+        if (keyDate) seen2.set(keyDate, r.client_id);
+      }
+    }
+    for (const cid of toDel2) {
+      try {
+        const { error } = await admin.from('user_concerts')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('client_id', cid);
+        if (!error) post_dedup_killed++;
+      } catch {}
+    }
+  } catch {}
+
   return NextResponse.json({
     imported,
     skipped,
@@ -574,6 +729,8 @@ export async function POST() {
     lineups_attempted,
     lineups_expanded,
     pre_dedup_killed,
+    post_dedup_killed,
+    title_band_cleaned,
     diag: {
       ...diag,
       existing_before: (existing || []).length,
