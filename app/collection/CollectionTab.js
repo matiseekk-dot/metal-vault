@@ -35,42 +35,115 @@ function PortfolioChart({ snapshots }) {
       No historical data — add records to your collection
     </div>
   );
-  const vals = snapshots.map(s => Number(s.total_value) || 0);
-  const maxV = Math.max(...vals, 1);
-  const minV = Math.min(...vals, 0);
-  const range = maxV - minV || 1;
-  const W = 300, H = 100, PL = 36, PR = 8, PT = 8, PB = 20;
-  const pts = snapshots.map((s, i) => {
-    const x = PL + (i / (snapshots.length - 1)) * (W - PL - PR);
-    const y = PT + ((maxV - (Number(s.total_value) || 0)) / range) * (H - PT - PB);
-    return `${x},${y}`;
-  }).join(' ');
-  const area = `${PL},${H - PB} ${pts} ${W - PR},${H - PB}`;
+
+  // Dedupe consecutive snapshots that share both total_value AND
+  // total_paid — otherwise the chart shows a long flat plateau when the
+  // user hasn't added/sold records or refreshed prices for weeks. Keep
+  // the FIRST and LAST snapshot always so the time-range stays correct.
+  const condensed = snapshots.filter((s, i) => {
+    if (i === 0 || i === snapshots.length - 1) return true;
+    const prev = snapshots[i - 1];
+    return Number(s.total_value) !== Number(prev.total_value)
+        || Number(s.total_paid)  !== Number(prev.total_paid);
+  });
+
+  // Two series: total_value (current market value of the whole
+  // collection, accent red) and total_paid (cumulative spending, gold).
+  // Paid is usually the more interesting line because it grows
+  // monotonically with every purchase the user logs — value is mostly
+  // flat in the short term since Discogs prices don't tick every day.
+  // Showing both gives the user a "spent vs worth now" delta at a glance.
+  const valueSeries = condensed.map(s => Number(s.total_value) || 0);
+  const paidSeries  = condensed.map(s => Number(s.total_paid)  || 0);
+  const maxV = Math.max(...valueSeries, ...paidSeries, 1);
+  const range = maxV || 1;
+  const W = 300, H = 110, PL = 40, PR = 8, PT = 8, PB = 24;
+
+  const buildPts = (series) => condensed.map((_, i) => {
+    const x = PL + (i / Math.max(1, condensed.length - 1)) * (W - PL - PR);
+    const v = Number(series[i]) || 0;
+    const y = PT + ((maxV - v) / range) * (H - PT - PB);
+    return [x, y, v];
+  });
+  const valuePts = buildPts(valueSeries);
+  const paidPts  = buildPts(paidSeries);
+  const valueStr = valuePts.map(([x, y]) => `${x},${y}`).join(' ');
+  const paidStr  = paidPts .map(([x, y]) => `${x},${y}`).join(' ');
+  const area = `${PL},${H - PB} ${valueStr} ${W - PR},${H - PB}`;
+
+  // Endpoint labels — read the latest values so the user immediately sees
+  // total spent vs total market value without doing the math in their head.
+  const lastValue = valueSeries[valueSeries.length - 1] || 0;
+  const lastPaid  = paidSeries [paidSeries.length  - 1] || 0;
+  const gain      = lastValue - lastPaid;
+  const gainPct   = lastPaid > 0 ? (gain / lastPaid) * 100 : 0;
+  const gainColor = gain >= 0 ? '#4ade80' : '#f87171';
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
-      <defs>
-        <linearGradient id="cg" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%"   stopColor={C.accent} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={C.accent} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {[0, 0.5, 1].map(pct => {
-        const y = PT + pct * (H - PT - PB);
-        const val = maxV - pct * range;
-        return (
-          <g key={pct}>
-            <line x1={PL} x2={W - PR} y1={y} y2={y} stroke={C.border} strokeWidth="1" />
-            <text x={PL - 3} y={y + 3} textAnchor="end" fontSize="7" fill={C.dim}>{val.toFixed(0)}</text>
-          </g>
-        );
-      })}
-      <polygon points={area} fill="url(#cg)" />
-      <polyline points={pts} fill="none" stroke={C.accent} strokeWidth="1.5" />
-      {snapshots.map((s, i) => {
-        const [x, y] = pts.split(' ')[i].split(',').map(Number);
-        return <circle key={i} cx={x} cy={y} r="2.5" fill={C.accent} />;
-      })}
-    </svg>
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+        <defs>
+          <linearGradient id="cg" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%"   stopColor={C.accent} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={C.accent} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[0, 0.5, 1].map(pct => {
+          const y = PT + pct * (H - PT - PB);
+          const val = maxV - pct * range;
+          return (
+            <g key={pct}>
+              <line x1={PL} x2={W - PR} y1={y} y2={y} stroke={C.border} strokeWidth="1" />
+              <text x={PL - 3} y={y + 3} textAnchor="end" fontSize="7" fill={C.dim}>{val.toFixed(0)}</text>
+            </g>
+          );
+        })}
+        {/* Value area + line (red accent) */}
+        <polygon points={area} fill="url(#cg)" />
+        <polyline points={valueStr} fill="none" stroke={C.accent} strokeWidth="1.6" />
+        {/* Paid line (gold, dashed) — distinct stroke so colour-blind
+            readers can still tell them apart by the dash pattern. */}
+        <polyline points={paidStr} fill="none" stroke="#f5c842"
+          strokeWidth="1.4" strokeDasharray="3,2" />
+        {/* Datapoint dots only on the last snapshot so the chart doesn't
+            look like measles. End-of-line markers anchor the eye to the
+            current position. */}
+        {(() => {
+          const lastIdx = condensed.length - 1;
+          return (
+            <g>
+              <circle cx={valuePts[lastIdx][0]} cy={valuePts[lastIdx][1]} r="3" fill={C.accent} />
+              <circle cx={paidPts [lastIdx][0]} cy={paidPts [lastIdx][1]} r="3" fill="#f5c842" />
+            </g>
+          );
+        })()}
+      </svg>
+      {/* Legend + endpoint readout: shows the latest paid vs value so
+          the user has the "spent / worth / delta" trio in one glance.
+          Compact mono grid keeps it visually consistent with the rest
+          of the stats card. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', marginTop: 4, gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, ...MONO, fontSize: 9 }}>
+          <span style={{ color: C.accent }}>
+            <span style={{ display: 'inline-block', width: 10, height: 2,
+              background: C.accent, verticalAlign: 'middle', marginRight: 4 }}/>
+            rynek {lastValue.toFixed(0)}
+          </span>
+          <span style={{ color: '#f5c842' }}>
+            <span style={{ display: 'inline-block', width: 10, height: 2,
+              background: 'repeating-linear-gradient(90deg,#f5c842 0,#f5c842 3px,transparent 3px,transparent 5px)',
+              verticalAlign: 'middle', marginRight: 4 }}/>
+            wpłacone {lastPaid.toFixed(0)}
+          </span>
+        </div>
+        {lastPaid > 0 && (
+          <span style={{ ...MONO, fontSize: 9, color: gainColor }}>
+            {gain >= 0 ? '+' : ''}{gain.toFixed(0)} ({gainPct >= 0 ? '+' : ''}{gainPct.toFixed(0)}%)
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1695,7 +1768,33 @@ export function CollectionTab({
                             </span>
                           )}
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>{formatPrice(paid, cur, fx)}</span>}
-                          {now > 0  && <span style={{ fontSize: 9, color: gain >= 0 ? '#4ade80' : '#f87171', ...MONO }}>→{formatPrice(now, cur, fx)}{gain !== null ? (gain >= 0 ? ' ▲' : ' ▼') : ''}</span>}
+                          {/* "from X" market price — explicitly labelled
+                              "od" (from) to make clear this is the LOWEST
+                              currently-listed price across ALL variants on
+                              Discogs, not the price of the specific variant
+                              the user owns. Earlier "→X" with arrow + ▲/▼
+                              direction implied "current value of your
+                              record" which misled users into thinking
+                              their gold limited edition was worth 42 zł
+                              when it was actually selling at 508 zł.
+                              Gain indicator only fires when paid is within
+                              the same order of magnitude (paid/2 ≤ now ≤
+                              paid×2) — otherwise the comparison is
+                              meaningless and we hide ▲/▼ entirely. */}
+                          {now > 0 && (() => {
+                            const showGain = paid > 0
+                              && now >= paid / 2
+                              && now <= paid * 2;
+                            const color = !showGain ? C.muted
+                              : gain >= 0 ? '#4ade80' : '#f87171';
+                            return (
+                              <span style={{ fontSize: 9, color, ...MONO }}
+                                title="Najniższa aktualna cena na rynku Discogs (różne warianty mogą mieć inne ceny — sprawdź listę wariantów w karcie)">
+                                od {formatPrice(now, cur, fx)}
+                                {showGain && (gain >= 0 ? ' ▲' : ' ▼')}
+                              </span>
+                            );
+                          })()}
                           {now === 0 && paid > 0 && (
                             // Was an ⏳ hourglass — users read it as a live
                             // spinner ("keeps searching for the last record's
@@ -1925,12 +2024,21 @@ export function CollectionTab({
                           // keyboard (input loses focus → blur fires) and the
                           // user had to tap OK twice.
                           (() => {
-                            const submitPrice = async () => {
-                              const n = parseFloat(String(priceInputVal).replace(',','.'));
-                              if (isNaN(n)) { setShowAlertForm(null); setPriceInputVal(''); return; }
-                              // Optimistic patch — flip the local item immediately so
-                              // the UI shows the new value even before the round-trip
-                              // completes. If the PATCH errors we revert below.
+                            // Reads the input value DIRECTLY from the DOM on
+                            // submit rather than from React state. Without
+                            // this the "save twice" bug fires on mobile:
+                            // last keystroke fires onChange asynchronously,
+                            // the tap on OK fires before React commits the
+                            // state update, so submitPrice reads stale
+                            // priceInputVal. Reading via form-event target
+                            // is sync — whatever the user just typed is
+                            // already in the DOM <input value>.
+                            const submitPrice = async (rawValue) => {
+                              const n = parseFloat(String(rawValue ?? '').trim().replace(',','.'));
+                              if (isNaN(n) || n < 0) {
+                                setShowAlertForm(null); setPriceInputVal('');
+                                return;
+                              }
                               const prevPrice = item.purchase_price;
                               const optimistic = collection.map(c =>
                                 c.id === item.id ? { ...c, purchase_price: n } : c);
@@ -1944,11 +2052,14 @@ export function CollectionTab({
                                   body: JSON.stringify({ purchase_price: n }),
                                 });
                                 if (!r.ok) throw new Error('PATCH failed');
-                                // Authoritative refetch keeps median_price etc fresh too
+                                // Authoritative refetch keeps median_price etc fresh too.
+                                // Broadcast the change so other tabs/listeners
+                                // (useCollection's mv-collection-changed) re-pull
+                                // and don't render stale prices on other devices.
                                 const fresh = await fetch('/api/collection').then(r => r.json());
                                 if (fresh.items) onUpdate(fresh.items);
+                                try { window.dispatchEvent(new Event('mv-collection-changed')); } catch {}
                               } catch {
-                                // Revert optimistic update on error
                                 const reverted = collection.map(c =>
                                   c.id === item.id ? { ...c, purchase_price: prevPrice } : c);
                                 onUpdate(reverted);
@@ -1956,17 +2067,33 @@ export function CollectionTab({
                               }
                             };
                             return (
-                              <form onSubmit={e => { e.preventDefault(); submitPrice(); }}
+                              <form onSubmit={e => {
+                                  e.preventDefault();
+                                  // Pull value straight from the <input> DOM
+                                  // node — bypasses any stale React state on
+                                  // mobile keyboards where the last keystroke
+                                  // hasn't committed yet.
+                                  const inp = e.currentTarget.querySelector('input[type=number]');
+                                  submitPrice(inp ? inp.value : priceInputVal);
+                                }}
                                 style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
                                 <span style={{ ...BEBAS, fontSize: 18, color: C.muted }}>$</span>
                                 <input type="number" inputMode="decimal" step="0.01"
-                                  value={priceInputVal}
+                                  defaultValue={priceInputVal}
                                   onChange={e => setPriceInputVal(e.target.value)}
                                   placeholder={t('vault.priceModal.placeholder')} autoFocus
                                   style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border,
                                     borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 16,
                                     ...MONO, outline: 'none' }} />
                                 <button type="submit"
+                                  // Force-commit on tap-start so the iOS keyboard
+                                  // doesn't swallow the final keystroke before
+                                  // the touch event fires submit.
+                                  onTouchEnd={e => {
+                                    const form = e.currentTarget.closest('form');
+                                    const inp = form?.querySelector('input[type=number]');
+                                    if (inp) inp.blur();
+                                  }}
                                   style={{ padding: '10px 18px', background: C.accent, border: 'none',
                                     borderRadius: 8, color: '#fff', cursor: 'pointer', ...BEBAS, fontSize: 16, flexShrink: 0 }}>
                                   {t('alert.ok')}
