@@ -30,6 +30,22 @@ import { haptic } from '@/lib/haptics';
 // ── PortfolioChart ────────────────────────────────────────────────
 function PortfolioChart({ snapshots }) {
   const t = useT();
+  // Mount-then-render guard. The SVG below has inline-style
+  // `repeating-linear-gradient` which React serialises differently on
+  // the server vs the client in some bundler configurations — caused a
+  // hydration mismatch (React #418) on production builds. Deferring
+  // chart paint until after first mount sidesteps it entirely while
+  // costing one extra render frame the user will never notice.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) {
+    return (
+      <div style={{ height: 110, display: 'flex', alignItems: 'center',
+        justifyContent: 'center', color: C.dim, ...MONO, fontSize: 10 }}>
+        …
+      </div>
+    );
+  }
   if (!snapshots || snapshots.length < 2) return (
     <div style={{ textAlign: 'center', padding: '30px 0', color: C.dim, ...MONO, fontSize: 11 }}>
       No historical data — add records to your collection
