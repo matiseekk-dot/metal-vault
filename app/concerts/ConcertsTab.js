@@ -940,6 +940,14 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               }
               if (d.imported > 0) {
                 haptic.success?.();
+                // Full diag to console — when the user complains "the
+                // 2010 events got cut off", asking them for the console
+                // dump shows exactly which year tabs were scanned and
+                // how many events came back per year. Faster than a
+                // round-trip through me re-deploying.
+                if (d.diag) {
+                  try { console.log('[LFM import diag]', d.diag); } catch {}
+                }
                 // Toast mentions festival promotion too — if the import
                 // upgraded existing 'Other'-tagged venues to Festival
                 // based on Last.fm URL/title heuristics, the user sees
@@ -951,10 +959,24 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                 const upcomingNote = (d.promoted_upcoming || 0) > 0
                   ? ' · ' + d.promoted_upcoming + ' ' + (t('concerts.importLastfmUpcomingPromoted') || 'flagged as upcoming')
                   : '';
+                // Year-coverage hint — compute min/max year actually
+                // imported. If the range looks wrong (e.g. min=2018 but
+                // the user has 2010 events) that's an immediate red
+                // flag that detectYears missed older tabs.
+                let yearNote = '';
+                try {
+                  const ys = Object.keys(d.diag?.year_stats || {})
+                    .filter(y => /^\d{4}$/.test(y))
+                    .map(Number)
+                    .sort((a, b) => a - b);
+                  if (ys.length > 0) {
+                    yearNote = ' · lata ' + ys[0] + '–' + ys[ys.length - 1];
+                  }
+                } catch {}
                 toast.success(
                   (t('concerts.importLastfmDone', { n: d.imported, s: d.skipped })
                     || ('Zaimportowano ' + d.imported + ' koncertów (pominięto ' + d.skipped + ' duplikatów)'))
-                  + festNote + upcomingNote,
+                  + festNote + upcomingNote + yearNote,
                   { duration: 8000 }
                 );
                 // Force a re-fetch of user concerts so the new rows
@@ -1054,10 +1076,17 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                 const dedupNote = (di.pre_dedup_killed || 0) > 0
                   ? ' · usunięto ' + di.pre_dedup_killed + ' duplikatów'
                   : '';
+                if (di.diag) { try { console.log('[LFM clear+reimport diag]', di.diag); } catch {} }
+                let yearNote2 = '';
+                try {
+                  const ys = Object.keys(di.diag?.year_stats || {})
+                    .filter(y => /^\d{4}$/.test(y)).map(Number).sort((a, b) => a - b);
+                  if (ys.length > 0) yearNote2 = ' · lata ' + ys[0] + '–' + ys[ys.length - 1];
+                } catch {}
                 toast.success(
                   (t('concerts.importLastfmDone', { n: di.imported, s: di.skipped })
                     || ('Zaimportowano ' + di.imported + ' (pominięto ' + di.skipped + ')'))
-                  + festNote + lineupNote + dedupNote,
+                  + festNote + lineupNote + dedupNote + yearNote2,
                   { duration: 9000 }
                 );
                 // Pull fresh local state.
@@ -1686,6 +1715,11 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                  // single-band concerts interleaved. The first concert
                  // of a festival group sets the group's display position
                  // so the user's sortBy choice still applies.
+                 //
+                 // After building items, we GROUP BY YEAR for navigation
+                 // — power users with 200+ concerts across 18 years need
+                 // year separators to scan visually. Within each year
+                 // the items keep their `filtered` sort order.
                  const items = [];
                  // Festival grouping key: venue+DATE when we have the
                  // exact date (LFM imports), venue+year as fallback
@@ -1714,11 +1748,40 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                    groupMap.set(k, fresh);
                    items.push(fresh);
                  }
-                 return items.map(it => {
+                 // Group items by year. Year is taken from the festival
+                 // wrapper or the single concert. Items with no year fall
+                 // into an 'Unknown' bucket rendered last.
+                 const itemYear = (it) => {
+                   if (it.type === 'festival') return String(it.year || '');
+                   return String(it.concert?.year || '');
+                 };
+                 const yearBuckets = new Map();   // year(string) → items[]
+                 for (const it of items) {
+                   const y = itemYear(it) || '——';
+                   if (!yearBuckets.has(y)) yearBuckets.set(y, []);
+                   yearBuckets.get(y).push(it);
+                 }
+                 // Sort years DESC (most recent first). The 'Unknown' bucket
+                 // labelled '——' sorts last because it's not numeric.
+                 const sortedYears = [...yearBuckets.keys()].sort((a, b) => {
+                   const na = Number(a) || -Infinity;
+                   const nb = Number(b) || -Infinity;
+                   return nb - na;
+                 });
+                 const renderItem = (it) => {
                    if (it.type === 'festival') {
                      const v = it.venue;
                      const col = '#f5c842';
                      const isOpen = !!setlistOpen['fest:' + it.key];
+                     // Headliner heuristic: first band in the lineup.
+                     // LFM-imported cell lineup preserves Last.fm's order
+                     // (headline-first); manual entries also tend to put
+                     // the headliner first. We show this as ⭐ in BOTH
+                     // the collapsed meta line AND on the top row of the
+                     // expanded list, so the user knows the main act
+                     // without expanding.
+                     const headliner = it.items[0]?.band || '';
+                     const supportCount = Math.max(0, it.items.length - 1);
                      // Festival ticket price is stored on a SINGLE row,
                      // not multiplied across the lineup. We find the
                      // first row that actually has a price (skips empty
@@ -1738,6 +1801,26 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                              <div style={{...BEBAS, fontSize: 20, color: col, letterSpacing: '0.04em', lineHeight: 1.1}}>
                                🎪 {v?.name || (t('concerts.unknownVenue') || 'Festiwal')}
                              </div>
+                             {/* Headliner pill — the marquee band visible
+                                 without expanding. Renders as e.g.
+                                 "⭐ Behemoth · +47 supportu" so the user
+                                 knows who's playing at a glance. */}
+                             {headliner && (
+                               <div style={{marginTop: 4, display: 'flex', alignItems: 'center',
+                                 gap: 6, flexWrap: 'wrap'}}>
+                                 <span style={{...MONO, fontSize: 13, color: '#fde68a',
+                                   letterSpacing: '0.04em'}}>
+                                   ⭐ {headliner}
+                                 </span>
+                                 {supportCount > 0 && (
+                                   <span style={{fontSize: 10, ...MONO, color: C.dim, opacity: 0.85}}>
+                                     · +{supportCount} {supportCount === 1
+                                       ? (t('concerts.supportOne') || 'support')
+                                       : (t('concerts.supportMany') || 'supportów')}
+                                   </span>
+                                 )}
+                               </div>
+                             )}
                              <div style={{display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap',
                                alignItems: 'center'}}>
                                <span style={{fontSize: 11, color: C.dim, ...MONO}}>
@@ -1823,12 +1906,21 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                            <div style={{marginTop: 12, paddingTop: 10,
                              borderTop: '1px solid ' + col + '33',
                              display: 'flex', flexDirection: 'column', gap: 6}}>
-                             {it.items.map(c => {
+                             {it.items.map((c, idx) => {
                                const seenN = bandSeenCount[(c.band || '').toLowerCase().trim()] || 1;
+                               const isHead = idx === 0;
                                return (
                                <div key={c.id} style={{display: 'flex', alignItems: 'center', gap: 8,
-                                 padding: '6px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 6}}>
-                                 <span style={{flex: 1, fontSize: 13, color: C.text, ...MONO}}>{c.band}</span>
+                                 padding: '6px 8px',
+                                 background: isHead ? 'rgba(245,200,66,0.10)' : 'rgba(0,0,0,0.3)',
+                                 border: isHead ? '1px solid ' + col + '55' : '1px solid transparent',
+                                 borderRadius: 6}}>
+                                 {isHead && (
+                                   <span style={{fontSize: 14, lineHeight: 1}} title="Headliner">⭐</span>
+                                 )}
+                                 <span style={{flex: 1, fontSize: 13,
+                                   color: isHead ? '#fde68a' : C.text, ...MONO,
+                                   fontWeight: isHead ? 600 : 400}}>{c.band}</span>
                                  {seenN >= 2 && (
                                    <span style={{fontSize: 9, ...MONO, padding: '1px 6px', borderRadius: 10,
                                      background: '#1a3d1a', color: '#4ade80'}}>
@@ -1928,7 +2020,27 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                      </div>
                    </div>
                  );
-                 });   // end items.map
+                 };   // end renderItem
+                 // Final render: year sections. Each year gets a sticky
+                 // monospace header above its items so the user can
+                 // visually scan "what year was that gig?" without
+                 // squinting at row metadata.
+                 return sortedYears.map(y => (
+                   <div key={'year-' + y} style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+                     <div style={{
+                       ...MONO, fontSize: 11, color: '#7c8aa6',
+                       letterSpacing: '0.22em', textTransform: 'uppercase',
+                       padding: '12px 4px 4px',
+                       borderBottom: '1px solid ' + C.border,
+                     }}>
+                       {y === '——' ? (t('concerts.yearUnknown') || 'BEZ DATY') : y}
+                       <span style={{marginLeft: 8, color: C.dim, opacity: 0.6}}>
+                         · {yearBuckets.get(y).length}
+                       </span>
+                     </div>
+                     {yearBuckets.get(y).map(renderItem)}
+                   </div>
+                 ));
                })()}
              </div>
         )}

@@ -107,12 +107,26 @@ export async function POST() {
   }
   const scrapedEvents = [...mergeMap.values()];
 
+  // Per-year breakdown — for "the importer cut off 2010" reports we
+  // need to know whether the year tab was DETECTED (=> Last.fm renders
+  // it in the year-picker), whether we FETCHED the page (=> not a 404),
+  // and how many events came back from the parser. Three independent
+  // failure modes, three independent counters.
+  const yearStats = {};   // { 2010: { fetched: 1, parsed: 0 }, ... }
+  for (const t of (rawEvents.__debug?.trace || [])) {
+    const tgt = String(t.target || '');
+    if (!yearStats[tgt]) yearStats[tgt] = { fetched: 0, parsed: 0 };
+    yearStats[tgt].fetched++;
+    yearStats[tgt].parsed += (t.finalEvents || 0);
+  }
   const diag = {
     targets_scanned: rawEvents.__debug?.targets?.length || 0,
+    targets:         rawEvents.__debug?.targets || [],     // explicit year list
     pages_scanned:   rawEvents.__debug?.trace?.length || 0,
     raw_count:       rawEvents.length,
     merged:          scrapedEvents.length,
     last_status:     rawEvents.__debug?.lastStatus || 'unknown',
+    year_stats:      yearStats,
   };
 
   // Cleanup pass — earlier broken parser runs inserted '<unknown>'
@@ -293,9 +307,28 @@ export async function POST() {
         const full = await lastfmEventFullLineup(ev.ticketsUrl, {
           timeoutMs: 8000, maxPages: 12,
         });
-        if (full.length > (ev.lineup?.length || 0)) {
-          ev.lineup = full;
-          lineups_expanded++;
+        // UNION not REPLACE — the user-events page cell sometimes
+        // contains bands the /lineup walker doesn't see (Last.fm
+        // surfaces "Confirmed" tier on the user listing but reorders
+        // /lineup paginated into tier groups). Equally the walker
+        // returns the long tail the cell omits. Combine both, dedup
+        // case-insensitively, preserve cell order first (it tends to
+        // headline-first).
+        if ((full?.length || 0) > 0) {
+          const seenN = new Set();
+          const merged = [];
+          const push = (n) => {
+            const k = String(n || '').toLowerCase().trim();
+            if (!k || seenN.has(k)) return;
+            seenN.add(k);
+            merged.push(n);
+          };
+          for (const n of (ev.lineup || [])) push(n);
+          for (const n of full) push(n);
+          if (merged.length > (ev.lineup?.length || 0)) {
+            ev.lineup = merged;
+            lineups_expanded++;
+          }
         }
       } catch {}
       await new Promise(rr => setTimeout(rr, 200));
