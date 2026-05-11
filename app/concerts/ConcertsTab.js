@@ -977,20 +977,18 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                 return;
               }
               const d = await r.json().catch(() => ({}));
+              // Always log the full diag, even on imported=0 / errors.
+              // When the user reports "still empty", this is the only
+              // way for me to see year_stats / last_status / htmlProbe
+              // without a round-trip.
+              try { console.log('[LFM import diag]', d); } catch {}
               if (!r.ok) {
                 toast.error(d.error || 'Import failed');
                 return;
               }
               if (d.imported > 0) {
                 haptic.success?.();
-                // Full diag to console — when the user complains "the
-                // 2010 events got cut off", asking them for the console
-                // dump shows exactly which year tabs were scanned and
-                // how many events came back per year. Faster than a
-                // round-trip through me re-deploying.
-                if (d.diag) {
-                  try { console.log('[LFM import diag]', d.diag); } catch {}
-                }
+                // Diag logged unconditionally above — no need to repeat.
                 // Toast mentions festival promotion too — if the import
                 // upgraded existing 'Other'-tagged venues to Festival
                 // based on Last.fm URL/title heuristics, the user sees
