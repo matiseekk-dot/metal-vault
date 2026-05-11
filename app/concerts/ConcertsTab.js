@@ -267,6 +267,10 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   const [festNewVenue,setFestNewVenue] = useState('');
   const [festNewVenueCity,setFestNewVenueCity] = useState('');
   const [showFestVenueAdd,setShowFestVenueAdd] = useState(false);
+  // Ranking-tab artist photos. Lazy-fetched per band when the user
+  // opens the Ranking tab; cached in state for the session.
+  // null = pending fetch, '' = no image found, string = URL.
+  const [bandPhotos,setBandPhotos] = useState({});
   // Search filter for the quick-add chips below the bands textarea.
   // Power users following 200+ bands need to narrow down — 30-chip
   // hardcoded cap was claustrophobic and looked like "stale data" when
@@ -355,6 +359,48 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
     setConcerts(c); saveLS(LS_KEY, c);
     if (v !== venues) { setVenues(v); saveLS(LS_VENUES, v); }
   };
+
+  // ── Ranking-tab band photos ────────────────────────────────────
+  // When the Ranking tab opens we eagerly fetch artist images for
+  // every unique band on the list (capped at 60 to stay polite). The
+  // /api/artists/image endpoint walks Spotify → Deezer → Wikipedia
+  // and caches server-side, so subsequent visits are near-instant.
+  // We dispatch in small parallel chunks; one slow lookup mustn't
+  // block the rest of the column from filling in.
+  useEffect(() => {
+    if (tab !== 'ranking' || concerts.length === 0) return;
+    const wanted = [...new Set(concerts.map(c => (c.band || '').trim()).filter(Boolean))]
+      .slice(0, 60)
+      .filter(name => bandPhotos[name.toLowerCase()] === undefined);
+    if (wanted.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      // 6 in flight at a time — bigger pool than serial, smaller than
+      // unbounded so we don't open 60 sockets to our own backend.
+      const queue = [...wanted];
+      const workers = Array.from({ length: 6 }, async () => {
+        while (queue.length > 0) {
+          const name = queue.shift();
+          if (!name || cancelled) return;
+          try {
+            const r = await fetch('/api/artists/image?name=' + encodeURIComponent(name));
+            if (!r.ok) {
+              setBandPhotos(p => ({ ...p, [name.toLowerCase()]: '' }));
+              continue;
+            }
+            const d = await r.json();
+            const img = d?.image || d?.thumb || '';
+            setBandPhotos(p => ({ ...p, [name.toLowerCase()]: img }));
+          } catch {
+            setBandPhotos(p => ({ ...p, [name.toLowerCase()]: '' }));
+          }
+        }
+      });
+      await Promise.all(workers);
+    })();
+    return () => { cancelled = true; };
+  }, [tab, concerts.length]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Pending-sync queue ──
   // Audit caught the "save+sync rolls forward forever on failure"
@@ -481,35 +527,54 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
     const existingLower = new Set(editingFest?.originalBands || []);
     const newBands = bands.filter(b => !existingLower.has(b.toLowerCase()));
 
-    const entries = newBands.map(band => ({
+    // Price model: festival ticket = single number for the whole event,
+    // not per band. To avoid summing N×price in the header (which made
+    // a 12-band Wacken festival display as "9 600 PLN" instead of
+    // "800 PLN"), we store the price on EXACTLY ONE row per festival
+    // — the first inserted band — and leave the rest with price=''.
+    // The aggregator below already reads from items[0].price for the
+    // header. Future edits via the modal also follow this single-row
+    // pattern (see patch block further down).
+    const festPrice = festForm.price || '';
+    const entries = newBands.map((band, idx) => ({
       band,
       venueId: festForm.venueId,
       year:    festForm.year,
       genre:   festForm.genre || 'Metal',
       rating:  festForm.rating || 0,
-      price:   festForm.price || '',
+      // Only the FIRST new row carries the festival price; rest get ''.
+      // When editing an existing festival, the patch block below
+      // handles its own price-only-on-first logic.
+      price:   (!isEdit && idx === 0) ? festPrice : '',
       note:    festForm.note || '',
       id:      crypto.randomUUID(),
     }));
 
-    // Patch existing rows if we're editing and shared metadata
-    // changed. We touch rating/price/note/genre/year on every
-    // original row so the festival header re-aggregates.
+    // Patch existing rows if we're editing. Genre/rating/note/year/
+    // venue apply to EVERY row; price applies to ONLY THE FIRST row
+    // (the rest get '' so the festival header doesn't sum N×price).
+    // This keeps "I bought a 12-band Wacken pass for 800 PLN" reading
+    // as 800 PLN instead of 9 600 PLN.
     let updated = [...concerts];
     if (isEdit && editingFest.originalIds.length > 0) {
-      const patch = {
+      const firstId = editingFest.originalIds[0];
+      const sharedPatch = {
         genre:  festForm.genre || 'Metal',
         rating: festForm.rating || 0,
-        price:  festForm.price || '',
         note:   festForm.note || '',
         year:   festForm.year || '',
-        // Keep venueId from form so user can re-pick the venue if
-        // they got the original wrong (e.g. duplicate venue rows).
         venueId: festForm.venueId,
       };
-      updated = updated.map(c => editingFest.originalIds.includes(c.id)
-        ? { ...c, ...patch } : c);
-      // Fire-and-forget sync each patched row.
+      updated = updated.map(c => {
+        if (!editingFest.originalIds.includes(c.id)) return c;
+        return {
+          ...c,
+          ...sharedPatch,
+          // Single-source price — first row holds the festival ticket;
+          // every other lineup row clears.
+          price: c.id === firstId ? (festPrice || '') : '',
+        };
+      });
       for (const c of updated) {
         if (editingFest.originalIds.includes(c.id)) syncConcert(c);
       }
@@ -724,7 +789,6 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
         <div style={{display:'flex',marginBottom:12,borderBottom:`1px solid ${C.border}`}}>
           {[
             ['list',      '📋 ' + (t('concerts.tab.list')      || 'Koncerty')],
-            ['festivals', '🎪 ' + (t('concerts.tab.festivals') || 'Festiwale')],
             ['ranking',   '🏆 ' + (t('concerts.tab.ranking')   || 'Ranking')],
           ].map(([k,l])=>(
             <button key={k} onClick={()=>setTab(k)}
@@ -1488,12 +1552,12 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
           </div>
         )}
 
-        {/* List / Festivals tabs. Same rendering machinery — the
-            'tab' value below decides whether singles or festival
-            aggregates surface, so a venue+year that's tagged Festival
-            appears in the "Festiwale" tab; everything else lives in
-            "Koncerty". */}
-        {(tab==='list' || tab==='festivals') && (
+        {/* Koncerty tab — single concerts AND festival aggregates
+            interleaved. Festival rows (venue.cat === 'Festival') auto-
+            group into a gold expandable card with the full lineup;
+            stand-alone concerts render as plain rows. Ranking tab
+            (below) is the OTHER tab and counts every appearance. */}
+        {tab==='list' && (
           filtered.length===0
             ?<div style={{textAlign:'center',padding:'50px 0',color:C.dim,...MONO}}>
                <div style={{fontSize:44,marginBottom:10}}>🎸</div>
@@ -1505,6 +1569,10 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                  //   • 'list'      → ONLY non-festival concerts (no aggregated cards)
                  //   • 'festivals' → ONLY festival aggregates
                  // Ranking has its own block below and counts everything.
+                 // Single combined list: festival aggregates AND
+                 // single-band concerts interleaved. The first concert
+                 // of a festival group sets the group's display position
+                 // so the user's sortBy choice still applies.
                  const items = [];
                  const groupKey = (c) => {
                    const v = findVenue(c.venueId);
@@ -1515,7 +1583,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                  for (const c of filtered) {
                    const k = groupKey(c);
                    if (!k) {
-                     if (tab === 'list') items.push({ type: 'single', concert: c });
+                     items.push({ type: 'single', concert: c });
                      continue;
                    }
                    const existing = groupMap.get(k);
@@ -1523,36 +1591,21 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                    const fresh = { type: 'festival', key: k, venue: findVenue(c.venueId),
                      year: c.year, items: [c] };
                    groupMap.set(k, fresh);
-                   if (tab === 'festivals') items.push(fresh);
-                 }
-                 if (items.length === 0) {
-                   return (
-                     <div style={{textAlign: 'center', padding: '40px 0',
-                       color: C.dim, ...MONO, fontSize: 12}}>
-                       {tab === 'festivals'
-                         ? (t('concerts.noFestivals') || 'Brak festiwali — wszystko trafiło do "Koncerty"')
-                         : (t('concerts.noConcerts')  || 'Brak pojedynczych koncertów')}
-                     </div>
-                   );
+                   items.push(fresh);
                  }
                  return items.map(it => {
                    if (it.type === 'festival') {
                      const v = it.venue;
                      const col = '#f5c842';
                      const isOpen = !!setlistOpen['fest:' + it.key];
-                     const totalPrice = it.items.reduce((s, c) => s + (Number(parsePrice(c.price).amount) || 0), 0);
-                     // Pick the most common currency among festival rows.
-                     // If 11/12 bands share PLN and one was logged in EUR,
-                     // the header shows PLN with the EUR row contributing
-                     // its raw value to the sum. Imperfect but readable.
-                     const festCurrency = (() => {
-                       const counts = {};
-                       for (const c of it.items) {
-                         const cur = parsePrice(c.price).currency;
-                         counts[cur] = (counts[cur] || 0) + 1;
-                       }
-                       return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'PLN';
-                     })();
+                     // Festival ticket price is stored on a SINGLE row,
+                     // not multiplied across the lineup. We find the
+                     // first row that actually has a price (skips empty
+                     // rows in case the user only filled one in the
+                     // middle of the lineup). Falls back to 0 = hidden.
+                     const pricedRow = it.items.find(c => Number(parsePrice(c.price).amount) > 0);
+                     const totalPrice  = pricedRow ? Number(parsePrice(pricedRow.price).amount) : 0;
+                     const festCurrency = pricedRow ? parsePrice(pricedRow.price).currency : 'PLN';
                      const avgRating = it.items.reduce((s, c) => s + (Number(c.rating) || 0), 0) / it.items.length;
                      return (
                        <div key={it.key} style={{background: '#1a1408',
@@ -1763,11 +1816,29 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
             ?<div style={{textAlign:'center',padding:'50px 0',color:C.dim,...MONO}}><div style={{fontSize:44}}>🏆</div></div>
             :<div style={{display:'flex',flexDirection:'column',gap:8}}>
                {ranked.map(([band,cs],i)=>{
-                 const col = CAT_COLOR[cs[0]?.genre] || C.accent;
                  const avg = cs.filter(c=>c.rating).length
                    ? (cs.filter(c=>c.rating).reduce((s,c)=>s+c.rating,0)/cs.filter(c=>c.rating).length).toFixed(1)
                    : null;
                  const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':null;
+                 const photo = bandPhotos[band.toLowerCase()];
+                 // Circular avatar with letter fallback — identical to
+                 // the BandsTab ArtistPhoto component. Inlined so we
+                 // don't drag in a separate file just for ranking.
+                 const photoView = photo
+                   ? <img src={photo} alt={band} loading="lazy"
+                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                       style={{width: 44, height: 44, borderRadius: '50%',
+                         objectFit: 'cover', flexShrink: 0,
+                         border: '1px solid ' + C.accent + '33'}}/>
+                   : <div style={{width: 44, height: 44, borderRadius: '50%',
+                       flexShrink: 0,
+                       background: 'linear-gradient(135deg,#1a0a0a,#0a0a0a)',
+                       border: '1px solid ' + C.accent + '33',
+                       display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                       <span style={{...BEBAS, fontSize: 20, color: C.accent}}>
+                         {(band || '?')[0].toUpperCase()}
+                       </span>
+                     </div>;
                  return(
                    <div key={band} style={{background:C.bg2,border:`1px solid ${C.border}`,
                      borderLeft:`4px solid ${C.accent}`,borderRadius:10,padding:'13px 14px',
@@ -1775,6 +1846,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                      <div style={{width:28,textAlign:'center',flexShrink:0}}>
                        {medal?<span style={{fontSize:20}}>{medal}</span>:<span style={{...BEBAS,fontSize:18,color:'#444'}}>#{i+1}</span>}
                      </div>
+                     {photoView}
                      <div style={{flex:1,minWidth:0}}>
                        <div style={{...BEBAS,fontSize:19,color:C.text,lineHeight:1}}>{band}</div>
                        <div style={{display:'flex',gap:12,marginTop:3}}>

@@ -18,7 +18,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
-import { lastfmUserEventsAll } from '@/lib/lastfm';
+import { lastfmUserEventsAll, lastfmEventFullLineup } from '@/lib/lastfm';
 
 export const dynamic = 'force-dynamic';
 // Long deadline — historical archive walks ~10 year-tabs sequentially
@@ -187,12 +187,39 @@ export async function POST() {
   const concertRows = [];
   const newVenues   = [];
 
+  // Track how many events got their lineup enriched from event-detail
+  // pages — surfaces in toast so the user knows the import wasn't just
+  // grabbing the 3-band preview from the list view.
+  let lineups_expanded = 0;
+
   for (const ev of scrapedEvents) {
     const venueName = ev.venue || '';
     const year      = ev.datetime ? String(new Date(ev.datetime).getFullYear()) : '';
     if (!venueName || !year) { skipped++; continue; }
 
     const isFest = isFestivalEvent(ev);
+
+    // Enrich lineup from event detail page. The events-listing
+    // page only renders 3-5 performer names per row for layout
+    // reasons; bigger gigs (festivals, multi-act tours) hide the
+    // rest behind a "+N more" link. We fetch the detail page when
+    // either the URL says /festival/ OR the visible lineup looks
+    // truncated for a non-festival (less than 2 acts on a row that
+    // also has a venue + city — strong hint there's more behind
+    // the "more" cutoff).
+    const looksTruncated = isFest
+      || (Array.isArray(ev.lineup) && ev.lineup.length <= 1 && ev.venue);
+    if (looksTruncated && ev.ticketsUrl) {
+      try {
+        const full = await lastfmEventFullLineup(ev.ticketsUrl, { timeoutMs: 4500 });
+        if (full.length > (ev.lineup?.length || 0)) {
+          ev.lineup = full;
+          lineups_expanded++;
+        }
+      } catch {}
+      // Throttle to ~3 req/sec against Last.fm — gentle on their box.
+      await new Promise(rr => setTimeout(rr, 300));
+    }
     const venueNorm = normaliseVenueName(venueName);
     let venueId = venueByName.get(venueNorm);
     if (!venueId) {
@@ -408,6 +435,7 @@ export async function POST() {
     venues_created: newVenues.length,
     venues_upgraded,
     promoted_upcoming,
+    lineups_expanded,
     diag: {
       ...diag,
       existing_before: (existing || []).length,
