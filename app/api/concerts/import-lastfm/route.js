@@ -227,6 +227,16 @@ export async function POST() {
       ? ev.lineup
       : [ev.title || '<unknown>'];
 
+    // Future-dated events are upcoming (user marked themselves as
+    // "interested in" / "going" on Last.fm). They should land in the
+    // "Nadchodzące" section in the UI, NOT in the historical concerts
+    // list. is_planned=true with planned_date=ISO unlocks that path.
+    // ev.datetime is ISO "2026-10-29T00:00:00"; compare day-prefix
+    // against today to avoid TZ edge cases on the boundary day.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const evDateIso = (ev.datetime || '').slice(0, 10);
+    const isUpcoming = evDateIso >= todayIso;
+
     for (const band of lineup) {
       const bandStr = String(band || '').trim();
       if (!bandStr) continue;
@@ -243,6 +253,12 @@ export async function POST() {
         rating:    0,
         price:     '',
         note:      'Imported from Last.fm',
+        // Upcoming-tracking fields populated only for future dates.
+        // Past rows keep is_planned=false (schema default), so they
+        // continue rendering in the history list / ranking as before.
+        is_planned:     isUpcoming,
+        tickets_bought: false,        // user marks this when they buy
+        planned_date:   isUpcoming ? evDateIso : null,
       });
       imported++;
     }
@@ -265,6 +281,57 @@ export async function POST() {
       } catch {}
     }
   }
+
+  // Retroactive upcoming-flag pass for rows already in the DB from
+  // earlier imports (back when this endpoint didn't write the
+  // is_planned/planned_date trio). Match by (band lowercased, year,
+  // venue normalised) — same key the dedup uses — and only flip
+  // is_planned=false rows whose scraped datetime is in the future.
+  // We don't downgrade past rows or rewrite existing is_planned=true
+  // rows, so manual user edits are preserved.
+  let promoted_upcoming = 0;
+  try {
+    const todayIsoP = new Date().toISOString().slice(0, 10);
+    const futureScraped = scrapedEvents
+      .filter(ev => (ev.datetime || '').slice(0, 10) >= todayIsoP);
+    if (futureScraped.length > 0) {
+      // Re-fetch current rows (post-insert) so we update rows we just
+      // wrote in the same request as well as legacy ones.
+      const { data: nowRows } = await admin.from('user_concerts')
+        .select('client_id, band, year, venue_id, is_planned, planned_date')
+        .eq('user_id', user.id)
+        .eq('is_planned', false);
+      // Build venue norm lookup again — newVenues might not be in
+      // venueNameById since that map was built before insert.
+      const vNameLookup = new Map(venueNameById);
+      for (const v of newVenues) vNameLookup.set(v.client_id, normaliseVenueName(v.name));
+
+      for (const ev of futureScraped) {
+        const evDate = (ev.datetime || '').slice(0, 10);
+        const evYear = String(new Date(ev.datetime).getFullYear());
+        const evVenueNorm = normaliseVenueName(ev.venue || '');
+        const evLineup = Array.isArray(ev.lineup) && ev.lineup.length > 0
+          ? ev.lineup : [ev.title || ''];
+        for (const band of evLineup) {
+          const bandKey = String(band || '').toLowerCase().trim();
+          if (!bandKey) continue;
+          const match = (nowRows || []).find(r =>
+            (r.band || '').toLowerCase().trim() === bandKey &&
+            String(r.year || '') === evYear &&
+            (vNameLookup.get(r.venue_id) || '') === evVenueNorm
+          );
+          if (!match) continue;
+          try {
+            const { error } = await admin.from('user_concerts')
+              .update({ is_planned: true, planned_date: evDate })
+              .eq('user_id', user.id)
+              .eq('client_id', match.client_id);
+            if (!error) promoted_upcoming++;
+          } catch {}
+        }
+      }
+    }
+  } catch {}
 
   // Upgrade existing 'Other' venues that this import recognised as
   // festivals via name/URL heuristic. Per-id update.
@@ -340,6 +407,7 @@ export async function POST() {
     scanned: scrapedEvents.length,
     venues_created: newVenues.length,
     venues_upgraded,
+    promoted_upcoming,
     diag: {
       ...diag,
       existing_before: (existing || []).length,
