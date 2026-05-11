@@ -872,9 +872,18 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               }
               if (d.imported > 0) {
                 haptic.success?.();
+                // Toast mentions festival promotion too — if the import
+                // upgraded existing 'Other'-tagged venues to Festival
+                // based on Last.fm URL/title heuristics, the user sees
+                // their old imports rearrange into the gold festival
+                // cards on this run.
+                const festNote = (d.venues_upgraded || 0) > 0
+                  ? ' · ' + d.venues_upgraded + ' ' + (t('concerts.importLastfmFestUpgrade') || 'venue(s) reclassified as festivals')
+                  : '';
                 toast.success(
                   (t('concerts.importLastfmDone', { n: d.imported, s: d.skipped })
-                    || ('Zaimportowano ' + d.imported + ' koncertów (pominięto ' + d.skipped + ' duplikatów)')),
+                    || ('Zaimportowano ' + d.imported + ' koncertów (pominięto ' + d.skipped + ' duplikatów)'))
+                  + festNote,
                   { duration: 8000 }
                 );
                 // Force a re-fetch of user concerts so the new rows

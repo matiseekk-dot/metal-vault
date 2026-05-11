@@ -128,10 +128,37 @@ export async function POST() {
 
   // Existing venues by normalised name → reuse rather than create
   // duplicate "Wacken Open Air" rows on every import.
+  // Also load the full venue row including cat so we can UPGRADE
+  // venues that were previously imported as 'Other' to 'Festival'
+  // when the new scrape proves they're actually festivals.
+  const { data: venuesFull } = await admin
+    .from('user_venues')
+    .select('client_id, name, cat')
+    .eq('user_id', user.id);
+  const venueRowById = new Map((venuesFull || []).map(v => [v.client_id, v]));
   const venueByName = new Map();
   for (const v of (venues || [])) {
     venueByName.set(normaliseVenueName(v.name), v.client_id);
   }
+
+  // Heuristic: Last.fm itself classifies events vs festivals by URL
+  // path. /festival/N+Name = festival, /event/N+Name = concert.
+  // Plus belt-and-braces keyword scan on the event title for cases
+  // where Last.fm got it wrong or the data was migrated badly
+  // (matches "Festival", "Fest", "Open Air", "Fesztivál" etc).
+  function isFestivalEvent(ev) {
+    if (ev?.ticketsUrl && /\/festival\//i.test(ev.ticketsUrl)) return true;
+    const t = String(ev?.title || '').toLowerCase();
+    if (/\b(festival|fest|open air|openair)\b/.test(t))     return true;
+    // Known Polish/German metal festival keywords that don't match
+    // the generic patterns above.
+    if (/\b(graspop|hellfest|wacken|mystic|summer breeze|with full force|brutal assault|metaldays|inferno|tons of rock|exit|sweden rock|nova rock|copenhell|alcatraz)\b/.test(t)) return true;
+    return false;
+  }
+
+  // Track which existing venues we UPGRADE Other → Festival in
+  // this pass — applied at the end in a single UPDATE.
+  const venuesToUpgrade = [];
 
   // Build rows + venue inserts.
   let imported = 0;
@@ -144,22 +171,33 @@ export async function POST() {
     const year      = ev.datetime ? String(new Date(ev.datetime).getFullYear()) : '';
     if (!venueName || !year) { skipped++; continue; }
 
+    const isFest = isFestivalEvent(ev);
     const venueNorm = normaliseVenueName(venueName);
     let venueId = venueByName.get(venueNorm);
     if (!venueId) {
-      // Create a venue row keyed by a fresh uuid so future imports
-      // hit the cache. We don't try to classify (Festival / Club /
-      // Arena) — heuristic categorisation is unreliable; default to
-      // "Other" so the user can re-tag in the UI if they want.
+      // New venue. Tag cat from the per-event heuristic instead of
+      // the old hardcoded 'Other'. Festivals tagged here will be
+      // picked up by the festival aggregator in ConcertsTab — the
+      // event lineup auto-groups into one expandable card.
       venueId = crypto.randomUUID();
       newVenues.push({
-        user_id: user.id,
+        user_id:   user.id,
         client_id: venueId,
-        name: venueName,
-        city: ev.city || '',
-        cat:  'Other',
+        name:      venueName,
+        city:      ev.city || '',
+        cat:       isFest ? 'Festival' : 'Other',
       });
       venueByName.set(venueNorm, venueId);
+    } else if (isFest) {
+      // Existing venue we recognise as a festival — upgrade if it
+      // was imported under the old "always Other" rule. Don't
+      // downgrade Arena/Klub/Hall venues that the user tagged
+      // manually; only flip Other → Festival.
+      const existingRow = venueRowById.get(venueId);
+      if (existingRow && existingRow.cat === 'Other'
+          && !venuesToUpgrade.find(u => u.client_id === venueId)) {
+        venuesToUpgrade.push({ client_id: venueId, name: existingRow.name });
+      }
     }
 
     // One row per performer (so festivals naturally aggregate into
@@ -207,11 +245,27 @@ export async function POST() {
     }
   }
 
+  // Upgrade existing 'Other' venues that this import recognised as
+  // festivals. Per-id update (Supabase JS doesn't have multi-row
+  // conditional UPDATE in one call without an RPC) — list is tiny
+  // in practice (few festivals per user) so the loop is cheap.
+  let venues_upgraded = 0;
+  for (const v of venuesToUpgrade) {
+    try {
+      const { error } = await admin.from('user_venues')
+        .update({ cat: 'Festival' })
+        .eq('user_id', user.id)
+        .eq('client_id', v.client_id);
+      if (!error) venues_upgraded++;
+    } catch {}
+  }
+
   return NextResponse.json({
     imported,
     skipped,
     scanned: scrapedEvents.length,
     venues_created: newVenues.length,
+    venues_upgraded,
     diag,
   });
 }

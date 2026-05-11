@@ -180,15 +180,56 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
         </div>
       )}
 
-      {/* Empty result */}
-      {!loading && !error && events.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '40px 24px', color: C.dim, ...MONO, fontSize: 12 }}>
-          <div style={{ ...BEBAS, fontSize: 16, color: C.muted, letterSpacing: '0.04em', marginBottom: 6 }}>
-            No upcoming dates
+      {/* Empty result — explain WHY, not just "no dates".
+          Three distinct empty-states keyed on the API diagnostics:
+            • resolvedArtists > 0 but events.length === 0 → location
+              filter trimmed everything (suggest widening radius)
+            • resolvedArtists === 0 but rawEvents === 0 across all
+              followed → Last.fm has nothing for these bands or our
+              parser got fresh-broken (rare but possible)
+            • artistsTotal === 0 → user follows no bands yet */}
+      {!loading && !error && events.length === 0 && (() => {
+        const totalFollowed = meta.artistsTotal || followedArtists.length;
+        const resolved      = meta.resolvedArtists || 0;
+        const raw           = meta.rawEvents || 0;
+        if (totalFollowed === 0) {
+          return (
+            <div style={{ textAlign: 'center', padding: '40px 24px', color: C.dim, ...MONO, fontSize: 12 }}>
+              <div style={{ ...BEBAS, fontSize: 16, color: C.muted, letterSpacing: '0.04em', marginBottom: 6 }}>
+                No followed bands
+              </div>
+              Follow some artists from the Listening tab or Bands tab — we&apos;ll then surface their upcoming shows here.
+            </div>
+          );
+        }
+        if (resolved > 0 && raw > 0) {
+          // Some bands had events upstream but our location/radius
+          // filter zeroed them out before render.
+          return (
+            <div style={{ textAlign: 'center', padding: '40px 24px', color: C.dim, ...MONO, fontSize: 12 }}>
+              <div style={{ ...BEBAS, fontSize: 16, color: C.muted, letterSpacing: '0.04em', marginBottom: 6 }}>
+                No shows in your area
+              </div>
+              {raw} event(s) found for {resolved} band(s), but none within your radius. Try &quot;Worldwide&quot;.
+            </div>
+          );
+        }
+        return (
+          <div style={{ textAlign: 'center', padding: '40px 24px', color: C.dim, ...MONO, fontSize: 12 }}>
+            <div style={{ ...BEBAS, fontSize: 16, color: C.muted, letterSpacing: '0.04em', marginBottom: 6 }}>
+              No upcoming dates
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              None of your {totalFollowed} followed artists have announced shows yet.
+            </div>
+            {/* Diagnostic footer — small text so it doesn't dominate
+                but visible enough to share when reporting an empty Live. */}
+            <div style={{ fontSize: 9, color: C.dim, opacity: 0.7, marginTop: 10 }}>
+              Scanned {totalFollowed} artists · resolved {resolved} · {raw} events found
+            </div>
           </div>
-          None of your {meta.artistsTotal || followedArtists.length} followed artists have announced shows yet.
-        </div>
-      )}
+        );
+      })()}
 
       {/* Result count + expand toggle */}
       {!loading && events.length > 0 && (

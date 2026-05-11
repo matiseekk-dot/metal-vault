@@ -164,7 +164,10 @@ async function readEventsCache(sb, cacheKey) {
 // to dozens of artists in parallel and one slow page mustn't drag
 // the whole multi-artist GET past its budget.
 async function fetchLastfmEvents(artistName, sb) {
-  const cacheKey = 'lfm-events-v1::' + artistName.toLowerCase().replace(/\s+/g, '_');
+  // v2 — bumped after the artist-page parser was added. v1 cached
+  // empty arrays for every artist (the old parser missed the new
+  // markup) and would have served stale empties for 24h post-fix.
+  const cacheKey = 'lfm-events-v2::' + artistName.toLowerCase().replace(/\s+/g, '_');
   const cached = await readEventsCache(sb, cacheKey);
   if (cached) return cached;
 
