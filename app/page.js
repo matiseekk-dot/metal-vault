@@ -85,6 +85,14 @@ export default function MetalVault() {
   // localStorage said so). The tab-restore from URL/localStorage runs
   // in a useEffect on mount instead.
   const [tab, setTab] = useState('vault');
+  // SSR vs CSR render parity is too costly to maintain across this app's
+  // ~30 stateful client components, so we mount-guard the entire root
+  // (see render path below). `mounted` flips on first useEffect tick,
+  // forcing a second render with the full UI. SSR'd HTML is a minimal
+  // METAL VAULT splash that's identical in both environments → no
+  // hydration mismatch can ever fire.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const valid = ['feed','vault','calendar','profile'];
@@ -595,6 +603,24 @@ export default function MetalVault() {
   const isWatched  = id   => col.watchlist.some(w => (w.id||w.album_id) === id);
   const isInCollection = id => col.collection.some(c => String(c.discogs_id) === String(id) || c.album_id === id);
   const isFollowed = name => col.followedArtists.some(a => a.artist_name === name);
+
+  // Mount-guard at the page root. The app is a heavily-stateful PWA
+  // with ~30 nested 'use client' components, async data loaders, and
+  // localStorage-derived UI everywhere. Maintaining strict SSR/CSR
+  // render parity across all of that for a SEO-irrelevant signed-in
+  // surface is not worth the engineering cost. SSR a minimal black
+  // skeleton; let the client take over after hydration. Eliminates
+  // every possible React #418 source in one move.
+  if (!mounted) {
+    return (
+      <div style={{ minHeight:'100vh', background:C.bg, maxWidth:600, margin:'0 auto',
+        display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ ...BEBAS, fontSize:24, letterSpacing:'0.1em', color:C.text, opacity:0.4 }}>
+          METAL VAULT
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight:'100vh', background:C.bg, maxWidth:600, margin:'0 auto' }}>
