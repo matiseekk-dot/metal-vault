@@ -33,6 +33,27 @@ const VENUES = [
   {id:20,name:"Summer Breeze",city:"Dinkelsbühl",cat:"Festival"},
 ];
 const CAT_COLOR = {Arena:"#4cc8e8",Hall:"#a78bfa",Klub:"#e84c4c",Festival:"#f5c842",Other:"#aaa"};
+
+// Currencies for ticket price. Concert prices are intrinsically local
+// (Wacken sold in EUR, Polish clubs in PLN, US arenas in USD) so we
+// store the currency alongside the number rather than auto-converting.
+// Future improvement: auto-default to user locale via lib/currency.
+const PRICE_CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP', 'CZK', 'CHF', 'SEK', 'NOK', 'DKK'];
+// Storage convention: "150 PLN" in the existing free-text price column
+// (avoids a schema migration). Parsers below split on the last space.
+function parsePrice(s) {
+  if (s == null) return { amount: '', currency: 'PLN' };
+  const str = String(s).trim();
+  if (!str) return { amount: '', currency: 'PLN' };
+  const m = str.match(/^(.+?)\s+([A-Z]{3})$/);
+  if (m) return { amount: m[1].trim(), currency: m[2] };
+  return { amount: str, currency: 'PLN' };
+}
+function formatPriceStored(amount, currency) {
+  const a = String(amount || '').trim();
+  if (!a) return '';
+  return a + ' ' + (currency || 'PLN');
+}
 const GENRES = ["Metal","Rock","Black Metal","Death Metal","Doom Metal","Thrash Metal","Heavy Metal","Progressive Metal","Metalcore","Sludge Metal","Grindcore","Post-Metal","Folk Metal","Symphonic Metal","Industrial Metal","Nu-Metal","Punk","Hardcore","Other"];
 const LS_KEY = 'mv_concerts_v1';
 const LS_VENUES = 'mv_venues_v1';
@@ -246,6 +267,11 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   const [festNewVenue,setFestNewVenue] = useState('');
   const [festNewVenueCity,setFestNewVenueCity] = useState('');
   const [showFestVenueAdd,setShowFestVenueAdd] = useState(false);
+  // Search filter for the quick-add chips below the bands textarea.
+  // Power users following 200+ bands need to narrow down — 30-chip
+  // hardcoded cap was claustrophobic and looked like "stale data" when
+  // the suggestions didn't include obvious choices.
+  const [bandChipSearch,setBandChipSearch] = useState('');
   const [suggestions,setSugg]  = useState([]);
   const [error,setError]       = useState('');
   const [newVenue,setNewVenue] = useState('');
@@ -547,7 +573,11 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   // Stats
   const bandMap = {};
   concerts.forEach(c=>{bandMap[c.band]=(bandMap[c.band]||[]);bandMap[c.band].push(c);});
-  const totalSpent = concerts.reduce((s,c)=>s+(Number(c.price)||0),0);
+  // totalSpent ignores currency mixing — sums raw amounts across PLN
+  // and EUR rows alike. Good enough for "total tickets bought" stat;
+  // multi-currency split would need lib/currency FX conversion which
+  // we save for later.
+  const totalSpent = concerts.reduce((s,c)=>s+(Number(parsePrice(c.price).amount)||0),0);
   const mostSeen   = Object.entries(bandMap).sort((a,b)=>b[1].length-a[1].length)[0];
 
   // Compare venue ids as strings — built-ins use numeric ids, user-added
@@ -991,7 +1021,25 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               </div>
               <div>
                 <label style={{display:'block',fontSize:9,color:C.dim,...MONO,letterSpacing:'0.15em',textTransform:'uppercase',marginBottom:4}}>{t('concerts.form.price')}</label>
-                <input type="number" inputMode="decimal" min="0" value={form.price} onChange={e=>setForm(f=>({...f,price:e.target.value}))} placeholder={t('concerts.form.pricePlaceholder')} style={inputSt}/>
+                {/* Price + currency split. Stored as "150 PLN" in the
+                    text column so we don't need a schema change. */}
+                {(() => {
+                  const { amount, currency } = parsePrice(form.price);
+                  return (
+                    <div style={{display:'flex', gap:4}}>
+                      <input type="number" inputMode="decimal" min="0"
+                        value={amount}
+                        onChange={e => setForm(f => ({ ...f, price: formatPriceStored(e.target.value, currency) }))}
+                        placeholder={t('concerts.form.pricePlaceholder')}
+                        style={{...inputSt, flex:1}}/>
+                      <select value={currency}
+                        onChange={e => setForm(f => ({ ...f, price: formatPriceStored(amount, e.target.value) }))}
+                        style={{...inputSt, width:74, cursor:'pointer'}}>
+                        {PRICE_CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1149,14 +1197,14 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                 })()}
               </div>
 
-              {/* Quick-add chips — sourced from user's followed artists +
-                  collection. Tapping a chip appends "Name\n" to the
-                  bands textarea. Removes the friction of typing 12 bands
-                  by hand when the user already follows most of them.
-                  Dedup against what's already in the textarea so a
-                  double-tap doesn't add duplicates. */}
+              {/* Quick-add chips — sourced from followedArtists +
+                  collection, then collection-only entries that aren't
+                  followed yet (catches the case where user owns a vinyl
+                  but never tapped follow). Search filter narrows the
+                  pool for users with hundreds of bands. Vertical scroll
+                  capped at 180px so the modal stays manageable. */}
               {(() => {
-                const pool = new Map();
+                const pool = new Map();   // lowerKey → display name
                 for (const a of (followedArtists || [])) {
                   const n = typeof a === 'string' ? a : a?.artist_name;
                   if (n) pool.set(n.toLowerCase(), n);
@@ -1169,35 +1217,61 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                   String(festForm.bands || '').replace(/,/g, '\n').split('\n')
                     .map(s => s.trim().toLowerCase()).filter(Boolean)
                 );
+                const q = bandChipSearch.toLowerCase().trim();
                 const suggestions = [...pool.values()]
                   .filter(n => !inTextarea.has(n.toLowerCase()))
-                  .sort((a, b) => a.localeCompare(b))
-                  .slice(0, 30);
-                if (suggestions.length === 0) return null;
+                  .filter(n => !q || n.toLowerCase().includes(q))
+                  .sort((a, b) => a.localeCompare(b));
+                if (suggestions.length === 0 && !q) return null;
                 return (
                   <div style={{marginTop: 8}}>
-                    <div style={{fontSize: 9, color: C.dim, ...MONO,
-                      letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6}}>
-                      {t('concerts.festSuggestions') || 'Z twoich obserwowanych / kolekcji — stuknij by dodać'}
+                    <div style={{display:'flex', alignItems:'center', gap:8,
+                      marginBottom: 6, flexWrap:'wrap'}}>
+                      <span style={{fontSize: 9, color: C.dim, ...MONO,
+                        letterSpacing: '0.08em', textTransform: 'uppercase'}}>
+                        {t('concerts.festSuggestions') || 'Z twoich obserwowanych / kolekcji — stuknij by dodać'}
+                      </span>
+                      <span style={{fontSize: 9, color: C.dim, ...MONO, marginLeft:'auto'}}>
+                        {suggestions.length} / {pool.size}
+                      </span>
                     </div>
-                    <div style={{display: 'flex', gap: 4, flexWrap: 'wrap'}}>
-                      {suggestions.map(name => (
-                        <button key={name}
-                          type="button"
-                          onClick={() => setFestForm(f => ({
-                            ...f,
-                            bands: (f.bands ? f.bands.trim() + '\n' : '') + name,
-                          }))}
-                          style={{
-                            background: C.bg3, border: '1px solid ' + C.border,
-                            borderRadius: 14, padding: '3px 9px',
-                            color: C.text, cursor: 'pointer',
-                            fontSize: 11, ...MONO, whiteSpace: 'nowrap',
-                          }}>
-                          + {name}
-                        </button>
-                      ))}
-                    </div>
+                    {/* Search input — filters the pool live. Power users
+                        with hundreds of bands can narrow to "may" → only
+                        Mayhem / Maybe-something / Mayfair appear. */}
+                    <input value={bandChipSearch}
+                      onChange={e => setBandChipSearch(e.target.value)}
+                      placeholder={t('concerts.festBandSearch') || 'Filtruj zespoły…'}
+                      style={{...inputSt, width:'100%', padding:'6px 10px',
+                        fontSize:12, marginBottom:6}}/>
+                    {suggestions.length === 0 ? (
+                      <div style={{fontSize: 11, color: C.dim, ...MONO, padding:'8px 0'}}>
+                        {t('concerts.festNoMatch') || 'Brak dopasowań — wpisz nazwę ręcznie w polu wyżej'}
+                      </div>
+                    ) : (
+                      <div style={{display: 'flex', gap: 4, flexWrap: 'wrap',
+                        maxHeight: 180, overflowY: 'auto',
+                        padding: 4, background: 'rgba(0,0,0,0.2)', borderRadius: 6,
+                        // Native iOS / Android scroll without horizontal swipe
+                        // hijack — bands list is purely vertical.
+                        WebkitOverflowScrolling: 'touch'}}>
+                        {suggestions.map(name => (
+                          <button key={name}
+                            type="button"
+                            onClick={() => setFestForm(f => ({
+                              ...f,
+                              bands: (f.bands ? f.bands.trim() + '\n' : '') + name,
+                            }))}
+                            style={{
+                              background: C.bg3, border: '1px solid ' + C.border,
+                              borderRadius: 14, padding: '3px 9px',
+                              color: C.text, cursor: 'pointer',
+                              fontSize: 11, ...MONO, whiteSpace: 'nowrap',
+                            }}>
+                            + {name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -1218,11 +1292,23 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                   textTransform:'uppercase', display:'block', marginBottom:4}}>
                   {t('concerts.form.price') || 'Cena biletu'}
                 </label>
-                <input type="number" inputMode="decimal" min="0"
-                  value={festForm.price}
-                  onChange={e => setFestForm(f => ({ ...f, price: e.target.value }))}
-                  placeholder="0"
-                  style={inputSt}/>
+                {(() => {
+                  const { amount, currency } = parsePrice(festForm.price);
+                  return (
+                    <div style={{display:'flex', gap:4}}>
+                      <input type="number" inputMode="decimal" min="0"
+                        value={amount}
+                        onChange={e => setFestForm(f => ({ ...f, price: formatPriceStored(e.target.value, currency) }))}
+                        placeholder="0"
+                        style={{...inputSt, flex:1}}/>
+                      <select value={currency}
+                        onChange={e => setFestForm(f => ({ ...f, price: formatPriceStored(amount, e.target.value) }))}
+                        style={{...inputSt, width:74, cursor:'pointer'}}>
+                        {PRICE_CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1402,7 +1488,19 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                      const v = it.venue;
                      const col = '#f5c842';
                      const isOpen = !!setlistOpen['fest:' + it.key];
-                     const totalPrice = it.items.reduce((s, c) => s + (Number(c.price) || 0), 0);
+                     const totalPrice = it.items.reduce((s, c) => s + (Number(parsePrice(c.price).amount) || 0), 0);
+                     // Pick the most common currency among festival rows.
+                     // If 11/12 bands share PLN and one was logged in EUR,
+                     // the header shows PLN with the EUR row contributing
+                     // its raw value to the sum. Imperfect but readable.
+                     const festCurrency = (() => {
+                       const counts = {};
+                       for (const c of it.items) {
+                         const cur = parsePrice(c.price).currency;
+                         counts[cur] = (counts[cur] || 0) + 1;
+                       }
+                       return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'PLN';
+                     })();
                      const avgRating = it.items.reduce((s, c) => s + (Number(c.rating) || 0), 0) / it.items.length;
                      return (
                        <div key={it.key} style={{background: '#1a1408',
@@ -1424,7 +1522,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                </span>
                                {totalPrice > 0 && (
                                  <span style={{fontSize: 11, color: '#f5c842', ...MONO}}>
-                                   🎟 {totalPrice.toFixed(0)}
+                                   🎟 {totalPrice.toFixed(0)} {festCurrency}
                                  </span>
                                )}
                                {avgRating > 0 && (
@@ -1538,7 +1636,12 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                          <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
                            {v&&<span style={{fontSize:11,color:C.dim,...MONO}}>📍{v.name}{v.city?` · ${v.city}`:''}</span>}
                            {c.year&&<span style={{fontSize:11,color:C.dim,...MONO}}>📅{c.year}</span>}
-                           {c.price>0&&<span style={{fontSize:11,color:'#f5c842',...MONO}}>🎟{Number(c.price).toFixed(0)}</span>}
+                           {(() => {
+                             const { amount, currency } = parsePrice(c.price);
+                             const n = Number(amount);
+                             if (!(n > 0)) return null;
+                             return <span style={{fontSize:11,color:'#f5c842',...MONO}}>🎟{n.toFixed(0)} {currency}</span>;
+                           })()}
                          </div>
                          {c.note&&<p style={{margin:'7px 0 0',fontSize:12,color:C.muted,fontFamily:'Georgia,serif',fontStyle:'italic',lineHeight:1.5}}>"{c.note}"</p>}
                          <div style={{marginTop:6}}><Stars value={c.rating||0}/></div>
