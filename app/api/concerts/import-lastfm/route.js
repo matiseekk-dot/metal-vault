@@ -83,15 +83,23 @@ export async function POST() {
     return NextResponse.json({ error: 'Scrape failed: ' + e.message }, { status: 502 });
   }
 
-  // Dedupe by (date prefix, venue, headline performer) so two passes
-  // touching the same event under different year tabs (rare but
-  // possible at year boundaries) only land one row.
+  // Dedupe scraped events. Last.fm lists the same event in BOTH the
+  // 'upcoming' tab AND the corresponding year tab — same event, but
+  // the lineup ordering can differ between tabs (one lists Amon Amarth
+  // first, the other lists Orbit Culture first) so an order-based key
+  // missed the duplicate and we'd insert the whole lineup twice.
+  //
+  // Now we key on the EVENT ID extracted from the URL (LFM gives every
+  // event a stable numeric id), with a (date+venue) fallback for the
+  // rare row that lacks one.
   const mergeMap = new Map();
   const mergeKey = (e) => {
+    // The id parser stamps lfm-event:NNN when the URL had /event/NNN
+    // or /festival/NNN — same number for both surfaces of the same event.
+    if (e?.id) return e.id;
     const d = (e.datetime || '').slice(0, 10);
     const v = (e.venue || '').toLowerCase().trim();
-    const a = (e.lineup?.[0] || '').toLowerCase().trim();
-    return d + '|' + v + '|' + a;
+    return 'fallback|' + d + '|' + v;
   };
   for (const e of rawEvents) {
     const k = mergeKey(e);
@@ -115,6 +123,41 @@ export async function POST() {
       .delete()
       .eq('user_id', user.id)
       .eq('band', '<unknown>');
+  } catch {}
+
+  // Pre-import duplicate sweep — earlier importer revisions could
+  // insert the same (band, year, venue) twice (concurrent click on
+  // 📻 Last.fm before the deploy of the mergeKey fix, or merge dedup
+  // missing because lineup ordering differed across year-tabs vs
+  // upcoming-tab). Keep the OLDEST row of each (band, year, venue_id)
+  // group; delete the rest. Bounded to LFM-imported rows so manual
+  // adds aren't touched.
+  let pre_dedup_killed = 0;
+  try {
+    const { data: lfmRows } = await admin
+      .from('user_concerts')
+      .select('client_id, band, year, venue_id, created_at')
+      .eq('user_id', user.id)
+      .eq('note', 'Imported from Last.fm')
+      .order('created_at', { ascending: true });
+    const seen = new Map();   // (band+year+venue) → first client_id
+    const toDelete = [];
+    for (const r of (lfmRows || [])) {
+      const key = (r.band || '').toLowerCase().trim() + '::' +
+                  (r.year || '') + '::' +
+                  (r.venue_id || '');
+      if (seen.has(key)) toDelete.push(r.client_id);
+      else seen.set(key, r.client_id);
+    }
+    for (const cid of toDelete) {
+      try {
+        const { error } = await admin.from('user_concerts')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('client_id', cid);
+        if (!error) pre_dedup_killed++;
+      } catch {}
+    }
   } catch {}
 
   if (scrapedEvents.length === 0) {
@@ -455,6 +498,7 @@ export async function POST() {
     promoted_upcoming,
     lineups_attempted,
     lineups_expanded,
+    pre_dedup_killed,
     diag: {
       ...diag,
       existing_before: (existing || []).length,

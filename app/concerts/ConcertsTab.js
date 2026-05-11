@@ -1046,18 +1046,18 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                 const festNote = (di.venues_upgraded || 0) > 0
                   ? ' · ' + di.venues_upgraded + ' fest'
                   : '';
-                // Show "5/12 lineups expanded" — if attempted >> expanded
-                // the walker is failing somewhere (rate limit, timeout)
-                // and the user knows to ping us for diagnostics.
                 const att = di.lineups_attempted || 0;
                 const exp = di.lineups_expanded  || 0;
                 const lineupNote = att > 0
                   ? ' · ' + exp + '/' + att + ' lineupów'
                   : '';
+                const dedupNote = (di.pre_dedup_killed || 0) > 0
+                  ? ' · usunięto ' + di.pre_dedup_killed + ' duplikatów'
+                  : '';
                 toast.success(
                   (t('concerts.importLastfmDone', { n: di.imported, s: di.skipped })
                     || ('Zaimportowano ' + di.imported + ' (pominięto ' + di.skipped + ')'))
-                  + festNote + lineupNote,
+                  + festNote + lineupNote + dedupNote,
                   { duration: 9000 }
                 );
                 // Pull fresh local state.
