@@ -77,7 +77,17 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
       .then(r => r.json())
       .then(d => {
         if (d.error) { setError(d.error); setEvents([]); }
-        else { setEvents(d.events || []); setMeta({ artistsTotal: d.artistsTotal || 0 }); }
+        else {
+          setEvents(d.events || []);
+          // Surface backend diagnostics (resolvedArtists, rawEvents)
+          // so the empty-state copy below can be honest about WHY
+          // there are no shows instead of just saying "no dates".
+          setMeta({
+            artistsTotal:     d.artistsTotal     || 0,
+            resolvedArtists:  d.resolvedArtists  || 0,
+            rawEvents:        d.rawEvents        || 0,
+          });
+        }
       })
       .catch(e => { setError(e.message); setEvents([]); })
       .finally(() => setLoading(false));

@@ -22,6 +22,12 @@ import { NextResponse } from 'next/server';
 import { createClient, getAdminClient } from '@/lib/supabase-server';
 import { lastfmArtistEvents } from '@/lib/lastfm';
 
+// Vercel default for /api routes is 10s Hobby / 60s Pro — Last.fm
+// page scraping is slower per artist than the old TM JSON API was
+// (HTML body + JSON-LD parse vs a thin REST response). 30 followed
+// artists at 3s each in batches of 10 = ~9s, comfortably under 60s.
+export const maxDuration = 60;
+
 export const dynamic = 'force-dynamic';
 
 const TICKETMASTER_BASE = 'https://app.ticketmaster.com/discovery/v2';
@@ -153,18 +159,18 @@ async function readEventsCache(sb, cacheKey) {
   } catch { return null; }
 }
 
-// Last.fm scraper path (primary). Returns mapped events ready to merge.
+// Last.fm scraper path. Returns mapped events ready to render.
+// Per-artist timeout deliberately tight (3s) because we may fan out
+// to dozens of artists in parallel and one slow page mustn't drag
+// the whole multi-artist GET past its budget.
 async function fetchLastfmEvents(artistName, sb) {
-  // Cache key separate from TM so the two sources don't evict each
-  // other. lfm-v1 because if the JSON-LD structure ever changes we'll
-  // want a clean re-fetch path.
   const cacheKey = 'lfm-events-v1::' + artistName.toLowerCase().replace(/\s+/g, '_');
   const cached = await readEventsCache(sb, cacheKey);
   if (cached) return cached;
 
   let events = [];
   try {
-    events = await lastfmArtistEvents(artistName, { timeoutMs: REQUEST_TIMEOUT_MS });
+    events = await lastfmArtistEvents(artistName, { timeoutMs: 3000 });
   } catch { events = []; }
   await writeEventsCache(sb, cacheKey, events);
   return events;
@@ -204,25 +210,34 @@ export async function GET(request) {
     return NextResponse.json({ events: [], message: 'No followed artists' });
   }
 
-  // Limit to 30 artists per request — Ticketmaster allows 5000/day total
-  // so 30 artists × 24h cache = 720 calls/day worst case (well under limit).
+  // 30-artist cap — covers the vast majority of users (most follow
+  // <20 metal bands). For Last.fm scraping the per-request cost is
+  // CPU + outbound HTTP, not a paid quota, so we can be more
+  // generous with parallelism than the old TM-rate-limited path.
   const artists = followed.slice(0, 30).map(f => f.artist_name).filter(Boolean);
 
-  // Sequential batching with small parallelism — Ticketmaster rate limit
-  // is 2 req/sec, so we use batches of 4 with 50ms gap between batches.
+  // Bumped batch 4 → 10 with the TM switch behind us. Last.fm
+  // doesn't have a 2 req/sec rate limit on scraping (it's just
+  // hitting public HTML), and the per-artist call is now
+  // 3s-timeout-bounded, so 3 batches of 10 = ~9s end-to-end for a
+  // full 30-artist cold pull. Cache hits return instantly.
+  let upstreamHits = 0;
+  let resolvedArtists = 0;
   const allEvents = [];
-  for (let i = 0; i < artists.length; i += 4) {
-    const batch = artists.slice(i, i + 4);
+  for (let i = 0; i < artists.length; i += 10) {
+    const batch = artists.slice(i, i + 10);
     const results = await Promise.all(batch.map(a => fetchArtistEvents(a, sb)));
     for (let j = 0; j < results.length; j++) {
       const r = results[j];
       const artistName = batch[j];
+      if ((r.events || []).length > 0) resolvedArtists++;
+      upstreamHits += (r.events || []).length;
       for (const ev of r.events || []) {
         allEvents.push({ ...ev, artist: artistName });
       }
     }
-    // Small gap between batches to respect 2 req/sec rate limit
-    if (i + 4 < artists.length) await new Promise(r => setTimeout(r, 100));
+    // Tiny gap between batches — courtesy spacing, not enforced.
+    if (i + 10 < artists.length) await new Promise(r => setTimeout(r, 50));
   }
 
   // Optional location filter
@@ -252,6 +267,12 @@ export async function GET(request) {
     events:           deduped,
     total:            deduped.length,
     artistsTotal:     artists.length,
+    // Diagnostic counters — if total=0 but resolvedArtists=0 too, the
+    // scraper is failing for every artist (likely Last.fm changed
+    // their JSON-LD structure or rate-limiting us). If resolvedArtists
+    // > 0 but total=0, it's a location-filter problem.
+    resolvedArtists,
+    rawEvents:        upstreamHits,
     locationApplied:  lat != null && lng != null,
     provider:         'lastfm',
   });
