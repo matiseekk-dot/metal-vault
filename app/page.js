@@ -102,7 +102,20 @@ export default function MetalVault() {
   const [showScanner,     setShowScanner]     = useState(false);
   const [syncStatus,      setSyncStatus]      = useState(null);
   const [syncResult,      setSyncResult]      = useState(null);
-  const [genreInterests,  setGenreInterests]  = useState(() => loadLS('mv_genre_interests', []));
+  // Genre interests — must start with the same value server-side AND
+  // client-side on first render, otherwise React #418 hydration error.
+  // The lazy initializer `() => loadLS(...)` is called on BOTH sides:
+  // server gets [] (no localStorage), client gets the stored array
+  // → state differs on the very first render → DOM mismatch → throw.
+  // Load the persisted value in useEffect after mount instead.
+  const [genreInterests,  setGenreInterests]  = useState([]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const v = loadLS('mv_genre_interests', null);
+      if (Array.isArray(v) && v.length > 0) setGenreInterests(v);
+    } catch {}
+  }, []);
   const [showGenrePicker, setShowGenrePicker] = useState(false);
   const [pushEnabled,     setPushEnabled]     = useState(false);
   const [streak,          setStreak]          = useState(0);
