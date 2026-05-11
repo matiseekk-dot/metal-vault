@@ -66,7 +66,10 @@ export default function WhensOnTab(props) {
       <div>
         {sub === 'calendar' && <CalendarTab releases={props.releases} followedArtists={props.followedArtists}/>}
         {sub === 'upcoming' && <UpcomingConcertsTab user={props.user} followedArtists={props.followedArtists}/>}
-        {sub === 'concerts' && <ConcertsTab/>}
+        {sub === 'concerts' && <ConcertsTab
+          followedArtists={props.followedArtists || []}
+          collection={props.collection || []}
+        />}
       </div>
     </div>
   );

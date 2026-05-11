@@ -213,7 +213,7 @@ function SetlistViewer({ artist, year, city, onClose }) {
   );
 }
 
-export default function ConcertsTab() {
+export default function ConcertsTab({ followedArtists = [], collection = [] } = {}) {
   const t = useT();
   const cur = useCurrency();
   const fx  = useFx();
@@ -237,6 +237,9 @@ export default function ConcertsTab() {
     bands: '', genre: 'Metal', rating: 0, price: '', note: '',
   });
   const [festSaving,setFestSaving] = useState(false);
+  // Editing context — when set, submitFest does additive merge
+  // (don't duplicate existing band rows) instead of pure insert.
+  const [editingFest,setEditingFest] = useState(null);
   const [suggestions,setSugg]  = useState([]);
   const [error,setError]       = useState('');
   const [newVenue,setNewVenue] = useState('');
@@ -411,6 +414,7 @@ export default function ConcertsTab() {
       bands: '', genre: 'Metal', rating: 0, price: '', note: '',
     });
     setShowFestForm(false);
+    setEditingFest(null);
     setError('');
   };
 
@@ -437,29 +441,64 @@ export default function ConcertsTab() {
     }
 
     setFestSaving(true);
-    const entries = bands.map(band => ({
+    // Edit mode: skip bands already in the original lineup, only
+    // INSERT new rows. We also patch existing rows when shared
+    // metadata (genre/rating/price/note) changed so the festival's
+    // top-line stats refresh.
+    const isEdit = !!editingFest;
+    const existingLower = new Set(editingFest?.originalBands || []);
+    const newBands = bands.filter(b => !existingLower.has(b.toLowerCase()));
+
+    const entries = newBands.map(band => ({
       band,
       venueId: festForm.venueId,
       year:    festForm.year,
       genre:   festForm.genre || 'Metal',
       rating:  festForm.rating || 0,
       price:   festForm.price || '',
-      // Tag the note so we can pick festival-origin rows up later
-      // (e.g. for stats "concerts vs festivals" or future bulk-edit).
       note:    festForm.note || '',
       id:      crypto.randomUUID(),
     }));
-    save([...entries, ...concerts]);
-    // Fire syncs in parallel — POST /api/user-concerts handles each
-    // upsert independently and we don't await each so the UI stays
-    // snappy. Pending queue covers any that 5xx.
+
+    // Patch existing rows if we're editing and shared metadata
+    // changed. We touch rating/price/note/genre/year on every
+    // original row so the festival header re-aggregates.
+    let updated = [...concerts];
+    if (isEdit && editingFest.originalIds.length > 0) {
+      const patch = {
+        genre:  festForm.genre || 'Metal',
+        rating: festForm.rating || 0,
+        price:  festForm.price || '',
+        note:   festForm.note || '',
+        year:   festForm.year || '',
+        // Keep venueId from form so user can re-pick the venue if
+        // they got the original wrong (e.g. duplicate venue rows).
+        venueId: festForm.venueId,
+      };
+      updated = updated.map(c => editingFest.originalIds.includes(c.id)
+        ? { ...c, ...patch } : c);
+      // Fire-and-forget sync each patched row.
+      for (const c of updated) {
+        if (editingFest.originalIds.includes(c.id)) syncConcert(c);
+      }
+    }
+    save([...entries, ...updated]);
     await Promise.all(entries.map(e => syncConcert(e)));
     setFestSaving(false);
     haptic.success?.();
-    toast.success(
-      (t('concerts.festAdded', { n: bands.length })
-        || ('Dodano ' + bands.length + ' zespołów do festiwalu'))
-    );
+    if (isEdit) {
+      toast.success(
+        newBands.length > 0
+          ? (t('concerts.festUpdatedAdded', { n: newBands.length })
+              || ('Zaktualizowano festiwal — dodano ' + newBands.length + ' nowych zespołów'))
+          : (t('concerts.festUpdated') || 'Zaktualizowano festiwal')
+      );
+    } else {
+      toast.success(
+        (t('concerts.festAdded', { n: bands.length })
+          || ('Dodano ' + bands.length + ' zespołów do festiwalu'))
+      );
+    }
     resetFest();
   };
 
@@ -866,7 +905,9 @@ export default function ConcertsTab() {
             borderRadius:12, padding:16, marginBottom:14,
             display:'flex', flexDirection:'column', gap:10}}>
             <div style={{...BEBAS, fontSize:16, color:'#f5c842', letterSpacing:'0.06em'}}>
-              🎪 {t('concerts.festTitle') || 'Festiwal — dodaj wszystkie zespoły'}
+              🎪 {editingFest
+                  ? (t('concerts.festEditTitle') || 'Edytuj festiwal')
+                  : (t('concerts.festTitle') || 'Festiwal — dodaj wszystkie zespoły')}
             </div>
             <div style={{fontSize:11, color:C.dim, ...MONO, lineHeight:1.5}}>
               {t('concerts.festHint')
@@ -948,6 +989,59 @@ export default function ConcertsTab() {
                                             : (t('concerts.bandCount.many') || 'zespołów'));
                 })()}
               </div>
+
+              {/* Quick-add chips — sourced from user's followed artists +
+                  collection. Tapping a chip appends "Name\n" to the
+                  bands textarea. Removes the friction of typing 12 bands
+                  by hand when the user already follows most of them.
+                  Dedup against what's already in the textarea so a
+                  double-tap doesn't add duplicates. */}
+              {(() => {
+                const pool = new Map();
+                for (const a of (followedArtists || [])) {
+                  const n = typeof a === 'string' ? a : a?.artist_name;
+                  if (n) pool.set(n.toLowerCase(), n);
+                }
+                for (const c of (collection || [])) {
+                  if (c?.artist) pool.set(c.artist.toLowerCase(), c.artist);
+                }
+                if (pool.size === 0) return null;
+                const inTextarea = new Set(
+                  String(festForm.bands || '').replace(/,/g, '\n').split('\n')
+                    .map(s => s.trim().toLowerCase()).filter(Boolean)
+                );
+                const suggestions = [...pool.values()]
+                  .filter(n => !inTextarea.has(n.toLowerCase()))
+                  .sort((a, b) => a.localeCompare(b))
+                  .slice(0, 30);
+                if (suggestions.length === 0) return null;
+                return (
+                  <div style={{marginTop: 8}}>
+                    <div style={{fontSize: 9, color: C.dim, ...MONO,
+                      letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6}}>
+                      {t('concerts.festSuggestions') || 'Z twoich obserwowanych / kolekcji — stuknij by dodać'}
+                    </div>
+                    <div style={{display: 'flex', gap: 4, flexWrap: 'wrap'}}>
+                      {suggestions.map(name => (
+                        <button key={name}
+                          type="button"
+                          onClick={() => setFestForm(f => ({
+                            ...f,
+                            bands: (f.bands ? f.bands.trim() + '\n' : '') + name,
+                          }))}
+                          style={{
+                            background: C.bg3, border: '1px solid ' + C.border,
+                            borderRadius: 14, padding: '3px 9px',
+                            color: C.text, cursor: 'pointer',
+                            fontSize: 11, ...MONO, whiteSpace: 'nowrap',
+                          }}>
+                          + {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Optional shared metadata — applied to every band row. */}
@@ -990,7 +1084,10 @@ export default function ConcertsTab() {
                 color: festSaving ? C.dim : '#1a0f00', cursor: festSaving ? 'wait' : 'pointer',
                 ...BEBAS, fontSize:17, letterSpacing:'0.1em',
                 opacity: festSaving ? 0.6 : 1}}>
-              {festSaving ? '⏳' : (t('concerts.festSave') || 'ZAPISZ FESTIWAL')}
+              {festSaving ? '⏳'
+                : (editingFest
+                    ? (t('concerts.festSaveEdit') || 'ZAPISZ ZMIANY')
+                    : (t('concerts.festSave')     || 'ZAPISZ FESTIWAL'))}
             </button>
           </div>
         )}
@@ -1085,7 +1182,64 @@ export default function ConcertsTab() {
                                )}
                              </div>
                            </div>
-                           <span style={{...MONO, fontSize: 14, color: C.dim}}>{isOpen ? '▲' : '▼'}</span>
+                           {/* Festival-level edit/delete. Edit opens the
+                               festival modal pre-filled with the existing
+                               lineup so the user can add missing bands or
+                               correct typos. Delete nukes EVERY band-row
+                               that shares this venue+year. */}
+                           <button onClick={(e) => {
+                               e.stopPropagation();
+                               // Pre-fill — pull metadata from first item
+                               // (genre/rating/price/note are shared at
+                               // festival save time).
+                               const first = it.items[0];
+                               setFestForm({
+                                 venueId: first.venueId,
+                                 year:    first.year || '',
+                                 bands:   it.items.map(c => c.band).join('\n'),
+                                 genre:   first.genre || 'Metal',
+                                 rating:  first.rating || 0,
+                                 price:   first.price || '',
+                                 note:    first.note || '',
+                               });
+                               // Stash the original ids so submit can
+                               // diff and only insert NEW bands instead
+                               // of duplicating the lineup.
+                               setEditingFest({
+                                 key: it.key,
+                                 originalIds: it.items.map(c => c.id),
+                                 originalBands: it.items.map(c => c.band.toLowerCase()),
+                               });
+                               setShowFestForm(true);
+                               window.scrollTo({ top: 0, behavior: 'smooth' });
+                             }}
+                             style={{background: 'none', border: '1px solid ' + col + '44',
+                               borderRadius: 6, color: col, cursor: 'pointer',
+                               padding: '6px 10px', fontSize: 12, ...MONO, marginLeft: 6}}>
+                             ✏
+                           </button>
+                           <button onClick={async (e) => {
+                               e.stopPropagation();
+                               const ok = await mvConfirm(
+                                 (t('concerts.delFestConfirm', { name: v?.name || '', year: it.year })
+                                   || ('Usunąć cały festiwal "' + (v?.name || '') + ' ' + it.year + '" (' + it.items.length + ' zespołów)?')),
+                                 { kind: 'danger', confirmLabel: t('common.delete') }
+                               );
+                               if (!ok) return;
+                               // Bulk-delete: take a snapshot of ids,
+                               // strip them from local state in one go,
+                               // fire individual syncDelete calls for
+                               // each (the syncs queue on failure).
+                               const ids = it.items.map(c => c.id);
+                               save(concerts.filter(c => !ids.includes(c.id)));
+                               for (const id of ids) syncDeleteConcert(id);
+                             }}
+                             style={{background: 'none', border: '1px solid #7f1d1d',
+                               borderRadius: 6, color: '#f87171', cursor: 'pointer',
+                               padding: '6px 10px', fontSize: 12, ...MONO, marginLeft: 4}}>
+                             🗑
+                           </button>
+                           <span style={{...MONO, fontSize: 14, color: C.dim, marginLeft: 6}}>{isOpen ? '▲' : '▼'}</span>
                          </div>
                          {isOpen && (
                            <div style={{marginTop: 12, paddingTop: 10,

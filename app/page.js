@@ -777,6 +777,7 @@ export default function MetalVault() {
             user={user}
             releases={releases}
             followedArtists={col.followedArtists}
+            collection={col.collection}
           /></ErrorBoundary>
         )}
 
