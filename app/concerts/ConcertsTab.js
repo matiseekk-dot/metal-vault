@@ -2184,6 +2184,35 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                               </span>
                             </div>
                           </div>
+                          {/* Group-level ticket toggle — taps flip
+                              tickets_bought on EVERY band in the group.
+                              The single fest/multi-band-tour usually
+                              means one ticket covers all acts, so a
+                              single toggle here is the right grain. */}
+                          <button onClick={(e) => {
+                              e.stopPropagation();
+                              const next = !allBought;
+                              const updated = concerts.map(x => {
+                                if (!items.some(it => it.id === x.id)) return x;
+                                return { ...x, tickets_bought: next };
+                              });
+                              save(updated);
+                              items.forEach(it => {
+                                const after = updated.find(x => x.id === it.id);
+                                if (after) syncConcert(after);
+                              });
+                            }}
+                            title={allBought
+                              ? (t('concerts.markUnbought') || 'Zaznacz jako bez biletu')
+                              : (t('concerts.markBought')   || 'Zaznacz że bilety kupione')}
+                            style={{background: allBought ? '#1a3d1a' : '#3a2906',
+                              border: '1px solid ' + (allBought ? '#4ade8088' : '#f5c84288'),
+                              borderRadius: 6,
+                              color: allBought ? '#4ade80' : '#f5c842',
+                              padding: '6px 10px', cursor: 'pointer',
+                              fontSize: 12, ...MONO, marginLeft: 4}}>
+                            {allBought ? '✓' : '🎟'}
+                          </button>
                           <span style={{...MONO, fontSize: 14, color: C.dim, marginLeft: 6}}>
                             {isOpen ? '▲' : '▼'}
                           </span>
@@ -2355,23 +2384,84 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                  // visually in the card itself via the venue.cat emoji
                  // (🎪 festival / 🎤 club-style multi-band).
                  //
-                 // Pass 1 — bucket by venue+date.
-                 const buckets = new Map();
+                 // Pass 1 — split filtered into two buckets:
+                 //   dateBuckets:  venueId::YYYY-MM-DD → concerts (with planned_date)
+                 //   datelessByVY: venueId::YYYY        → concerts (year only, no date)
+                 //
+                 // Then merge dateless rows into a dated bucket WHEN
+                 // there's exactly ONE dated group at the same venue+year.
+                 // This handles the user's case: COB imported as legacy
+                 // (no planned_date) at Stodoła 2011, alongside Ensiferum
+                 // 2011-04-26 — single dated group in that venue+year, so
+                 // COB merges in. When there are multiple dated groups
+                 // (e.g. Mega Club hosting 6 distinct gigs in 2016), the
+                 // dateless row is ambiguous → stays separate to avoid
+                 // wrongly collapsing distinct events.
+                 const dateBuckets  = new Map();   // venueId::YYYY-MM-DD → [c]
+                 const datelessByVY = new Map();   // venueId::YYYY → [c]
                  for (const c of filtered) {
-                   const v = findVenue(c.venueId);
-                   const dateKey = c.planned_date || c.year;
-                   if (!v || !dateKey) continue;
-                   const k = c.venueId + '::' + dateKey;
-                   if (!buckets.has(k)) buckets.set(k, []);
-                   buckets.get(k).push(c);
+                   if (!c.venueId) continue;
+                   if (!findVenue(c.venueId)) continue;
+                   if (c.planned_date) {
+                     const k = c.venueId + '::' + c.planned_date;
+                     if (!dateBuckets.has(k)) dateBuckets.set(k, []);
+                     dateBuckets.get(k).push(c);
+                   } else if (c.year) {
+                     const k = c.venueId + '::' + c.year;
+                     if (!datelessByVY.has(k)) datelessByVY.set(k, []);
+                     datelessByVY.get(k).push(c);
+                   }
                  }
+                 // Try to absorb each dateless group into a unique
+                 // dated group in the same venue+year.
+                 const absorbedDatelessKeys = new Set();
+                 for (const [vyKey, datelessRows] of datelessByVY) {
+                   const [venueId, year] = vyKey.split('::');
+                   const matchingDated = [];
+                   for (const [dk, bucket] of dateBuckets) {
+                     if (!dk.startsWith(venueId + '::')) continue;
+                     // bucket items all share planned_date+venue, derive
+                     // the year from the date prefix YYYY-MM-DD.
+                     const datedYear = dk.split('::')[1].slice(0, 4);
+                     if (datedYear === year) matchingDated.push(dk);
+                   }
+                   if (matchingDated.length === 1) {
+                     dateBuckets.get(matchingDated[0]).push(...datelessRows);
+                     absorbedDatelessKeys.add(vyKey);
+                   }
+                 }
+                 // The final buckets map mixes dated keys and (still-
+                 // separate) dateless keys. Use a unified shape so the
+                 // render loop below doesn't need to know which is which.
+                 const buckets = new Map(dateBuckets);
+                 for (const [vyKey, datelessRows] of datelessByVY) {
+                   if (absorbedDatelessKeys.has(vyKey)) continue;
+                   buckets.set(vyKey, datelessRows);
+                 }
+                 // Helper — find which final bucket a given concert
+                 // belongs to (needed in pass 2 below). A concert with
+                 // planned_date goes to venueId::date; a dateless row
+                 // either lives in its venueId::year bucket or was
+                 // absorbed into a dated bucket in the same year.
+                 const bucketKeyOf = (c) => {
+                   if (!c.venueId || !findVenue(c.venueId)) return null;
+                   if (c.planned_date) return c.venueId + '::' + c.planned_date;
+                   if (!c.year) return null;
+                   const vy = c.venueId + '::' + c.year;
+                   if (!absorbedDatelessKeys.has(vy)) return vy;
+                   // It got absorbed — find the dated key in the same year.
+                   for (const dk of dateBuckets.keys()) {
+                     if (!dk.startsWith(c.venueId + '::')) continue;
+                     if (dk.split('::')[1].slice(0, 4) === c.year) return dk;
+                   }
+                   return null;
+                 };
                  // Pass 2 — walk filtered in sort order, materialise
                  // aggregates at the position of their first member.
                  const renderedBucket = new Set();
                  for (const c of filtered) {
                    const v = findVenue(c.venueId);
-                   const dateKey = c.planned_date || c.year;
-                   const k = (v && dateKey) ? c.venueId + '::' + dateKey : null;
+                   const k = bucketKeyOf(c);
                    if (!k) {
                      items.push({ type: 'single', concert: c });
                      continue;
@@ -2383,12 +2473,15 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                    }
                    if (renderedBucket.has(k)) continue;
                    renderedBucket.add(k);
+                   // For absorbed-dateless aggregates, prefer the dated
+                   // row's planned_date as the canonical group date.
+                   const datedRow = bucket.find(c2 => c2.planned_date);
                    items.push({
                      type: 'festival',  // historical name, now covers any ≥2-band group
                      key:   k,
                      venue: v,
                      year:  c.year,
-                     date:  c.planned_date || null,
+                     date:  datedRow?.planned_date || c.planned_date || null,
                      items: bucket,
                    });
                  }
