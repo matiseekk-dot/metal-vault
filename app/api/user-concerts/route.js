@@ -35,6 +35,11 @@ function clean(item) {
     // Accept ISO date strings (YYYY-MM-DD); null clears.
     out.planned_date = item.planned_date ? String(item.planned_date).slice(0, 10) : null;
   }
+  // Per-band "did I actually see this one at the festival" flag —
+  // migration 040. Default true on inserts so the existing seen-count
+  // semantics don't shift; per-band toggles flip it to false for the
+  // bands the user skipped at e.g. a 100-act festival.
+  if (item.attended !== undefined) out.attended = !!item.attended;
   return out;
 }
 

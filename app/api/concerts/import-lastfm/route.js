@@ -44,6 +44,22 @@ function normaliseVenueName(s) {
     .replace(/\s+/g, ' ');
 }
 
+// Band-name dedup helper. Collapses unicode-equivalent forms so e.g.
+// "Bölzer" written as NFC ("ö") matches "Bölzer" written as NFD
+// ("ö") — Last.fm has been observed to deliver both forms
+// across different archive pages, producing the duplicate rows the
+// user screenshotted ("Behemoth / Batushka / Bölzer" × 2). Also
+// strips zero-width / BOM / non-breaking-space invisibles that
+// silently break naive string equality.
+function normaliseBandName(s) {
+  return String(s || '')
+    .normalize('NFC')
+    .replace(/[​-‍﻿]/g, '')   // zero-width chars
+    .replace(/ /g, ' ')                 // nbsp → regular space
+    .toLowerCase()
+    .trim();
+}
+
 export async function POST() {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
@@ -172,10 +188,10 @@ export async function POST() {
       // Two keys to catch BOTH: same-band-same-year-same-venue
       // (loose) AND same-band-same-exact-date-same-venue (strict,
       // matches LFM event id semantics). Either match counts as dup.
-      const keyYear = (r.band || '').toLowerCase().trim() + '::' +
+      const keyYear = normaliseBandName(r.band) + '::' +
                       (r.year || '') + '::' + venueNorm;
       const keyDate = r.planned_date
-        ? (r.band || '').toLowerCase().trim() + '::date::' +
+        ? normaliseBandName(r.band) + '::date::' +
           r.planned_date + '::' + venueNorm
         : null;
       if (seen.has(keyYear) || (keyDate && seen.has(keyDate))) {
@@ -233,7 +249,7 @@ export async function POST() {
   const venueNameById = new Map((venues || []).map(v => [v.client_id, normaliseVenueName(v.name)]));
   const existingKeys = new Set();
   for (const r of (existing || [])) {
-    const bandKey = String(r.band || '').toLowerCase().trim();
+    const bandKey = normaliseBandName(r.band);
     const yearKey = String(r.year || '').trim();
     const venueKey = venueNameById.get(r.venue_id) || '';
     existingKeys.add(bandKey + '::' + yearKey + '::' + venueKey);
@@ -374,7 +390,7 @@ export async function POST() {
           const seenN = new Set();
           const merged = [];
           const push = (n) => {
-            const k = String(n || '').toLowerCase().trim();
+            const k = normaliseBandName(n);
             if (!k || seenN.has(k)) return;
             seenN.add(k);
             merged.push(n);
@@ -458,7 +474,10 @@ export async function POST() {
     for (const band of lineup) {
       const bandStr = String(band || '').trim();
       if (!bandStr) continue;
-      const dedupKey = bandStr.toLowerCase() + '::' + year + '::' + venueNorm;
+      // Use the unicode-aware normaliser so the dedup key matches what
+      // pre/post-dedup and existingKeys use (otherwise the "Bölzer" NFC
+      // vs NFD duplicate sneaks past the in-loop dedup too).
+      const dedupKey = normaliseBandName(bandStr) + '::' + year + '::' + venueNorm;
       // User explicitly removed this band from this event in the
       // past — respect their pruning. (Migration 039 tombstones.)
       if (excludeKeys.has(dedupKey)) { skipped++; continue; }
@@ -537,10 +556,10 @@ export async function POST() {
         const evLineup = Array.isArray(ev.lineup) && ev.lineup.length > 0
           ? ev.lineup : [ev.title || ''];
         for (const band of evLineup) {
-          const bandKey = String(band || '').toLowerCase().trim();
+          const bandKey = normaliseBandName(band);
           if (!bandKey) continue;
           const match = (nowRows || []).find(r =>
-            (r.band || '').toLowerCase().trim() === bandKey &&
+            normaliseBandName(r.band) === bandKey &&
             String(r.year || '') === evYear &&
             (vNameLookup.get(r.venue_id) || '') === evVenueNorm
           );
@@ -611,7 +630,7 @@ export async function POST() {
       if (!r.planned_date) continue;        // strict: same-date required
       const k = r.venue_id + '::' + r.planned_date;
       const s = groups.get(k) || new Set();
-      s.add((r.band || '').toLowerCase().trim());
+      s.add(normaliseBandName(r.band));
       groups.set(k, s);
     }
 
@@ -734,7 +753,7 @@ export async function POST() {
     const cleanIndex = new Set();
     for (const r of (dirtyRows || [])) {
       const venueNorm = venueNormById3.get(r.venue_id) || '';
-      cleanIndex.add((r.band || '').toLowerCase().trim() + '::' +
+      cleanIndex.add(normaliseBandName(r.band) + '::' +
                      (r.year || '') + '::' + venueNorm);
     }
     for (const r of (dirtyRows || [])) {
@@ -746,7 +765,7 @@ export async function POST() {
       const cleaned = extractHeadlinerFromTitle(b);
       if (!cleaned || cleaned.toLowerCase() === b.toLowerCase()) continue;
       const venueNorm = venueNormById3.get(r.venue_id) || '';
-      const cleanKey = cleaned.toLowerCase().trim() + '::' +
+      const cleanKey = normaliseBandName(cleaned) + '::' +
                        (r.year || '') + '::' + venueNorm;
       if (cleanIndex.has(cleanKey)) {
         // Clean variant exists at this event — drop the dirty row.
@@ -803,10 +822,10 @@ export async function POST() {
     const toDel2 = [];
     for (const r of (postRows || [])) {
       const venueNorm = venueNormById2.get(r.venue_id) || '';
-      const keyYear = (r.band || '').toLowerCase().trim() + '::' +
+      const keyYear = normaliseBandName(r.band) + '::' +
                       (r.year || '') + '::' + venueNorm;
       const keyDate = r.planned_date
-        ? (r.band || '').toLowerCase().trim() + '::date::' +
+        ? normaliseBandName(r.band) + '::date::' +
           r.planned_date + '::' + venueNorm
         : null;
       if (seen2.has(keyYear) || (keyDate && seen2.has(keyDate))) {

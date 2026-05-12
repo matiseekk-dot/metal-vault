@@ -696,6 +696,13 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   const bandSeenCount = (() => {
     const m = {};
     for (const c of concerts) {
+      // Only count rows the user actually saw. attended defaults to
+      // true (migration 040), so legacy rows that pre-date the flag
+      // — and every freshly-imported row — still count. Rows the user
+      // explicitly toggled to attended=false (skipped at a multi-act
+      // festival) are excluded so the badge reflects reality, not
+      // the festival lineup's row count.
+      if (c.attended === false) continue;
       const k = (c.band || '').toLowerCase().trim();
       if (!k) continue;
       m[k] = (m[k] || 0) + 1;
@@ -1157,6 +1164,50 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               borderRadius: 10, color: '#f87171', padding: '12px 12px',
               cursor: 'pointer', ...MONO, fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap'}}>
             🔄 Wyczyść
+          </button>
+          {/* Scal duplikaty — manually merge duplicate LFM-imported
+              rows without re-running the full import. Useful for the
+              "Bölzer ×2" / "Behemoth ×2" leftovers from earlier
+              broken imports where the unicode-aware dedup didn't yet
+              ship. Idempotent: runs the same merge logic the importer
+              now applies on every run. Attended flags are OR-ed across
+              the group so user marks don't get lost in the merge. */}
+          <button onClick={async () => {
+            toast(t('concerts.dedupRunning') || 'Scalanie duplikatów…');
+            try {
+              const r = await fetch('/api/concerts/dedup-now', { method: 'POST' });
+              const ct = r.headers.get('content-type') || '';
+              if (!ct.includes('application/json')) {
+                toast.error('Dedup endpoint zwrócił nie-JSON (timeout?)');
+                return;
+              }
+              const d = await r.json().catch(() => ({}));
+              if (!r.ok) { toast.error(d.error || 'Dedup failed'); return; }
+              if ((d.deleted || 0) === 0) {
+                toast(t('concerts.dedupNothing') || 'Brak duplikatów — wszystko już czyste');
+              } else {
+                toast.success(
+                  (t('concerts.dedupDone', { n: d.deleted })
+                    || ('Scalono ' + d.deleted + ' duplikatów'))
+                  + (d.updated_attended ? ' · zachowano ' + d.updated_attended + ' oznaczeń ✓' : ''),
+                  { duration: 7000 }
+                );
+              }
+              // Pull fresh state so the UI reflects the merge.
+              try {
+                const r2 = await fetch('/api/user-concerts');
+                if (r2.ok) {
+                  const j = await r2.json();
+                  if (j.concerts) save(j.concerts);
+                }
+              } catch {}
+            } catch (e) { toast.error(e.message); }
+          }}
+            title={t('concerts.dedupTitle') || 'Scal duplikaty zaimportowane z Last.fm'}
+            style={{flexShrink:0, background: '#0d1f0d', border: '1px solid #4ade8044',
+              borderRadius: 10, color: '#4ade80', padding: '12px 12px',
+              cursor: 'pointer', ...MONO, fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap'}}>
+            🧹 {t('concerts.dedupBtn') || 'Scal'}
           </button>
           {/* Force pull from server — pulls latest user_concerts +
               user_venues from the database without the import flow.
@@ -1861,11 +1912,29 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                <span style={{fontSize: 11, color: C.dim, ...MONO}}>
                                  📅 {it.date || it.year}
                                </span>
-                               <span style={{fontSize: 11, color: C.dim, ...MONO}}>
-                                 🎸 {it.items.length} {it.items.length === 1
-                                       ? (t('concerts.bandCount.one') || 'zespół')
-                                       : (t('concerts.bandCount.many') || 'zespołów')}
-                               </span>
+                               {(() => {
+                                 // Show "🎸 X/Y widziane" when any band is
+                                 // marked attended=false; otherwise the
+                                 // simpler "🎸 N zespołów" stays. The X/Y
+                                 // form is greener to draw attention to
+                                 // partial-attendance festivals.
+                                 const total    = it.items.length;
+                                 const attended = it.items.filter(c => c.attended !== false).length;
+                                 if (attended < total) {
+                                   return (
+                                     <span style={{fontSize: 11, color: '#4ade80', ...MONO}}>
+                                       🎸 {attended}/{total} widziane
+                                     </span>
+                                   );
+                                 }
+                                 return (
+                                   <span style={{fontSize: 11, color: C.dim, ...MONO}}>
+                                     🎸 {total} {total === 1
+                                           ? (t('concerts.bandCount.one') || 'zespół')
+                                           : (t('concerts.bandCount.many') || 'zespołów')}
+                                   </span>
+                                 );
+                               })()}
                                {totalPrice > 0 && (
                                  <span style={{fontSize: 11, color: '#f5c842', ...MONO}}>
                                    🎟 {totalPrice.toFixed(0)} {festCurrency}
@@ -1940,18 +2009,58 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                              {it.items.map((c, idx) => {
                                const seenN = bandSeenCount[(c.band || '').toLowerCase().trim()] || 1;
                                const isHead = idx === 0;
+                               // Default to true on legacy rows that pre-date
+                               // migration 040 (column has DEFAULT true so DB
+                               // is consistent, but client-side LS may not
+                               // have the field at all).
+                               const attended = c.attended !== false;
+                               // Toggle handler — optimistic + persist.
+                               // Stop event bubbling so the row click (if
+                               // any) doesn't fire too.
+                               const toggleAttended = async (e) => {
+                                 e.stopPropagation();
+                                 const next = !attended;
+                                 const updated = { ...c, attended: next };
+                                 save(concerts.map(cc => cc.id === c.id ? updated : cc));
+                                 try { await syncConcert(updated); } catch {}
+                               };
                                return (
                                <div key={c.id} style={{display: 'flex', alignItems: 'center', gap: 8,
                                  padding: '6px 8px',
-                                 background: isHead ? 'rgba(245,200,66,0.10)' : 'rgba(0,0,0,0.3)',
-                                 border: isHead ? '1px solid ' + col + '55' : '1px solid transparent',
-                                 borderRadius: 6}}>
+                                 background: isHead
+                                   ? (attended ? 'rgba(245,200,66,0.10)' : 'rgba(80,80,80,0.15)')
+                                   : (attended ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)'),
+                                 border: isHead && attended ? '1px solid ' + col + '55' : '1px solid transparent',
+                                 borderRadius: 6,
+                                 opacity: attended ? 1 : 0.45,
+                                 // Visual cue that the user wasn't there — strike-
+                                 // through on the band name handled below; the
+                                 // wider row dim is the at-a-glance signal.
+                                 transition: 'opacity 0.15s'}}>
                                  {isHead && (
                                    <span style={{fontSize: 14, lineHeight: 1}} title="Headliner">⭐</span>
                                  )}
                                  <span style={{flex: 1, fontSize: 13,
-                                   color: isHead ? '#fde68a' : C.text, ...MONO,
-                                   fontWeight: isHead ? 600 : 400}}>{c.band}</span>
+                                   color: isHead && attended ? '#fde68a' : C.text, ...MONO,
+                                   fontWeight: isHead ? 600 : 400,
+                                   textDecoration: attended ? 'none' : 'line-through',
+                                   textDecorationColor: '#666'}}>{c.band}</span>
+                                 {/* Attended toggle — bigger touch target,
+                                     visually distinct from the edit/delete
+                                     glyphs so users find it. Green ✓ when
+                                     marked seen, dimmed ✗ when not. Tap to
+                                     flip. */}
+                                 <button onClick={toggleAttended}
+                                   title={attended ? 'Widziałem — kliknij żeby odznaczyć' : 'Nie widziałem — kliknij żeby zaznaczyć'}
+                                   style={{background: 'none',
+                                     border: '1px solid ' + (attended ? '#4ade8055' : C.border),
+                                     borderRadius: 6,
+                                     color: attended ? '#4ade80' : '#666',
+                                     cursor: 'pointer', fontSize: 13, lineHeight: 1,
+                                     padding: '4px 8px', minWidth: 30,
+                                     ...MONO}}>
+                                   {attended ? '✓' : '✗'}
+                                 </button>
                                  {seenN >= 2 && (
                                    <span style={{fontSize: 9, ...MONO, padding: '1px 6px', borderRadius: 10,
                                      background: '#1a3d1a', color: '#4ade80'}}>
