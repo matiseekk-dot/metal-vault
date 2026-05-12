@@ -307,16 +307,50 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   // the band the user marked as headliner. festivalKey is the same
   // venueId::date string the festival aggregator uses, so the read
   // path in renderItem is trivial.
-  const [headlinerPicks, setHeadlinerPicks] = useState(() => loadLS('mv-headliner-picks', {}));
-  const setHeadliner = (festivalKey, concertId) => {
-    setHeadlinerPicks(prev => {
-      const next = { ...prev };
-      if (concertId == null) delete next[festivalKey];
-      else next[festivalKey] = concertId;
-      saveLS('mv-headliner-picks', next);
-      return next;
+  // setHeadliner — picks the headliner of a festival/multi-band group
+  // and persists via PATCH. Server-backed now (migration 042); we
+  // optimistically update concert rows in place so the UI flips
+  // immediately, then fire off the syncs to Supabase. Single-select
+  // semantics: setting one row's is_headliner=true clears all other
+  // is_headliner=true rows in the SAME group (venueId + date) so
+  // there's never more than one headliner per event.
+  //
+  // Falls back to the legacy `mv-headliner-picks` LS map ONLY when
+  // the API path errors out (e.g. column not yet migrated) — keeps
+  // the picker usable for users who haven't applied migration 042.
+  const setHeadliner = async (festivalKey, concertId, groupItems = []) => {
+    // 1. Compute the new attended-flag state for every row in the group.
+    //    Target row: is_headliner = (concertId !== null && c.id === concertId)
+    //    Other rows: is_headliner = false (clears any stale picks)
+    const next = concerts.map(c => {
+      if (!groupItems.some(g => g.id === c.id)) return c;
+      const shouldBeHead = concertId != null && c.id === concertId;
+      if ((c.is_headliner === true) === shouldBeHead) return c;
+      return { ...c, is_headliner: shouldBeHead };
     });
+    save(next);
+    // 2. Sync the changed rows to Supabase. We only push rows whose
+    //    is_headliner just flipped to avoid noise.
+    const touched = next.filter(c =>
+      groupItems.some(g => g.id === c.id) &&
+      c.is_headliner !== (concerts.find(cc => cc.id === c.id)?.is_headliner)
+    );
+    try {
+      await Promise.all(touched.map(c => syncConcert(c)));
+    } catch {
+      // syncConcert handles its own error toasting + queue-pending.
+      // Belt-and-braces: also drop a legacy LS pick so the user has
+      // SOME headliner record if the column doesn't exist yet.
+      const lsMap = loadLS('mv-headliner-picks', {});
+      if (concertId == null) delete lsMap[festivalKey];
+      else lsMap[festivalKey] = concertId;
+      saveLS('mv-headliner-picks', lsMap);
+    }
   };
+  // Legacy localStorage map — kept as a fallback when the row's
+  // is_headliner is unavailable (column not migrated, stale cache).
+  // Render path prefers row.is_headliner === true over the LS pick.
+  const [legacyHeadlinerPicks] = useState(() => loadLS('mv-headliner-picks', {}));
   const inputRef = useRef();
 
   // Load + sync flow:
@@ -1913,6 +1947,9 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
           if (missing.includes('user_concerts.attended')) {
             sqlBits.push("ALTER TABLE user_concerts\n  ADD COLUMN IF NOT EXISTS attended boolean NOT NULL DEFAULT true;");
           }
+          if (missing.includes('user_concerts.is_headliner')) {
+            sqlBits.push("ALTER TABLE user_concerts\n  ADD COLUMN IF NOT EXISTS is_headliner boolean NOT NULL DEFAULT false;\nCREATE INDEX IF NOT EXISTS idx_user_concerts_headliner\n  ON user_concerts(user_id)\n  WHERE is_headliner = true;");
+          }
           if (missing.includes('collection.bought_at_concert_id')) {
             sqlBits.push("ALTER TABLE collection\n  ADD COLUMN IF NOT EXISTS bought_at_concert_id text;\nCREATE INDEX IF NOT EXISTS idx_collection_bought_at_concert\n  ON collection(user_id, bought_at_concert_id)\n  WHERE bought_at_concert_id IS NOT NULL;");
           }
@@ -2227,15 +2264,21 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                        : (CAT_COLOR[v?.cat] || '#aaa');
                      const isOpen = !!setlistOpen['fest:' + it.key];
                      // Headliner: MANUAL pick via ⭐ toggle in expanded
-                     // view, stored client-side in headlinerPicks LS map.
-                     // No auto-detection anymore — Last.fm cell ordering
-                     // was unreliable (sometimes lists supports first)
-                     // and users want explicit control.
-                     // headlinerPicks[festivalKey] holds the concertId of
-                     // the band the user picked; resolve to the actual
-                     // band name (or null when no manual pick + collapsed
-                     // view shows date / count only, no headliner line).
-                     const pickedConcertId = headlinerPicks[it.key] || null;
+                     // view. Server-backed via user_concerts.is_headliner
+                     // (migration 042) so picks sync across devices and
+                     // survive cache wipes. Falls back to the legacy
+                     // `mv-headliner-picks` LS map for users who haven't
+                     // applied 042 yet — old picks keep showing.
+                     //
+                     // Read priority:
+                     //   1. row with is_headliner === true in the group
+                     //   2. legacyHeadlinerPicks[festivalKey] from LS
+                     //   3. null → collapsed view shows venue + date,
+                     //      no "⭐ band" pill
+                     const rowHead = it.items.find(c => c.is_headliner === true);
+                     const pickedConcertId = rowHead
+                       ? rowHead.id
+                       : (legacyHeadlinerPicks[it.key] || null);
                      const headlinerRow    = pickedConcertId
                        ? it.items.find(c => c.id === pickedConcertId)
                        : null;
@@ -2469,7 +2512,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                // (or tapping ⭐ on another band) replaces.
                                const toggleHeadliner = (e) => {
                                  e.stopPropagation();
-                                 setHeadliner(it.key, isHead ? null : c.id);
+                                 setHeadliner(it.key, isHead ? null : c.id, it.items);
                                  haptic.tap?.();
                                };
                                return (

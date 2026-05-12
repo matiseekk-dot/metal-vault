@@ -44,18 +44,21 @@ async function columnExists(admin, table, column) {
 export async function GET() {
   const admin = getAdminClient();
   const attended            = await columnExists(admin, 'user_concerts',        'attended');
+  const isHeadliner         = await columnExists(admin, 'user_concerts',        'is_headliner');
   const boughtAtConcertId   = await columnExists(admin, 'collection',           'bought_at_concert_id');
   const concertExcludes     = await columnExists(admin, 'user_concert_excludes', 'exclude_key');
 
   return NextResponse.json({
     columns: {
       'user_concerts.attended':                  attended,
+      'user_concerts.is_headliner':              isHeadliner,
       'collection.bought_at_concert_id':         boughtAtConcertId,
       'user_concert_excludes.exclude_key':       concertExcludes,
     },
     // Convenience aggregate: any missing column means the UI should
     // surface the migration banner.
     needs_migration: attended === false
+                  || isHeadliner === false
                   || boughtAtConcertId === false
                   || concertExcludes === false,
   });

@@ -40,6 +40,10 @@ function clean(item) {
   // semantics don't shift; per-band toggles flip it to false for the
   // bands the user skipped at e.g. a 100-act festival.
   if (item.attended !== undefined) out.attended = !!item.attended;
+  // "This band was the headliner of this event" — migration 042.
+  // Server-backed replacement for the old mv-headliner-picks LS map.
+  // Single-select per (venueId, date) enforced client-side.
+  if (item.is_headliner !== undefined) out.is_headliner = !!item.is_headliner;
   return out;
 }
 
@@ -82,6 +86,11 @@ export async function GET() {
       // column is absent — defaults to unmarked, consistent with the
       // inverted-attended UI default.
       attended:       c.attended ?? false,
+      // "This band was the headliner" flag (migration 042). Replaces
+      // the old client-side localStorage picks. Same defensive ?? false
+      // so pre-042 databases stay functional (client falls back to
+      // not-marked, which is the UI default anyway).
+      is_headliner:   c.is_headliner ?? false,
       // Planned-concert fields. Defensive defaults so the UI keeps
       // rendering past gigs unchanged when migration 038 hasn't been
       // applied yet (column simply absent → undefined → falsy).
