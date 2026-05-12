@@ -18,6 +18,7 @@ import ListenButton from '@/app/components/ListenButton';
 import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
 import ManualAddForm from '@/app/collection/ManualAddForm';
 import PriceModal from '@/app/collection/PriceModal';
+import ConcertPicker from '@/app/collection/ConcertPicker';
 import { trackAlertCreated } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics';
 // (Previously had a dynamic-import for BandsTab here — dead code, never
@@ -1193,6 +1194,36 @@ export function CollectionTab({
   }, [collection.length, premium]);  // eslint-disable-line
   const [showAlertForm, setShowAlertForm] = useState(null);
   const [priceModalItem, setPriceModalItem] = useState(null);
+  // When non-null, the ConcertPicker overlay is open for this Vault item.
+  // The picker lets the user link the record to a concert from their journal
+  // ("kupione na koncercie") — the vinyl × concert bridge.
+  const [concertPickerItem, setConcertPickerItem] = useState(null);
+  // Lazy-cached map of user concerts (id → { band, year, venue_id, ... }) so
+  // we can render the LINKED-CONCERT pill inline in the expanded card without
+  // a new round-trip per card. Loaded once when any card opens the picker
+  // OR when any card with bought_at_concert_id is rendered. Keys are
+  // client_id strings.
+  const [concertById, setConcertById] = useState({});
+  const [concertVenueById, setConcertVenueById] = useState({});
+  // One-shot fetch of the user's concerts so the "kupione na" pills render
+  // without waiting for the user to open the picker. Cheap on mount, cached.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch('/api/user-concerts');
+        if (!alive || !r.ok) return;
+        const j = await r.json();
+        const cMap = {};
+        for (const c of (j.concerts || [])) cMap[c.client_id || c.id] = c;
+        const vMap = {};
+        for (const v of (j.venues || [])) vMap[v.client_id || v.id] = v;
+        setConcertById(cMap);
+        setConcertVenueById(vMap);
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, []);
   const [priceInputVal, setPriceInputVal] = useState('');
   const [targetPrice, setTargetPrice]     = useState('');
   const [alertType,   setAlertType]       = useState('PRICE_DROP');
@@ -1941,6 +1972,58 @@ export function CollectionTab({
                             </div>
                           );
                         })()}
+
+                        {/* Vinyl × Concert bridge — link this record to
+                            the concert it was bought at. Unique feature
+                            no other vinyl OR concert app offers. The
+                            already-linked concert renders as a clickable
+                            pill; an unlinked record shows a dashed
+                            "Kupiłem na koncercie?" button that opens the
+                            ConcertPicker overlay. */}
+                        {(() => {
+                          const linkedId = item.bought_at_concert_id;
+                          const linked   = linkedId ? concertById[linkedId] : null;
+                          const linkedVenue = linked ? concertVenueById[linked.venue_id] : null;
+                          return (
+                            <button
+                              onClick={() => setConcertPickerItem(item)}
+                              style={{
+                                width: '100%', marginBottom: 10, padding: '10px 12px',
+                                background: linked ? '#0d1a0d' : 'rgba(245,200,66,0.06)',
+                                border: linked
+                                  ? '1px solid #4ade8055'
+                                  : '1px dashed ' + C.border,
+                                borderRadius: 8,
+                                color: linked ? '#4ade80' : '#f5c842',
+                                cursor: 'pointer',
+                                ...MONO, fontSize: 11, lineHeight: 1.3,
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                textAlign: 'left',
+                              }}>
+                              <span style={{ fontSize: 14 }}>🎫</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                {linked ? (
+                                  <>
+                                    <div style={{ ...BEBAS, fontSize: 12, letterSpacing: '0.04em',
+                                      color: '#4ade80', lineHeight: 1.1 }}>
+                                      {t('collection.boughtAt') || 'Kupiłem na'}: {linkedVenue?.cat === 'Festival' ? '🎪 ' : ''}{linked.band}
+                                    </div>
+                                    <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2,
+                                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {linkedVenue ? linkedVenue.name : '?'}{linked.planned_date ? ' · ' + linked.planned_date : (linked.year ? ' · ' + linked.year : '')}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div>
+                                    + {t('collection.boughtAtAdd') || 'Kupiłem na koncercie?'}
+                                  </div>
+                                )}
+                              </div>
+                              {linked && <span style={{ opacity: 0.6 }}>✎</span>}
+                            </button>
+                          );
+                        })()}
+
                         {/* Grade */}
                         <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           <span style={{ fontSize: 9, color: C.dim, ...MONO, marginRight: 2 }}>Grade:</span>
@@ -2278,6 +2361,50 @@ export function CollectionTab({
             </div>
           )}
         </div>
+
+      {/* ═══ CONCERT PICKER — links a Vault item to a concert journal row ═══ */}
+      {concertPickerItem && (
+        <ConcertPicker
+          currentId={concertPickerItem.bought_at_concert_id || null}
+          onClose={() => setConcertPickerItem(null)}
+          onPick={async (concertId) => {
+            // null = unlink, string = set link. Optimistic + PATCH + use
+            // server response (same anti-stale-replica pattern as the
+            // price-modal). NO mv-collection-changed broadcast for the
+            // same reason: refetching the whole list would race with
+            // replica lag and could overwrite the just-saved link.
+            const itemId = concertPickerItem.id;
+            const newVal = concertId || null;
+            const optimistic = collection.map(c =>
+              c.id === itemId ? { ...c, bought_at_concert_id: newVal } : c);
+            onUpdate(optimistic);
+            setConcertPickerItem(null);
+            try {
+              const r = await fetch('/api/collection?id=' + itemId, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bought_at_concert_id: newVal }),
+              });
+              if (!r.ok) throw new Error('PATCH failed');
+              const body = await r.json().catch(() => ({}));
+              if (body && body.item) {
+                const merged = collection.map(c =>
+                  c.id === itemId ? { ...c, ...body.item } : c);
+                onUpdate(merged);
+              }
+              haptic.success?.();
+            } catch {
+              // Revert on failure
+              const reverted = collection.map(c =>
+                c.id === itemId
+                  ? { ...c, bought_at_concert_id: concertPickerItem.bought_at_concert_id || null }
+                  : c);
+              onUpdate(reverted);
+              toast.error(t('vault.priceModal.saveFailed') || 'Save failed');
+            }
+          }}
+        />
+      )}
 
       {/* ═══ PRICE MODAL — rendered outside card list to avoid iOS re-render bug ═══ */}
       {priceModalItem && (

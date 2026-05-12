@@ -730,6 +730,19 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
     }
     return m;
   })();
+  // Vault-bought-at-this-concert index. For the vinyl × concert
+  // bridge: when the user expands a concert in the journal, the card
+  // surfaces "📀 N albumów kupione tu" with a drilldown. Same
+  // collection prop is passed from WhensOnTab → ConcertsTab.
+  const recordsByConcertId = (() => {
+    const m = {};
+    for (const it of (collection || [])) {
+      const k = it.bought_at_concert_id;
+      if (!k) continue;
+      (m[k] = m[k] || []).push(it);
+    }
+    return m;
+  })();
   const mostSeen   = Object.entries(bandMap).sort((a,b)=>b[1].length-a[1].length)[0];
 
   // Compare venue ids as strings — built-ins use numeric ids, user-added
@@ -2157,6 +2170,46 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                </div>
                                );
                              })}
+                             {/* Vinyl × Concert reverse-direction:
+                                 records the user bought AT this festival.
+                                 The bridge feature's payoff — concert
+                                 cards show what physical loot you took
+                                 home. Concert-id is shared across all
+                                 lineup rows so we sample items[0].id. */}
+                             {(() => {
+                               const cid = it.items[0]?.id;
+                               const bought = cid ? (recordsByConcertId[cid] || []) : [];
+                               if (bought.length === 0) return null;
+                               return (
+                                 <div style={{marginTop: 10, paddingTop: 10,
+                                   borderTop: '1px dashed ' + col + '33'}}>
+                                   <div style={{fontSize: 10, color: '#4ade80', ...MONO,
+                                     letterSpacing: '0.12em', textTransform: 'uppercase',
+                                     marginBottom: 6}}>
+                                     📀 {bought.length} {bought.length === 1 ? 'płyta kupiona tutaj' : 'płyt kupionych tutaj'}
+                                   </div>
+                                   <div style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+                                     {bought.map(b => (
+                                       <div key={b.id} style={{
+                                         display: 'flex', alignItems: 'center', gap: 8,
+                                         padding: '6px 8px', background: 'rgba(74,222,128,0.06)',
+                                         borderRadius: 6}}>
+                                         <span style={{flex: 1, fontSize: 12, ...MONO, color: C.text,
+                                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                                           {b.artist} — {b.album}
+                                         </span>
+                                         {b.format && b.format !== 'Vinyl' && (
+                                           <span style={{fontSize: 8, color: C.dim, ...MONO,
+                                             padding: '1px 5px', background: C.bg3, borderRadius: 3}}>
+                                             {b.format}
+                                           </span>
+                                         )}
+                                       </div>
+                                     ))}
+                                   </div>
+                                 </div>
+                               );
+                             })()}
                            </div>
                          )}
                        </div>
@@ -2203,6 +2256,25 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                            })()}
                          </div>
                          {c.note&&<p style={{margin:'7px 0 0',fontSize:12,color:C.muted,fontFamily:'Georgia,serif',fontStyle:'italic',lineHeight:1.5}}>"{c.note}"</p>}
+                         {/* Vinyl bought at this gig — reverse direction
+                             of the bridge added by migration 041. */}
+                         {(() => {
+                           const bought = recordsByConcertId[c.id] || [];
+                           if (bought.length === 0) return null;
+                           return (
+                             <div style={{marginTop: 8, padding: '6px 10px',
+                               background: 'rgba(74,222,128,0.06)',
+                               border: '1px solid #4ade8033', borderRadius: 6,
+                               ...MONO, fontSize: 11, color: '#4ade80'}}>
+                               📀 {bought.length} {bought.length === 1 ? 'płyta kupiona tutaj' : 'płyt kupionych tutaj'}
+                               {bought.length <= 3 && (
+                                 <span style={{color: C.dim, opacity: 0.8, fontSize: 10}}>
+                                   {' · '}{bought.map(b => b.album).join(', ')}
+                                 </span>
+                               )}
+                             </div>
+                           );
+                         })()}
                          <div style={{display:'flex',gap:6,marginTop:8}}>
                            <button onClick={()=>edit(c)} style={{flex:1,padding:'6px',background:C.bg3,border:`1px solid ${C.border}`,borderRadius:7,color:C.muted,cursor:'pointer',fontSize:11,...MONO}}>✏ Edit</button>
                            <button onClick={()=>copy(c)} style={{flex:1,padding:'6px',background:C.bg3,border:`1px solid ${C.border}`,borderRadius:7,color:C.muted,cursor:'pointer',fontSize:11,...MONO}}>⧉ Copy</button>

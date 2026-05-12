@@ -17,6 +17,9 @@ const COLLECTION_WRITABLE = [
   // fields without premium is fine; the *generation* of listings is
   // what's gated.
   'for_sale', 'asking_price', 'for_sale_note',
+  // The vinyl × concert bridge — points at a user_concerts.client_id
+  // the user bought this record AT. Migration 041.
+  'bought_at_concert_id',
 ];
 
 function filterWritable(body) {
