@@ -286,6 +286,37 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   // non-null, the LiveAttendanceMode overlay is open for this aggregate
   // (shape: { key, venue, year, date, items[] }).
   const [liveFestival, setLiveFestival] = useState(null);
+  // Schema-check banner state. Set once on mount by hitting
+  // /api/concerts/schema-check; when any of the recently-added columns
+  // (attended, bought_at_concert_id, exclude_key) is missing on the
+  // user's Supabase, the banner surfaces the SQL to run.
+  const [schemaStatus, setSchemaStatus] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch('/api/concerts/schema-check');
+        if (!alive || !r.ok) return;
+        setSchemaStatus(await r.json());
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, []);
+  // Manual headliner picks — stored client-side in localStorage so we
+  // don't need a schema migration. Map of festivalKey → concertId of
+  // the band the user marked as headliner. festivalKey is the same
+  // venueId::date string the festival aggregator uses, so the read
+  // path in renderItem is trivial.
+  const [headlinerPicks, setHeadlinerPicks] = useState(() => loadLS('mv-headliner-picks', {}));
+  const setHeadliner = (festivalKey, concertId) => {
+    setHeadlinerPicks(prev => {
+      const next = { ...prev };
+      if (concertId == null) delete next[festivalKey];
+      else next[festivalKey] = concertId;
+      saveLS('mv-headliner-picks', next);
+      return next;
+    });
+  };
   const inputRef = useRef();
 
   // Load + sync flow:
@@ -1806,6 +1837,77 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
             different action class than "what I attended"). Sorted by
             planned_date ascending. Each row shows the date + tickets-
             bought status + venue + edit/delete. */}
+        {/* Migration nudge — when the user's Supabase doesn't have one
+            of the recently-added columns, per-band ✓ toggles fail
+            silently and ☐ Odznacz appears to do nothing. Tells the user
+            exactly what SQL to paste into the Supabase editor. */}
+        {tab === 'list' && schemaStatus && schemaStatus.needs_migration && (() => {
+          const missing = Object.entries(schemaStatus.columns || {})
+            .filter(([, v]) => v === false)
+            .map(([k]) => k);
+          if (missing.length === 0) return null;
+          const sqlBits = [];
+          if (missing.includes('user_concerts.attended')) {
+            sqlBits.push("ALTER TABLE user_concerts\n  ADD COLUMN IF NOT EXISTS attended boolean NOT NULL DEFAULT true;");
+          }
+          if (missing.includes('collection.bought_at_concert_id')) {
+            sqlBits.push("ALTER TABLE collection\n  ADD COLUMN IF NOT EXISTS bought_at_concert_id text;\nCREATE INDEX IF NOT EXISTS idx_collection_bought_at_concert\n  ON collection(user_id, bought_at_concert_id)\n  WHERE bought_at_concert_id IS NOT NULL;");
+          }
+          const sql = sqlBits.join('\n\n');
+          return (
+            <div style={{
+              marginBottom: 16, padding: '14px 16px',
+              background: 'linear-gradient(135deg,#1a1408 0%, #2a1a05 100%)',
+              border: '1px solid #f5c84266', borderRadius: 10,
+            }}>
+              <div style={{ ...BEBAS, fontSize: 14, color: '#f5c842',
+                letterSpacing: '0.06em', marginBottom: 6 }}>
+                ⚠ Wykonaj te SQL-e w Supabase
+              </div>
+              <div style={{ fontSize: 11, color: C.dim, ...MONO, marginBottom: 8,
+                lineHeight: 1.5 }}>
+                Funkcje &ldquo;widziałem&rdquo; (✓/✗ przy bandach) i &ldquo;kupione na koncercie&rdquo; wymagają
+                kolumn których nie ma jeszcze w twojej bazie. Otwórz Supabase → SQL Editor →
+                wklej i uruchom:
+              </div>
+              <pre style={{
+                background: '#0a0805', border: '1px solid ' + C.border,
+                borderRadius: 6, padding: 10, fontSize: 11,
+                color: '#dcf5dc', ...MONO,
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                margin: 0, overflowX: 'auto',
+              }}>{sql}</pre>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <button onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(sql);
+                    toast.success('Skopiowano do schowka');
+                  } catch { toast.error('Skopiowanie nie powiodło się — zaznacz ręcznie'); }
+                }} style={{
+                  background: '#f5c842', border: 'none', borderRadius: 6,
+                  color: '#0a0a0a', padding: '8px 14px',
+                  cursor: 'pointer', ...MONO, fontSize: 11, fontWeight: 600,
+                }}>
+                  📋 Skopiuj SQL
+                </button>
+                <button onClick={async () => {
+                  // Re-probe so banner disappears after the user runs the SQL.
+                  try {
+                    const r = await fetch('/api/concerts/schema-check');
+                    if (r.ok) setSchemaStatus(await r.json());
+                  } catch {}
+                }} style={{
+                  background: 'none', border: '1px solid ' + C.border,
+                  borderRadius: 6, color: C.dim, padding: '8px 14px',
+                  cursor: 'pointer', ...MONO, fontSize: 11,
+                }}>
+                  ↻ Sprawdź ponownie
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Live-mode banner — only renders when there's a Festival-
             categorised event with planned_date within ±1 day of now.
             Loud red-orange gradient + giant text so the user can't
@@ -2026,15 +2128,21 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                      const v = it.venue;
                      const col = '#f5c842';
                      const isOpen = !!setlistOpen['fest:' + it.key];
-                     // Headliner heuristic: first band in the lineup.
-                     // LFM-imported cell lineup preserves Last.fm's order
-                     // (headline-first); manual entries also tend to put
-                     // the headliner first. We show this as ⭐ in BOTH
-                     // the collapsed meta line AND on the top row of the
-                     // expanded list, so the user knows the main act
-                     // without expanding.
-                     const headliner = it.items[0]?.band || '';
-                     const supportCount = Math.max(0, it.items.length - 1);
+                     // Headliner: MANUAL pick via ⭐ toggle in expanded
+                     // view, stored client-side in headlinerPicks LS map.
+                     // No auto-detection anymore — Last.fm cell ordering
+                     // was unreliable (sometimes lists supports first)
+                     // and users want explicit control.
+                     // headlinerPicks[festivalKey] holds the concertId of
+                     // the band the user picked; resolve to the actual
+                     // band name (or null when no manual pick + collapsed
+                     // view shows date / count only, no headliner line).
+                     const pickedConcertId = headlinerPicks[it.key] || null;
+                     const headlinerRow    = pickedConcertId
+                       ? it.items.find(c => c.id === pickedConcertId)
+                       : null;
+                     const headliner       = headlinerRow ? headlinerRow.band : '';
+                     const supportCount    = Math.max(0, it.items.length - (headlinerRow ? 1 : 0));
                      // Festival ticket price is stored on a SINGLE row,
                      // not multiplied across the lineup. We find the
                      // first row that actually has a price (skips empty
@@ -2231,7 +2339,9 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                              )}
                              {it.items.map((c, idx) => {
                                const seenN = bandSeenCount[(c.band || '').toLowerCase().trim()] || 1;
-                               const isHead = idx === 0;
+                               // isHead reads from the manual pick map
+                               // now (no more auto-first-band guess).
+                               const isHead = pickedConcertId === c.id;
                                // Default to true on legacy rows that pre-date
                                // migration 040 (column has DEFAULT true so DB
                                // is consistent, but client-side LS may not
@@ -2247,6 +2357,15 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                  save(concerts.map(cc => cc.id === c.id ? updated : cc));
                                  try { await syncConcert(updated); } catch {}
                                };
+                               // Headliner toggle — single-select per
+                               // festival group. Tapping ⭐ on a band
+                               // sets it as the headliner; tapping again
+                               // (or tapping ⭐ on another band) replaces.
+                               const toggleHeadliner = (e) => {
+                                 e.stopPropagation();
+                                 setHeadliner(it.key, isHead ? null : c.id);
+                                 haptic.tap?.();
+                               };
                                return (
                                <div key={c.id} style={{display: 'flex', alignItems: 'center', gap: 8,
                                  padding: '6px 8px',
@@ -2260,9 +2379,21 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                  // through on the band name handled below; the
                                  // wider row dim is the at-a-glance signal.
                                  transition: 'opacity 0.15s'}}>
-                                 {isHead && (
-                                   <span style={{fontSize: 14, lineHeight: 1}} title="Headliner">⭐</span>
-                                 )}
+                                 {/* Headliner picker — left of band name.
+                                     Gold ⭐ when this row is the marked
+                                     headliner; dim outline ☆ otherwise.
+                                     Tap toggles single-select per group. */}
+                                 <button onClick={toggleHeadliner}
+                                   title={isHead ? 'To jest headliner — kliknij żeby odznaczyć' : 'Oznacz jako headlinera festiwalu'}
+                                   style={{
+                                     background: 'none', border: 'none',
+                                     cursor: 'pointer', padding: 4,
+                                     fontSize: 16, lineHeight: 1,
+                                     color: isHead ? '#f5c842' : '#555',
+                                     minWidth: 28,
+                                   }}>
+                                   {isHead ? '⭐' : '☆'}
+                                 </button>
                                  <span style={{flex: 1, fontSize: 13,
                                    color: isHead && attended ? '#fde68a' : C.text, ...MONO,
                                    fontWeight: isHead ? 600 : 400,
