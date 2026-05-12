@@ -5,6 +5,7 @@ import { toast, confirm as mvConfirm } from '@/app/components/Toast';
 import { useT, useLocale } from '@/lib/i18n';
 import { useCurrency, useFx, formatPrice } from '@/lib/currency';
 import { haptic } from '@/lib/haptics';
+import LiveAttendanceMode from '@/app/concerts/LiveAttendanceMode';
 
 
 const VENUES = [
@@ -281,6 +282,10 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   const [newVenue,setNewVenue] = useState('');
   const [showVenueAdd,setShowVenueAdd] = useState(false);
   const [setlistOpen,setSetlistOpen] = useState({});  // concert.id → bool
+  // Live mode — the at-the-festival tap-friendly attended grid. When
+  // non-null, the LiveAttendanceMode overlay is open for this aggregate
+  // (shape: { key, venue, year, date, items[] }).
+  const [liveFestival, setLiveFestival] = useState(null);
   const inputRef = useRef();
 
   // Load + sync flow:
@@ -742,6 +747,40 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
       (m[k] = m[k] || []).push(it);
     }
     return m;
+  })();
+  // Today-ish festivals: any festival-categorised event whose
+  // planned_date is within ±1 day of "now". Triggers the Live-mode
+  // banner above the list and a "🎸 Jestem teraz" button on the
+  // festival card itself. Window is ±1 day so an evening-then-overnight
+  // festival starting yesterday still shows during today's afterparty,
+  // and a festival starting tomorrow shows on travel day.
+  //
+  // Aggregation matches the festival aggregator in the list IIFE
+  // below (venue+date) so opening Live mode uses the same grouped
+  // shape the rest of the UI expects.
+  const liveFestivals = (() => {
+    if (!concerts || concerts.length === 0) return [];
+    const now = new Date();
+    const day = 86400000;
+    const lo = new Date(now.getTime() - day).toISOString().slice(0, 10);
+    const hi = new Date(now.getTime() + day).toISOString().slice(0, 10);
+    const groups = new Map();
+    for (const c of concerts) {
+      if (!c.planned_date) continue;
+      const d = String(c.planned_date).slice(0, 10);
+      if (d < lo || d > hi) continue;
+      const v = (venues || []).find(vv => String(vv.id ?? vv.client_id) === String(c.venueId));
+      if (!v || v.cat !== 'Festival') continue;
+      const k = String(c.venueId) + '::' + d;
+      if (!groups.has(k)) {
+        groups.set(k, {
+          key: k, venue: v, year: c.year, date: c.planned_date,
+          items: [],
+        });
+      }
+      groups.get(k).items.push(c);
+    }
+    return [...groups.values()];
   })();
   const mostSeen   = Object.entries(bandMap).sort((a,b)=>b[1].length-a[1].length)[0];
 
@@ -1767,6 +1806,60 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
             different action class than "what I attended"). Sorted by
             planned_date ascending. Each row shows the date + tickets-
             bought status + venue + edit/delete. */}
+        {/* Live-mode banner — only renders when there's a Festival-
+            categorised event with planned_date within ±1 day of now.
+            Loud red-orange gradient + giant text so the user can't
+            miss it walking into the venue. Click → fullscreen
+            LiveAttendanceMode. */}
+        {tab === 'list' && liveFestivals.length > 0 && (
+          <div style={{marginBottom: 16, display: 'flex',
+            flexDirection: 'column', gap: 8}}>
+            {liveFestivals.map(lf => (
+              <button key={lf.key}
+                onClick={() => setLiveFestival(lf)}
+                style={{
+                  width: '100%',
+                  background: 'linear-gradient(135deg,#d51007 0%, #f5c842 100%)',
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '14px 16px',
+                  color: '#0a0a0a',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  boxShadow: '0 4px 20px #d5100744',
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  // Subtle "now playing" pulse so the banner reads as
+                  // live + actionable, not just another row.
+                  animation: 'mv-live-pulse 2.4s ease-in-out infinite',
+                }}>
+                <div style={{fontSize: 30, lineHeight: 1}}>🎸</div>
+                <div style={{flex: 1, minWidth: 0}}>
+                  <div style={{...BEBAS, fontSize: 11, letterSpacing: '0.2em',
+                    textTransform: 'uppercase', opacity: 0.7, marginBottom: 2}}>
+                    {t('concerts.liveBannerNow') || 'Trwa teraz'}
+                  </div>
+                  <div style={{...BEBAS, fontSize: 22, lineHeight: 1.05,
+                    letterSpacing: '0.04em',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                    {lf.venue?.name || (t('concerts.unknownVenue') || 'Festiwal')}
+                  </div>
+                  <div style={{fontSize: 11, ...MONO, marginTop: 4, opacity: 0.75}}>
+                    {lf.date} · {t('concerts.liveBannerCta') || 'Oznacz kogo widzisz →'}
+                  </div>
+                </div>
+              </button>
+            ))}
+            {/* Inline keyframes — keeps the component self-contained
+                instead of polluting global CSS. */}
+            <style>{`
+              @keyframes mv-live-pulse {
+                0%, 100% { box-shadow: 0 4px 20px #d5100744; }
+                50%      { box-shadow: 0 4px 28px #d5100788; }
+              }
+            `}</style>
+          </div>
+        )}
+
         {tab === 'list' && upcoming.length > 0 && (
           <div style={{marginBottom: 16}}>
             <div style={{fontSize: 10, color: '#60a5fa', ...MONO,
@@ -2066,6 +2159,21 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                borderRadius: 6, color: col, cursor: 'pointer',
                                padding: '6px 10px', fontSize: 12, ...MONO, marginLeft: 6}}>
                              ✏
+                           </button>
+                           {/* Live-mode launcher on every festival card.
+                               Useful both at-the-festival (manual entry
+                               when the date band misses by hours) and
+                               after-the-fact (retroactive marking of who
+                               you saw at last year's Wacken). */}
+                           <button onClick={(e) => {
+                               e.stopPropagation();
+                               setLiveFestival(it);
+                             }}
+                             title={t('concerts.liveModeBtn') || 'Tryb live — oznacz kogo widzisz'}
+                             style={{background: 'none', border: '1px solid #4ade8044',
+                               borderRadius: 6, color: '#4ade80', cursor: 'pointer',
+                               padding: '6px 10px', fontSize: 12, ...MONO, marginLeft: 4}}>
+                             🎸
                            </button>
                            <button onClick={async (e) => {
                                e.stopPropagation();
@@ -2376,6 +2484,36 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
              </div>
         )}
       </div>
+      {/* Live mode overlay — opens when the today-ish banner is
+          tapped OR the user explicitly hits "Tryb live" on a fest
+          card. The toggle handler reuses save() + syncConcert(),
+          identical to the per-band ✓ in the expanded view, so
+          state changes propagate through the same path.
+          ALSO refresh from prop: when the parent's concerts state
+          updates after a toggle, find the same key in the latest
+          aggregation so the overlay sees current attended flags. */}
+      {liveFestival && (() => {
+        // Re-pull current items for this festival key out of the
+        // latest concerts state — props mutate, the festival
+        // snapshot we stored when opening is now stale.
+        const freshItems = concerts.filter(c => {
+          if (!c.planned_date || !liveFestival.date) return false;
+          return String(c.venueId) === String(liveFestival.venue?.id ?? liveFestival.venue?.client_id)
+              && String(c.planned_date).slice(0, 10) === String(liveFestival.date).slice(0, 10);
+        });
+        const liveSnapshot = { ...liveFestival, items: freshItems };
+        return (
+          <LiveAttendanceMode
+            festival={liveSnapshot}
+            onClose={() => setLiveFestival(null)}
+            onToggle={async (c, nextAttended) => {
+              const updated = { ...c, attended: nextAttended };
+              save(concerts.map(cc => cc.id === c.id ? updated : cc));
+              try { await syncConcert(updated); } catch {}
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
