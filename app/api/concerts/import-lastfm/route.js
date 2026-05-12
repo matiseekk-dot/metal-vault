@@ -185,20 +185,24 @@ export async function POST() {
     const toDelete = [];
     for (const r of (lfmRows || [])) {
       const venueNorm = venueNormById.get(r.venue_id) || '';
-      // Two keys to catch BOTH: same-band-same-year-same-venue
-      // (loose) AND same-band-same-exact-date-same-venue (strict,
-      // matches LFM event id semantics). Either match counts as dup.
-      const keyYear = normaliseBandName(r.band) + '::' +
-                      (r.year || '') + '::' + venueNorm;
-      const keyDate = r.planned_date
-        ? normaliseBandName(r.band) + '::date::' +
-          r.planned_date + '::' + venueNorm
-        : null;
-      if (seen.has(keyYear) || (keyDate && seen.has(keyDate))) {
+      // PER-EVENT dedup. Use the exact date when present (which it is
+      // for everything migration 038 stamped — all LFM imports going
+      // forward). Year is a fallback ONLY for legacy rows from before
+      // 038 that still have planned_date=null.
+      //
+      // This protects the "saw Opeth 5 times at different venues" case
+      // AND the "two-night residency at the same venue" case: two
+      // Iron Maiden rows at O2 Arena dated 2024-09-15 and 2024-09-16
+      // produce DIFFERENT keys (the date segment differs) → not merged.
+      // Same-day duplicates (e.g. the same LFM event imported twice
+      // via 'upcoming' + year tab) DO merge — they share the date.
+      const k = r.planned_date
+        ? normaliseBandName(r.band) + '::d::' + r.planned_date + '::' + venueNorm
+        : normaliseBandName(r.band) + '::y::' + (r.year || '') + '::' + venueNorm;
+      if (seen.has(k)) {
         toDelete.push(r.client_id);
       } else {
-        seen.set(keyYear, r.client_id);
-        if (keyDate) seen.set(keyDate, r.client_id);
+        seen.set(k, r.client_id);
       }
     }
     for (const cid of toDelete) {
@@ -240,19 +244,26 @@ export async function POST() {
   // existingKeys to be empty → every band re-inserted → multiplication.
   const { data: existing } = await admin
     .from('user_concerts')
-    .select('band, year, venue_id, client_id')
+    .select('band, year, venue_id, planned_date, client_id')
     .eq('user_id', user.id);
   const { data: venues } = await admin
     .from('user_venues')
     .select('client_id, name')
     .eq('user_id', user.id);
   const venueNameById = new Map((venues || []).map(v => [v.client_id, normaliseVenueName(v.name)]));
+  // PER-EVENT identity: exact date when row has one, year as fallback
+  // for legacy rows. Same shape used by pre/post-dedup AND the insert-
+  // loop below so all four dedup surfaces agree. Two-night residency
+  // (Iron Maiden at O2 on 2024-09-15 and 2024-09-16) produces two
+  // separate keys → both rows survive.
   const existingKeys = new Set();
   for (const r of (existing || [])) {
-    const bandKey = normaliseBandName(r.band);
-    const yearKey = String(r.year || '').trim();
+    const bandKey  = normaliseBandName(r.band);
     const venueKey = venueNameById.get(r.venue_id) || '';
-    existingKeys.add(bandKey + '::' + yearKey + '::' + venueKey);
+    const k = r.planned_date
+      ? bandKey + '::d::' + r.planned_date + '::' + venueKey
+      : bandKey + '::y::' + String(r.year || '').trim() + '::' + venueKey;
+    existingKeys.add(k);
   }
 
   // Existing venues by normalised name → reuse rather than create
@@ -474,10 +485,13 @@ export async function POST() {
     for (const band of lineup) {
       const bandStr = String(band || '').trim();
       if (!bandStr) continue;
-      // Use the unicode-aware normaliser so the dedup key matches what
-      // pre/post-dedup and existingKeys use (otherwise the "Bölzer" NFC
-      // vs NFD duplicate sneaks past the in-loop dedup too).
-      const dedupKey = normaliseBandName(bandStr) + '::' + year + '::' + venueNorm;
+      // Same key shape as existingKeys above + the pre/post dedup
+      // passes: exact date when known (which it always is for LFM
+      // imports thanks to migration 038), year as legacy fallback.
+      // Bands+venue+different dates count as DIFFERENT events.
+      const dedupKey = evDateIso
+        ? normaliseBandName(bandStr) + '::d::' + evDateIso + '::' + venueNorm
+        : normaliseBandName(bandStr) + '::y::' + year + '::' + venueNorm;
       // User explicitly removed this band from this event in the
       // past — respect their pruning. (Migration 039 tombstones.)
       if (excludeKeys.has(dedupKey)) { skipped++; continue; }
@@ -822,17 +836,17 @@ export async function POST() {
     const toDel2 = [];
     for (const r of (postRows || [])) {
       const venueNorm = venueNormById2.get(r.venue_id) || '';
-      const keyYear = normaliseBandName(r.band) + '::' +
-                      (r.year || '') + '::' + venueNorm;
-      const keyDate = r.planned_date
-        ? normaliseBandName(r.band) + '::date::' +
-          r.planned_date + '::' + venueNorm
-        : null;
-      if (seen2.has(keyYear) || (keyDate && seen2.has(keyDate))) {
+      // PER-EVENT dedup (same logic as pre-dedup above): exact date
+      // when known, year fallback only for legacy rows without it.
+      // Two-night residencies (Opeth at Stodoła on 2024-04-12 and
+      // 2024-04-13) stay distinct because the date segment differs.
+      const k = r.planned_date
+        ? normaliseBandName(r.band) + '::d::' + r.planned_date + '::' + venueNorm
+        : normaliseBandName(r.band) + '::y::' + (r.year || '') + '::' + venueNorm;
+      if (seen2.has(k)) {
         toDel2.push(r.client_id);
       } else {
-        seen2.set(keyYear, r.client_id);
-        if (keyDate) seen2.set(keyDate, r.client_id);
+        seen2.set(k, r.client_id);
       }
     }
     for (const cid of toDel2) {

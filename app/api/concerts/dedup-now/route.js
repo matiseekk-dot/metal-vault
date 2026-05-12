@@ -59,20 +59,25 @@ export async function POST() {
     venueNormById.set(v.client_id, normaliseVenueName(v.name));
   }
 
-  // Group by (band_norm, year, venue_norm). The first encountered row
-  // (created_at ascending → oldest) becomes the SURVIVOR; later rows
-  // get added to the delete list. attended is OR-ed across the group
-  // so a user-marked-attended row never gets demoted to attended=false
-  // just because the merge survivor happened to be the older un-marked
-  // row.
+  // Group PER-EVENT: prefer the exact planned_date in the key so e.g.
+  // two-night residencies (Opeth at Stodoła on 2024-04-12 and
+  // 2024-04-13) STAY DISTINCT instead of collapsing into one row.
+  // Year is a fallback ONLY for legacy rows without planned_date.
+  //
+  // The first encountered row (created_at ascending → oldest) becomes
+  // the SURVIVOR; later rows with the same key get added to delete.
+  // attended is OR-ed across the group so a user-marked-attended row
+  // never gets demoted just because the survivor was the older
+  // un-marked copy.
   const survivors = new Map();   // key → { id, attended }
   const toDelete  = [];
-  const toUpdate  = new Map();   // survivor_id → { attended } if it needs OR-merge
+  const toUpdate  = new Map();   // survivor_id → { attended } if needs OR-merge
 
   for (const r of (rows || [])) {
-    const k = normaliseBandName(r.band) + '::' +
-              (r.year || '') + '::' +
-              (venueNormById.get(r.venue_id) || '');
+    const venueNorm = venueNormById.get(r.venue_id) || '';
+    const k = r.planned_date
+      ? normaliseBandName(r.band) + '::d::' + r.planned_date + '::' + venueNorm
+      : normaliseBandName(r.band) + '::y::' + (r.year || '') + '::' + venueNorm;
     const existing = survivors.get(k);
     if (!existing) {
       survivors.set(k, { id: r.client_id, attended: r.attended !== false });

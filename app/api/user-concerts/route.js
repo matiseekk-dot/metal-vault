@@ -139,7 +139,7 @@ export async function DELETE(request) {
   try {
     const { data: row } = await sb
       .from('user_concerts')
-      .select('band, year, venue_id, note')
+      .select('band, year, venue_id, planned_date, note')
       .eq('user_id', user.id)
       .eq('client_id', id)
       .maybeSingle();
@@ -155,8 +155,20 @@ export async function DELETE(request) {
           .maybeSingle();
         venueNorm = _normaliseVenueName(v?.name || '');
       }
-      const key = (row.band || '').toLowerCase().trim() + '::' +
-                  (row.year || '') + '::' + venueNorm;
+      // PER-EVENT exclude key — must match the shape the importer
+      // builds in existingKeys / dedupKey. Without the d::date::
+      // segment, deleting Opeth at Stodoła on 2024-04-12 would also
+      // tombstone the Opeth row at Stodoła on 2024-04-13 (2-night
+      // residency) and re-import would skip both.
+      const bandNorm = String(row.band || '')
+        .normalize('NFC')
+        .replace(/[​-‍﻿]/g, '')
+        .replace(/ /g, ' ')
+        .toLowerCase()
+        .trim();
+      const key = row.planned_date
+        ? bandNorm + '::d::' + row.planned_date + '::' + venueNorm
+        : bandNorm + '::y::' + String(row.year || '') + '::' + venueNorm;
       // Upsert via on-conflict-do-nothing: harmless to attempt twice.
       await sb.from('user_concert_excludes').upsert({
         user_id:     user.id,
