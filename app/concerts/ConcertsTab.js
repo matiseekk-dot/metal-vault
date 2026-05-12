@@ -576,10 +576,30 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   const submit = () => {
     if(!form.band.trim()){setError(t('concerts.error.bandRequired'));return;}
     const entry = {...form,band:form.band.trim(),id:editId||crypto.randomUUID()};
+    const wasEdit = !!editId;
     const updated = editId ? concerts.map(c=>c.id===editId?entry:c) : [entry,...concerts];
     save(updated);
     syncConcert(entry);
+    const savedId = entry.id;
     resetForm();setShowForm(false);
+    // Edit case only: after the form closes and the page reflows, the
+    // row the user just edited is no longer where their thumb was —
+    // the form occupied space above the list, and dismissing it
+    // collapsed that height. Without help the user thinks the row
+    // "jumped to the top". Scroll the row back into view so it sits
+    // visually where they left off. Skips on new-insert (the row is
+    // already at the top — exactly where the new entry should land).
+    if (wasEdit && typeof window !== 'undefined') {
+      // Wait for React to reflow + the form to unmount before measuring.
+      // Two RAFs = "next paint" — small enough the user doesn't see a
+      // jump, big enough that getBoundingClientRect is accurate.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const node = document.getElementById('mv-concert-' + savedId);
+        if (node && node.scrollIntoView) {
+          node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }));
+    }
   };
 
   const resetFest = () => {
@@ -2069,82 +2089,223 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               📅 {t('concerts.upcoming') || 'Nadchodzące'} ({upcoming.length})
             </div>
             <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
-              {upcoming.map(c => {
-                const v = findVenue(c.venueId);
-                const daysUntil = c.planned_date
-                  ? Math.ceil((new Date(c.planned_date) - new Date()) / 86400000)
-                  : null;
-                return (
-                  <div key={c.id} style={{background: '#0d1f3a',
-                    border: '1px solid #3b82f644', borderLeft: '4px solid #3b82f6',
-                    borderRadius: 10, padding: '12px 14px',
-                    display: 'flex', alignItems: 'center', gap: 10}}>
-                    <div style={{flex: 1, minWidth: 0}}>
-                      <div style={{...BEBAS, fontSize: 18, color: C.text,
-                        letterSpacing: '0.04em', lineHeight: 1.1}}>
-                        {c.band}
+              {(() => {
+                // Same two-pass aggregation pattern as the main list: any
+                // ≥2 bands sharing (venueId, date) collapse into one
+                // expandable card. Singles render as the existing
+                // standalone blue row. The aggregate card lives in the
+                // blue (#3b82f6) "upcoming" palette so it visually
+                // matches the rest of this section instead of looking
+                // like a misplaced festival card.
+                const upBuckets = new Map();
+                for (const c of upcoming) {
+                  const dateKey = c.planned_date;
+                  if (!c.venueId || !dateKey) continue;
+                  const k = c.venueId + '::' + dateKey;
+                  if (!upBuckets.has(k)) upBuckets.set(k, []);
+                  upBuckets.get(k).push(c);
+                }
+                const rendered = new Set();
+                const out = [];
+                for (const c of upcoming) {
+                  const dateKey = c.planned_date;
+                  const k = (c.venueId && dateKey) ? c.venueId + '::' + dateKey : null;
+                  if (k && upBuckets.get(k).length >= 2) {
+                    if (rendered.has(k)) continue;
+                    rendered.add(k);
+                    out.push({ type: 'group', key: k, items: upBuckets.get(k) });
+                  } else {
+                    out.push({ type: 'single', concert: c });
+                  }
+                }
+                return out.map(it => {
+                  if (it.type === 'group') {
+                    const items = it.items;
+                    const v = findVenue(items[0].venueId);
+                    const date = items[0].planned_date;
+                    const daysUntil = date
+                      ? Math.ceil((new Date(date) - new Date()) / 86400000)
+                      : null;
+                    // Group-level ticket status: if EVERY item in the
+                    // group is tickets_bought=true → festival pass
+                    // purchased. Otherwise show count of bought / total.
+                    const boughtN = items.filter(c => c.tickets_bought).length;
+                    const allBought = boughtN === items.length;
+                    const isOpen = !!setlistOpen['upc:' + it.key];
+                    // Headliner pick reused from main aggregator state.
+                    const rowHead = items.find(c => c.is_headliner === true);
+                    const headliner = rowHead
+                      ? rowHead.band
+                      : (legacyHeadlinerPicks[it.key]
+                          ? items.find(c => c.id === legacyHeadlinerPicks[it.key])?.band
+                          : null);
+                    return (
+                      <div key={it.key} style={{background: '#0d1f3a',
+                        border: '1px solid #3b82f644', borderLeft: '4px solid #3b82f6',
+                        borderRadius: 10, padding: '12px 14px'}}>
+                        <div onClick={() => setSetlistOpen(s => ({ ...s, ['upc:' + it.key]: !isOpen }))}
+                          style={{display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer'}}>
+                          <div style={{flex: 1, minWidth: 0}}>
+                            <div style={{...BEBAS, fontSize: 19, color: '#93c5fd',
+                              letterSpacing: '0.04em', lineHeight: 1.1}}>
+                              {v?.cat === 'Festival' ? '🎪' : v?.cat === 'Arena' ? '🏟' : '🎤'}{' '}
+                              {v?.name || (t('concerts.unknownVenue') || 'Wydarzenie')}
+                            </div>
+                            {headliner && (
+                              <div style={{marginTop: 4, fontSize: 12, color: '#fde68a',
+                                ...MONO, letterSpacing: '0.04em'}}>
+                                ⭐ {headliner}
+                                <span style={{color: C.dim, opacity: 0.7, marginLeft: 6}}>
+                                  · +{items.length - 1} {items.length - 1 === 1 ? 'support' : 'supportów'}
+                                </span>
+                              </div>
+                            )}
+                            <div style={{display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap'}}>
+                              <span style={{fontSize: 11, color: C.dim, ...MONO}}>
+                                📅 {date}
+                                {daysUntil != null && daysUntil >= 0 && (
+                                  <span style={{marginLeft: 4, color: daysUntil <= 7 ? '#f5c842' : C.dim}}>
+                                    {daysUntil === 0 ? ' · ' + (t('concerts.today') || 'DZIŚ')
+                                      : daysUntil === 1 ? ' · ' + (t('concerts.tomorrow') || 'JUTRO')
+                                      : ' · za ' + daysUntil + 'd'}
+                                  </span>
+                                )}
+                              </span>
+                              <span style={{fontSize: 11, color: C.dim, ...MONO}}>
+                                🎸 {items.length} {items.length === 1
+                                  ? (t('concerts.bandCount.one') || 'zespół')
+                                  : (t('concerts.bandCount.many') || 'zespołów')}
+                              </span>
+                              <span style={{fontSize: 11, ...MONO,
+                                color: allBought ? '#4ade80' : '#f5c842'}}>
+                                {allBought
+                                  ? '🎟 ' + (t('concerts.ticketsBought') || 'Bilety kupione')
+                                  : '❓ ' + boughtN + '/' + items.length + ' biletów'}
+                              </span>
+                            </div>
+                          </div>
+                          <span style={{...MONO, fontSize: 14, color: C.dim, marginLeft: 6}}>
+                            {isOpen ? '▲' : '▼'}
+                          </span>
+                        </div>
+                        {isOpen && (
+                          <div style={{marginTop: 12, paddingTop: 10,
+                            borderTop: '1px solid #3b82f633',
+                            display: 'flex', flexDirection: 'column', gap: 6}}>
+                            {items.map(c => (
+                              <div key={c.id} style={{display: 'flex', alignItems: 'center', gap: 8,
+                                padding: '6px 8px', background: 'rgba(59,130,246,0.10)',
+                                borderRadius: 6}}>
+                                <span style={{flex: 1, fontSize: 13, color: C.text, ...MONO}}>{c.band}</span>
+                                <button onClick={(e) => {
+                                  e.stopPropagation();
+                                  const updated = { ...c, tickets_bought: !c.tickets_bought };
+                                  save(concerts.map(x => x.id === c.id ? updated : x));
+                                  syncConcert(updated);
+                                }}
+                                  title={c.tickets_bought
+                                    ? (t('concerts.markUnbought') || 'Zaznacz jako bez biletu')
+                                    : (t('concerts.markBought')   || 'Zaznacz że bilet kupiony')}
+                                  style={{background: c.tickets_bought ? '#1a3d1a' : '#3a2906',
+                                    border: '1px solid ' + (c.tickets_bought ? '#4ade8088' : '#f5c84288'),
+                                    borderRadius: 6,
+                                    color: c.tickets_bought ? '#4ade80' : '#f5c842',
+                                    padding: '4px 8px', cursor: 'pointer', fontSize: 11, ...MONO}}>
+                                  {c.tickets_bought ? '✓' : '🎟'}
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); edit(c); }}
+                                  style={{background: 'none', border: 'none', color: C.dim,
+                                    cursor: 'pointer', fontSize: 14, padding: '4px 8px'}}>✏</button>
+                                <button onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (await mvConfirm(t('concerts.deleteConfirm', { band: c.band }),
+                                      { kind: 'danger', confirmLabel: t('common.delete') })) {
+                                    del(c.id);
+                                  }
+                                }}
+                                  style={{background: 'none', border: 'none', color: '#666',
+                                    cursor: 'pointer', fontSize: 16, padding: '4px 8px'}}>×</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div style={{display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap'}}>
-                        <span style={{fontSize: 11, color: C.dim, ...MONO}}>
-                          📅 {c.planned_date}
-                          {daysUntil != null && daysUntil >= 0 && (
-                            <span style={{marginLeft: 4, color: daysUntil <= 7 ? '#f5c842' : C.dim}}>
-                              {daysUntil === 0 ? ' · ' + (t('concerts.today') || 'DZIŚ')
-                                : daysUntil === 1 ? ' · ' + (t('concerts.tomorrow') || 'JUTRO')
-                                : ' · za ' + daysUntil + 'd'}
-                            </span>
-                          )}
-                        </span>
-                        {v && <span style={{fontSize: 11, color: C.dim, ...MONO}}>
-                          📍 {v.name}{v.city ? ' · ' + v.city : ''}
-                        </span>}
-                        <span style={{fontSize: 11, ...MONO,
-                          color: c.tickets_bought ? '#4ade80' : '#f5c842'}}>
-                          {c.tickets_bought
-                            ? '🎟 ' + (t('concerts.ticketsBought') || 'Bilet kupiony')
-                            : '❓ ' + (t('concerts.ticketsNot')   || 'Bilet jeszcze nie kupiony')}
-                        </span>
+                    );
+                  }
+                  const c = it.concert;
+                  const v = findVenue(c.venueId);
+                  const daysUntil = c.planned_date
+                    ? Math.ceil((new Date(c.planned_date) - new Date()) / 86400000)
+                    : null;
+                  return (
+                    <div key={c.id} style={{background: '#0d1f3a',
+                      border: '1px solid #3b82f644', borderLeft: '4px solid #3b82f6',
+                      borderRadius: 10, padding: '12px 14px',
+                      display: 'flex', alignItems: 'center', gap: 10}}>
+                      <div style={{flex: 1, minWidth: 0}}>
+                        <div style={{...BEBAS, fontSize: 18, color: C.text,
+                          letterSpacing: '0.04em', lineHeight: 1.1}}>
+                          {c.band}
+                        </div>
+                        <div style={{display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap'}}>
+                          <span style={{fontSize: 11, color: C.dim, ...MONO}}>
+                            📅 {c.planned_date}
+                            {daysUntil != null && daysUntil >= 0 && (
+                              <span style={{marginLeft: 4, color: daysUntil <= 7 ? '#f5c842' : C.dim}}>
+                                {daysUntil === 0 ? ' · ' + (t('concerts.today') || 'DZIŚ')
+                                  : daysUntil === 1 ? ' · ' + (t('concerts.tomorrow') || 'JUTRO')
+                                  : ' · za ' + daysUntil + 'd'}
+                              </span>
+                            )}
+                          </span>
+                          {v && <span style={{fontSize: 11, color: C.dim, ...MONO}}>
+                            📍 {v.name}{v.city ? ' · ' + v.city : ''}
+                          </span>}
+                          <span style={{fontSize: 11, ...MONO,
+                            color: c.tickets_bought ? '#4ade80' : '#f5c842'}}>
+                            {c.tickets_bought
+                              ? '🎟 ' + (t('concerts.ticketsBought') || 'Bilet kupiony')
+                              : '❓ ' + (t('concerts.ticketsNot')   || 'Bilet jeszcze nie kupiony')}
+                          </span>
+                        </div>
                       </div>
+                      <button onClick={() => {
+                        const updated = { ...c, tickets_bought: !c.tickets_bought };
+                        save(concerts.map(x => x.id === c.id ? updated : x));
+                        syncConcert(updated);
+                      }}
+                        title={c.tickets_bought
+                          ? (t('concerts.markUnbought') || 'Zaznacz jako bez biletu')
+                          : (t('concerts.markBought')   || 'Zaznacz że bilet kupiony')}
+                        style={{background: c.tickets_bought ? '#1a3d1a' : '#3a2906',
+                          border: '1px solid ' + (c.tickets_bought ? '#4ade8088' : '#f5c84288'),
+                          borderRadius: 6,
+                          color: c.tickets_bought ? '#4ade80' : '#f5c842',
+                          padding: '6px 10px', cursor: 'pointer',
+                          fontSize: 12, ...MONO}}>
+                        {c.tickets_bought ? '✓' : '🎟'}
+                      </button>
+                      <button onClick={() => edit(c)}
+                        style={{background: 'none', border: '1px solid ' + C.border,
+                          borderRadius: 6, color: C.dim, cursor: 'pointer',
+                          padding: '6px 10px', fontSize: 12, ...MONO}}>
+                        ✏
+                      </button>
+                      <button onClick={async () => {
+                        if (await mvConfirm(t('concerts.deleteConfirm', { band: c.band }),
+                            { kind: 'danger', confirmLabel: t('common.delete') })) {
+                          del(c.id);
+                        }
+                      }}
+                        style={{background: 'none', border: '1px solid #7f1d1d',
+                          borderRadius: 6, color: '#f87171', cursor: 'pointer',
+                          padding: '6px 10px', fontSize: 12, ...MONO}}>
+                        ×
+                      </button>
                     </div>
-                    {/* Quick toggle for ticket status — saves a full
-                        edit-form round trip when the user just bought
-                        their ticket and wants to flip the badge. */}
-                    <button onClick={() => {
-                      const updated = { ...c, tickets_bought: !c.tickets_bought };
-                      save(concerts.map(x => x.id === c.id ? updated : x));
-                      syncConcert(updated);
-                    }}
-                      title={c.tickets_bought
-                        ? (t('concerts.markUnbought') || 'Zaznacz jako bez biletu')
-                        : (t('concerts.markBought')   || 'Zaznacz że bilet kupiony')}
-                      style={{background: c.tickets_bought ? '#1a3d1a' : '#3a2906',
-                        border: '1px solid ' + (c.tickets_bought ? '#4ade8088' : '#f5c84288'),
-                        borderRadius: 6,
-                        color: c.tickets_bought ? '#4ade80' : '#f5c842',
-                        padding: '6px 10px', cursor: 'pointer',
-                        fontSize: 12, ...MONO}}>
-                      {c.tickets_bought ? '✓' : '🎟'}
-                    </button>
-                    <button onClick={() => edit(c)}
-                      style={{background: 'none', border: '1px solid ' + C.border,
-                        borderRadius: 6, color: C.dim, cursor: 'pointer',
-                        padding: '6px 10px', fontSize: 12, ...MONO}}>
-                      ✏
-                    </button>
-                    <button onClick={async () => {
-                      if (await mvConfirm(t('concerts.deleteConfirm', { band: c.band }),
-                          { kind: 'danger', confirmLabel: t('common.delete') })) {
-                        del(c.id);
-                      }
-                    }}
-                      style={{background: 'none', border: '1px solid #7f1d1d',
-                        borderRadius: 6, color: '#f87171', cursor: 'pointer',
-                        padding: '6px 10px', fontSize: 12, ...MONO}}>
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </div>
         )}
@@ -2516,7 +2677,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                  haptic.tap?.();
                                };
                                return (
-                               <div key={c.id} style={{display: 'flex', alignItems: 'center', gap: 8,
+                               <div key={c.id} id={'mv-concert-' + c.id} style={{display: 'flex', alignItems: 'center', gap: 8,
                                  padding: '6px 8px',
                                  background: isHead
                                    ? (attended ? 'rgba(245,200,66,0.10)' : 'rgba(80,80,80,0.15)')
@@ -2635,7 +2796,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                    const v = findVenue(c.venueId);
                    const col = v ? CAT_COLOR[v.cat] || '#aaa' : '#555';
                    return (
-                   <div key={c.id} style={{background:C.bg2,border:`1px solid ${C.border}`,
+                   <div key={c.id} id={'mv-concert-' + c.id} style={{background:C.bg2,border:`1px solid ${C.border}`,
                      borderLeft:`4px solid ${col}`,borderRadius:10,padding:'13px 14px'}}>
                      <div style={{display:'flex',justifyContent:'space-between',gap:10}}>
                        <div style={{flex:1,minWidth:0}}>
