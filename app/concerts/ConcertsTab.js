@@ -2145,26 +2145,54 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                  // club's whole year being merged into one festival
                  // card (Mega Club hosting 6 distinct gigs got
                  // wrongly collapsed before this).
-                 const groupKey = (c) => {
-                   const v = findVenue(c.venueId);
-                   if (!v || v.cat !== 'Festival') return null;
-                   const dateKey = c.planned_date || c.year;
-                   if (!dateKey) return null;
-                   return c.venueId + '::' + dateKey;
-                 };
-                 const groupMap = new Map();
+                 // Two-pass aggregation. Old logic only grouped when
+                 // venue.cat === 'Festival', so multi-band shows at clubs
+                 // (In Flames + 4 supports at Stodoła = "tour package")
+                 // rendered as N standalone cards with the same date and
+                 // venue. Ugly and lossy.
+                 //
+                 // Now: ANY group of ≥2 concerts sharing (venueId, date)
+                 // renders as an aggregate card. Solo gigs still render
+                 // standalone. Festival vs club distinction is handled
+                 // visually in the card itself via the venue.cat emoji
+                 // (🎪 festival / 🎤 club-style multi-band).
+                 //
+                 // Pass 1 — bucket by venue+date.
+                 const buckets = new Map();
                  for (const c of filtered) {
-                   const k = groupKey(c);
+                   const v = findVenue(c.venueId);
+                   const dateKey = c.planned_date || c.year;
+                   if (!v || !dateKey) continue;
+                   const k = c.venueId + '::' + dateKey;
+                   if (!buckets.has(k)) buckets.set(k, []);
+                   buckets.get(k).push(c);
+                 }
+                 // Pass 2 — walk filtered in sort order, materialise
+                 // aggregates at the position of their first member.
+                 const renderedBucket = new Set();
+                 for (const c of filtered) {
+                   const v = findVenue(c.venueId);
+                   const dateKey = c.planned_date || c.year;
+                   const k = (v && dateKey) ? c.venueId + '::' + dateKey : null;
                    if (!k) {
                      items.push({ type: 'single', concert: c });
                      continue;
                    }
-                   const existing = groupMap.get(k);
-                   if (existing) { existing.items.push(c); continue; }
-                   const fresh = { type: 'festival', key: k, venue: findVenue(c.venueId),
-                     year: c.year, date: c.planned_date || null, items: [c] };
-                   groupMap.set(k, fresh);
-                   items.push(fresh);
+                   const bucket = buckets.get(k);
+                   if (bucket.length === 1) {
+                     items.push({ type: 'single', concert: c });
+                     continue;
+                   }
+                   if (renderedBucket.has(k)) continue;
+                   renderedBucket.add(k);
+                   items.push({
+                     type: 'festival',  // historical name, now covers any ≥2-band group
+                     key:   k,
+                     venue: v,
+                     year:  c.year,
+                     date:  c.planned_date || null,
+                     items: bucket,
+                   });
                  }
                  // Group items by year. Year is taken from the festival
                  // wrapper or the single concert. Items with no year fall
@@ -2189,7 +2217,14 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                  const renderItem = (it) => {
                    if (it.type === 'festival') {
                      const v = it.venue;
-                     const col = '#f5c842';
+                     // Card border colour follows venue type. Festival
+                     // venues keep the gold accent that signalled "this is
+                     // a fest"; club / arena aggregates (multi-band shows
+                     // at non-festival venues) use the CAT_COLOR palette
+                     // so they're visually distinct from real festivals.
+                     const col = v?.cat === 'Festival'
+                       ? '#f5c842'
+                       : (CAT_COLOR[v?.cat] || '#aaa');
                      const isOpen = !!setlistOpen['fest:' + it.key];
                      // Headliner: MANUAL pick via ⭐ toggle in expanded
                      // view, stored client-side in headlinerPicks LS map.
@@ -2222,7 +2257,15 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                            onClick={() => setSetlistOpen(s => ({ ...s, ['fest:' + it.key]: !isOpen }))}>
                            <div style={{flex: 1, minWidth: 0}}>
                              <div style={{...BEBAS, fontSize: 20, color: col, letterSpacing: '0.04em', lineHeight: 1.1}}>
-                               🎪 {v?.name || (t('concerts.unknownVenue') || 'Festiwal')}
+                               {/* Venue-aware emoji. Tent for actual
+                                   festivals, microphone for clubs / other
+                                   multi-band shows (now that the aggregator
+                                   merges any ≥2-band same-venue+date group).
+                                   Arenas get a stadium glyph. */}
+                               {v?.cat === 'Festival' ? '🎪'
+                                 : v?.cat === 'Arena' ? '🏟'
+                                 : '🎤'}{' '}
+                               {v?.name || (t('concerts.unknownVenue') || 'Festiwal')}
                              </div>
                              {/* Headliner pill — the marquee band visible
                                  without expanding. Renders as e.g.
