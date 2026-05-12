@@ -2186,9 +2186,11 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                           </div>
                           {/* Group-level ticket toggle — taps flip
                               tickets_bought on EVERY band in the group.
-                              The single fest/multi-band-tour usually
-                              means one ticket covers all acts, so a
-                              single toggle here is the right grain. */}
+                              One ticket per festival/tour-package is the
+                              norm. Earlier version was emoji-only and
+                              users mistook it for an edit pencil; now
+                              the button has a readable text label so the
+                              CTA is obvious. */}
                           <button onClick={(e) => {
                               e.stopPropagation();
                               const next = !allBought;
@@ -2205,13 +2207,19 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                             title={allBought
                               ? (t('concerts.markUnbought') || 'Zaznacz jako bez biletu')
                               : (t('concerts.markBought')   || 'Zaznacz że bilety kupione')}
-                            style={{background: allBought ? '#1a3d1a' : '#3a2906',
+                            style={{background: allBought ? '#0d1f0d' : '#1a1408',
                               border: '1px solid ' + (allBought ? '#4ade8088' : '#f5c84288'),
-                              borderRadius: 6,
+                              borderRadius: 8,
                               color: allBought ? '#4ade80' : '#f5c842',
-                              padding: '6px 10px', cursor: 'pointer',
-                              fontSize: 12, ...MONO, marginLeft: 4}}>
-                            {allBought ? '✓' : '🎟'}
+                              padding: '8px 12px', cursor: 'pointer',
+                              fontSize: 12, ...MONO, marginLeft: 4,
+                              fontWeight: 600, letterSpacing: '0.04em',
+                              display: 'flex', alignItems: 'center', gap: 6,
+                              whiteSpace: 'nowrap', flexShrink: 0,
+                            }}>
+                            {allBought
+                              ? '✓ ' + (t('concerts.ticketsBoughtShort') || 'Mam')
+                              : '🎟 ' + (t('concerts.ticketsMark') || 'Kupię/mam')}
                           </button>
                           <span style={{...MONO, fontSize: 14, color: C.dim, marginLeft: 6}}>
                             {isOpen ? '▲' : '▼'}
