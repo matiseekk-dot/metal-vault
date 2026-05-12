@@ -319,7 +319,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   // the API path errors out (e.g. column not yet migrated) — keeps
   // the picker usable for users who haven't applied migration 042.
   const setHeadliner = async (festivalKey, concertId, groupItems = []) => {
-    // 1. Compute the new attended-flag state for every row in the group.
+    // 1. Compute the new is_headliner state for every row in the group.
     //    Target row: is_headliner = (concertId !== null && c.id === concertId)
     //    Other rows: is_headliner = false (clears any stale picks)
     const next = concerts.map(c => {
@@ -329,23 +329,29 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
       return { ...c, is_headliner: shouldBeHead };
     });
     save(next);
-    // 2. Sync the changed rows to Supabase. We only push rows whose
-    //    is_headliner just flipped to avoid noise.
+    // 2. ALWAYS persist to the legacyHeadlinerPicks LS map as a
+    //    belt-and-braces fallback. syncConcert catches its own errors
+    //    (so our try/catch here never fires), which meant earlier
+    //    versions wrote the LS map only in a catch that never ran —
+    //    when migration 042 wasn't applied the pick silently vanished
+    //    on next page load. The render path prefers row.is_headliner
+    //    over the LS map, so once the column exists the LS write is
+    //    cosmetic — until then it keeps the pick visible.
+    const lsMap = loadLS('mv-headliner-picks', {});
+    if (concertId == null) delete lsMap[festivalKey];
+    else lsMap[festivalKey] = concertId;
+    saveLS('mv-headliner-picks', lsMap);
+    // 3. Sync the changed rows to Supabase. We only push rows whose
+    //    is_headliner just flipped to avoid noise. syncConcert handles
+    //    its own toasting + queue-pending; our try/catch is purely
+    //    defensive (it never actually fires in the current contract).
     const touched = next.filter(c =>
       groupItems.some(g => g.id === c.id) &&
       c.is_headliner !== (concerts.find(cc => cc.id === c.id)?.is_headliner)
     );
     try {
       await Promise.all(touched.map(c => syncConcert(c)));
-    } catch {
-      // syncConcert handles its own error toasting + queue-pending.
-      // Belt-and-braces: also drop a legacy LS pick so the user has
-      // SOME headliner record if the column doesn't exist yet.
-      const lsMap = loadLS('mv-headliner-picks', {});
-      if (concertId == null) delete lsMap[festivalKey];
-      else lsMap[festivalKey] = concertId;
-      saveLS('mv-headliner-picks', lsMap);
-    }
+    } catch {}
   };
   // Legacy localStorage map — kept as a fallback when the row's
   // is_headliner is unavailable (column not migrated, stale cache).
@@ -521,19 +527,22 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(item),
       });
       if (res.status === 401 || res.ok) return;
-      // Graceful fallback: if the server rejects because migration 040
-      // hasn't been applied yet ("attended" column missing), retry the
-      // upsert WITHOUT the attended field. The user still gets the rest
-      // of their edit synced; attended-toggle persistence is degraded
-      // to LS-only until they run the SQL. This avoids the scary red
-      // "sync nieudany" toast on every per-band ✓/✗ click.
+      // Graceful fallback: if the server rejects because a newly-added
+      // column doesn't exist yet (user didn't apply migration 040 /
+      // 042), retry the upsert with the missing field(s) stripped. The
+      // rest of the row still syncs; the missing flag falls back to
+      // LS-only persistence until the SQL is applied. Avoids the scary
+      // red "sync nieudany" toast on every ✓/⭐ click.
       let errBody = '';
       try { errBody = await res.text(); } catch {}
-      const looksLikeAttendedMissing = /attended/i.test(errBody) &&
+      const isMissing = (col) =>
+        new RegExp(col, 'i').test(errBody) &&
         /column|does not exist|nie\s*istnieje|undefined/i.test(errBody);
-      if (looksLikeAttendedMissing && 'attended' in item) {
-        const stripped = { ...item };
-        delete stripped.attended;
+      const stripped = { ...item };
+      let strippedAny = false;
+      if (isMissing('attended')     && 'attended'     in stripped) { delete stripped.attended;     strippedAny = true; }
+      if (isMissing('is_headliner') && 'is_headliner' in stripped) { delete stripped.is_headliner; strippedAny = true; }
+      if (strippedAny) {
         try {
           const res2 = await fetch('/api/user-concerts', {
             method:'POST', headers:{'Content-Type':'application/json'},
