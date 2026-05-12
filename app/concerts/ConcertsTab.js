@@ -295,7 +295,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
     let alive = true;
     (async () => {
       try {
-        const r = await fetch('/api/concerts/schema-check');
+        const r = await fetch('/api/concerts/schema-check?t=' + Date.now(), { cache: 'no-store' });
         if (!alive || !r.ok) return;
         setSchemaStatus(await r.json());
       } catch {}
@@ -1331,11 +1331,29 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               const r = await fetch('/api/concerts/mark-all-unattended', { method: 'POST' });
               const d = await r.json().catch(() => ({}));
               if (!r.ok) { toast.error(d.error || 'Failed'); return; }
-              toast.success(
-                (t('concerts.unmarkAllDone', { n: d.updated || 0 })
-                  || ('Odznaczono ' + (d.updated || 0) + ' wpisów — oznaczaj ✓ kogo widziałeś')),
-                { duration: 7000 }
-              );
+              // Three outcomes — show each one clearly so the user
+              // knows whether the operation did nothing because it
+              // had nothing to do, or because something is broken.
+              const upd = d.updated || 0;
+              const totalLfm = d.total_lfm_rows || 0;
+              const alreadyOff = d.already_unmarked || 0;
+              if (upd === 0) {
+                if (totalLfm === 0) {
+                  toast('Nie masz jeszcze koncertów z Last.fm — kliknij 📻 najpierw',
+                    { duration: 7000 });
+                } else if (alreadyOff === totalLfm) {
+                  toast.success('Wszystkie ' + totalLfm + ' wpisów już odznaczone — oznacz ✓ kogo widziałeś',
+                    { duration: 7000 });
+                } else {
+                  toast('Nic do odznaczenia — sprawdź czy migracja 040 zastosowana',
+                    { duration: 7000 });
+                }
+              } else {
+                toast.success(
+                  'Odznaczono ' + upd + ' z ' + totalLfm + ' wpisów — oznacz ✓ kogo widziałeś',
+                  { duration: 7000 }
+                );
+              }
               // Pull fresh state so UI reflects the flip immediately.
               try {
                 const r2 = await fetch('/api/user-concerts');
@@ -1893,7 +1911,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                 <button onClick={async () => {
                   // Re-probe so banner disappears after the user runs the SQL.
                   try {
-                    const r = await fetch('/api/concerts/schema-check');
+                    const r = await fetch('/api/concerts/schema-check?t=' + Date.now(), { cache: 'no-store' });
                     if (r.ok) setSchemaStatus(await r.json());
                   } catch {}
                 }} style={{
