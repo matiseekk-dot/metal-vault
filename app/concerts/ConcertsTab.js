@@ -334,7 +334,12 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
 
     (async () => {
       let r;
-      try { r = await fetch('/api/user-concerts'); } catch { return; }
+      // cache:'no-store' here is critical: the service worker would
+      // otherwise serve a pre-migration response (without the new
+      // `attended` field) every refresh, even after the user ran the
+      // 040 SQL on Supabase. UI then keeps showing ✓ because every
+      // c.attended is undefined → treated as truthy by the toggle.
+      try { r = await fetch('/api/user-concerts?t=' + Date.now(), { cache: 'no-store' }); } catch { return; }
       if (r.status === 401 || !r.ok) return;          // anon or transient — keep local
       let server;
       try { server = await r.json(); } catch { return; }
@@ -1134,7 +1139,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                 // Force a re-fetch of user concerts so the new rows
                 // surface in the list without a full page reload.
                 try {
-                  const r2 = await fetch('/api/user-concerts');
+                  const r2 = await fetch('/api/user-concerts?t=' + Date.now(), { cache: 'no-store' });
                   if (r2.ok) {
                     const j = await r2.json();
                     if (j.concerts) save(j.concerts);
@@ -1195,7 +1200,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               // Re-fetch local state immediately so the user sees the
               // wipe happen, then chain into the import.
               try {
-                const r2 = await fetch('/api/user-concerts');
+                const r2 = await fetch('/api/user-concerts?t=' + Date.now(), { cache: 'no-store' });
                 if (r2.ok) {
                   const j = await r2.json();
                   if (j.concerts) save(j.concerts);
@@ -1249,7 +1254,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                   { duration: 9000 }
                 );
                 // Pull fresh local state.
-                const r3 = await fetch('/api/user-concerts');
+                const r3 = await fetch('/api/user-concerts?t=' + Date.now(), { cache: 'no-store' });
                 if (r3.ok) {
                   const j = await r3.json();
                   if (j.concerts) save(j.concerts);
@@ -1299,7 +1304,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               }
               // Pull fresh state so the UI reflects the merge.
               try {
-                const r2 = await fetch('/api/user-concerts');
+                const r2 = await fetch('/api/user-concerts?t=' + Date.now(), { cache: 'no-store' });
                 if (r2.ok) {
                   const j = await r2.json();
                   if (j.concerts) save(j.concerts);
@@ -1354,9 +1359,24 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                   { duration: 7000 }
                 );
               }
-              // Pull fresh state so UI reflects the flip immediately.
+              // Optimistic local flip — bypasses any service-worker
+              // caching on /api/user-concerts. The server is now the
+              // truth (all LFM rows attended=false); we just sync our
+              // local mirror to match. Without this the UI keeps showing
+              // green ✓ because the mount-time GET response (made before
+              // the migration ran) sits in SW cache without the attended
+              // field, and the refetch returns the same stale body.
+              if (totalLfm > 0) {
+                const flipped = concerts.map(c =>
+                  c.note === 'Imported from Last.fm' ? { ...c, attended: false } : c
+                );
+                save(flipped);
+              }
+              // Cache-bust the authoritative refetch so picked-up
+              // server fields (median_price, computed columns) are
+              // current too.
               try {
-                const r2 = await fetch('/api/user-concerts');
+                const r2 = await fetch('/api/user-concerts?t=' + Date.now(), { cache: 'no-store' });
                 if (r2.ok) {
                   const j = await r2.json();
                   if (j.concerts) save(j.concerts);
@@ -1379,7 +1399,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
           <button onClick={async () => {
             toast(t('concerts.syncRefresh') || 'Pobieram z serwera…');
             try {
-              const r = await fetch('/api/user-concerts');
+              const r = await fetch('/api/user-concerts?t=' + Date.now(), { cache: 'no-store' });
               if (!r.ok) { toast.error('Sync failed'); return; }
               const j = await r.json();
               if (j.concerts) save(j.concerts);
