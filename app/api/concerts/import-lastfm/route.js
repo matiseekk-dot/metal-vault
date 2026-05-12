@@ -529,6 +529,15 @@ export async function POST() {
         note:      'Imported from Last.fm',
         is_planned:     isUpcoming,
         tickets_bought: false,
+        // Inverted attended-flag default for LFM imports: lineup rows
+        // come back with the FULL festival roster (often 100+ bands)
+        // but the user typically only saw a small subset. Default OFF
+        // so the user opts in per-band via the ✓ toggle — much less
+        // friction than un-ticking 80 of 90 acts at a major festival.
+        // Manual entries (via the +Dodaj koncert form) stay attended
+        // =true (the column default) since typing a band name in by
+        // hand is a deliberate "I saw this" action.
+        attended:       false,
         // ALWAYS store the full event date, not just for upcoming.
         // Migration 038 named the column planned_date but it accepts
         // any date — we re-use it as "exact event date" for every

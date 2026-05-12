@@ -1230,6 +1230,45 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               cursor: 'pointer', ...MONO, fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap'}}>
             🧹 {t('concerts.dedupBtn') || 'Scal'}
           </button>
+          {/* Odznacz wszystko — opt-in to the inverted attended logic.
+              Flips every LFM-imported row to attended=false in one shot
+              so the user can start from "saw nothing" and mark only
+              the bands they actually saw. Manual entries stay
+              attended=true. Useful for users who imported BEFORE the
+              importer started defaulting attended=false on new rows. */}
+          <button onClick={async () => {
+            const ok = await mvConfirm(
+              t('concerts.unmarkAllConfirm')
+                || 'Odznaczyć wszystkie zaimportowane koncerty? Następnie sam zaznaczysz ✓ na bandach których słuchałeś na żywo. Wpisy dodane ręcznie zostaną nietknięte.',
+              { kind: 'danger', confirmLabel: t('concerts.unmarkAllGo') || 'Odznacz wszystko' }
+            );
+            if (!ok) return;
+            toast(t('concerts.unmarkAllRunning') || 'Odznaczanie…');
+            try {
+              const r = await fetch('/api/concerts/mark-all-unattended', { method: 'POST' });
+              const d = await r.json().catch(() => ({}));
+              if (!r.ok) { toast.error(d.error || 'Failed'); return; }
+              toast.success(
+                (t('concerts.unmarkAllDone', { n: d.updated || 0 })
+                  || ('Odznaczono ' + (d.updated || 0) + ' wpisów — oznaczaj ✓ kogo widziałeś')),
+                { duration: 7000 }
+              );
+              // Pull fresh state so UI reflects the flip immediately.
+              try {
+                const r2 = await fetch('/api/user-concerts');
+                if (r2.ok) {
+                  const j = await r2.json();
+                  if (j.concerts) save(j.concerts);
+                }
+              } catch {}
+            } catch (e) { toast.error(e.message); }
+          }}
+            title={t('concerts.unmarkAllTitle') || 'Odznacz wszystko (oznaczę ✓ kogo widziałem)'}
+            style={{flexShrink:0, background: '#0a1a20', border: '1px solid #60a5fa44',
+              borderRadius: 10, color: '#60a5fa', padding: '12px 12px',
+              cursor: 'pointer', ...MONO, fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap'}}>
+            ☐ {t('concerts.unmarkAllBtn') || 'Odznacz'}
+          </button>
           {/* Force pull from server — pulls latest user_concerts +
               user_venues from the database without the import flow.
               Useful when the same user added concerts on another
@@ -1941,6 +1980,21 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                  // partial-attendance festivals.
                                  const total    = it.items.length;
                                  const attended = it.items.filter(c => c.attended !== false).length;
+                                 // Three states:
+                                 //   0/N    → "oznacz kogo widziałeś" (LFM
+                                 //              imports default-OFF; prompts
+                                 //              the user to mark per band)
+                                 //   X/N    → "X/N widziane" (partial)
+                                 //   N/N    → "N zespołów" (all marked,
+                                 //              effectively a manual entry
+                                 //              or older row without flag)
+                                 if (attended === 0 && total > 0) {
+                                   return (
+                                     <span style={{fontSize: 11, color: '#f5c842', ...MONO}}>
+                                       🎸 {total} · oznacz kogo widziałeś
+                                     </span>
+                                   );
+                                 }
                                  if (attended < total) {
                                    return (
                                      <span style={{fontSize: 11, color: '#4ade80', ...MONO}}>
