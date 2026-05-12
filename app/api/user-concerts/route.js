@@ -58,6 +58,15 @@ export async function GET() {
 
   // Reshape rows to the client-side format the UI already expects (id
   // instead of client_id, venueId instead of venue_id).
+  //
+  // CRITICAL: include `attended` here. Earlier version omitted it,
+  // which made every per-band ✓ toggle invisible after the next page
+  // refresh: PATCH wrote attended=true to the row, but this reshape
+  // dropped the field on the way back → client got c.attended ===
+  // undefined → predicate `c.attended === true` evaluated false →
+  // band looked unmarked even though the DB had it as true. User
+  // saw "I marked 30 bands and they all disappeared" because the
+  // PATCHes did land but the GET hid the result.
   return NextResponse.json({
     concerts: (concerts || []).map(c => ({
       id: c.client_id,
@@ -68,6 +77,11 @@ export async function GET() {
       rating: c.rating,
       price: c.price,
       note: c.note,
+      // Per-band "did I see this one live" flag (migration 040). The
+      // ?? false guards against pre-migration databases where the
+      // column is absent — defaults to unmarked, consistent with the
+      // inverted-attended UI default.
+      attended:       c.attended ?? false,
       // Planned-concert fields. Defensive defaults so the UI keeps
       // rendering past gigs unchanged when migration 038 hasn't been
       // applied yet (column simply absent → undefined → falsy).
