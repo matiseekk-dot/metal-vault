@@ -2202,6 +2202,33 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                            <div style={{marginTop: 12, paddingTop: 10,
                              borderTop: '1px solid ' + col + '33',
                              display: 'flex', flexDirection: 'column', gap: 6}}>
+                             {/* Discoverable Live-mode CTA right above the
+                                 band list. Tiny 🎸 icon button alone in the
+                                 row header doesn't telegraph what it does;
+                                 this wider chip with explicit label does.
+                                 Tap → fullscreen tile grid for tap-friendly
+                                 attendance marking. */}
+                             {it.items.length >= 4 && (
+                               <button onClick={(e) => {
+                                 e.stopPropagation();
+                                 setLiveFestival(it);
+                               }}
+                                 style={{
+                                   width: '100%',
+                                   background: 'linear-gradient(135deg,#0d1f0d 0%, #1a3d1a 100%)',
+                                   border: '1px solid #4ade8055',
+                                   borderRadius: 8,
+                                   color: '#4ade80',
+                                   padding: '10px 12px',
+                                   cursor: 'pointer',
+                                   ...MONO, fontSize: 11, letterSpacing: '0.06em',
+                                   display: 'flex', alignItems: 'center',
+                                   justifyContent: 'center', gap: 8,
+                                   marginBottom: 4,
+                                 }}>
+                                 🎸 {t('concerts.liveModeBtn') || 'Tryb live — oznacz kogo widziałeś'}
+                               </button>
+                             )}
                              {it.items.map((c, idx) => {
                                const seenN = bandSeenCount[(c.band || '').toLowerCase().trim()] || 1;
                                const isHead = idx === 0;
