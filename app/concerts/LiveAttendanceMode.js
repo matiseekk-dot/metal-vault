@@ -43,7 +43,7 @@ export default function LiveAttendanceMode({
   const [marks, setMarks] = useState(() => {
     const m = {};
     for (const it of (festival?.items || [])) {
-      m[it.id] = it.attended !== false;
+      m[it.id] = it.attended === true;
     }
     return m;
   });
@@ -56,7 +56,7 @@ export default function LiveAttendanceMode({
     setMarks(prev => {
       const next = { ...prev };
       for (const it of (festival?.items || [])) {
-        if (!(it.id in prev)) next[it.id] = it.attended !== false;
+        if (!(it.id in prev)) next[it.id] = it.attended === true;
       }
       return next;
     });
@@ -83,7 +83,7 @@ export default function LiveAttendanceMode({
   }, [festival, marks]);
 
   const flip = async (item) => {
-    const cur = marks[item.id] !== false;
+    const cur = marks[item.id] === true;
     const next = !cur;
     setMarks(m => ({ ...m, [item.id]: next }));
     haptic.tap?.();
@@ -145,7 +145,7 @@ export default function LiveAttendanceMode({
           gap: 10,
         }}>
           {sortedItems.map(it => {
-            const seen = marks[it.id] !== false;
+            const seen = marks[it.id] === true;
             const isHead = it.id === headlinerId;
             return (
               <button key={it.id}

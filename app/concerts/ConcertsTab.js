@@ -764,7 +764,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
       // explicitly toggled to attended=false (skipped at a multi-act
       // festival) are excluded so the badge reflects reality, not
       // the festival lineup's row count.
-      if (c.attended === false) continue;
+      if (c.attended !== true) continue;
       const k = (c.band || '').toLowerCase().trim();
       if (!k) continue;
       m[k] = (m[k] || 0) + 1;
@@ -2231,7 +2231,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                  // form is greener to draw attention to
                                  // partial-attendance festivals.
                                  const total    = it.items.length;
-                                 const attended = it.items.filter(c => c.attended !== false).length;
+                                 const attended = it.items.filter(c => c.attended === true).length;
                                  // Three states:
                                  //   0/N    → "oznacz kogo widziałeś" (LFM
                                  //              imports default-OFF; prompts
@@ -2384,7 +2384,7 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                // migration 040 (column has DEFAULT true so DB
                                // is consistent, but client-side LS may not
                                // have the field at all).
-                               const attended = c.attended !== false;
+                               const attended = c.attended === true;
                                // Toggle handler — optimistic + persist.
                                // Stop event bubbling so the row click (if
                                // any) doesn't fire too.

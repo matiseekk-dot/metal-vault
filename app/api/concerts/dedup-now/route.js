@@ -80,12 +80,12 @@ export async function POST() {
       : normaliseBandName(r.band) + '::y::' + (r.year || '') + '::' + venueNorm;
     const existing = survivors.get(k);
     if (!existing) {
-      survivors.set(k, { id: r.client_id, attended: r.attended !== false });
+      survivors.set(k, { id: r.client_id, attended: r.attended === true });
       continue;
     }
     toDelete.push(r.client_id);
     // OR-merge attended into the survivor.
-    if (r.attended !== false && !existing.attended) {
+    if (r.attended === true && !existing.attended) {
       existing.attended = true;
       toUpdate.set(existing.id, { attended: true });
     }
