@@ -446,6 +446,27 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(item),
       });
       if (res.status === 401 || res.ok) return;
+      // Graceful fallback: if the server rejects because migration 040
+      // hasn't been applied yet ("attended" column missing), retry the
+      // upsert WITHOUT the attended field. The user still gets the rest
+      // of their edit synced; attended-toggle persistence is degraded
+      // to LS-only until they run the SQL. This avoids the scary red
+      // "sync nieudany" toast on every per-band ✓/✗ click.
+      let errBody = '';
+      try { errBody = await res.text(); } catch {}
+      const looksLikeAttendedMissing = /attended/i.test(errBody) &&
+        /column|does not exist|nie\s*istnieje|undefined/i.test(errBody);
+      if (looksLikeAttendedMissing && 'attended' in item) {
+        const stripped = { ...item };
+        delete stripped.attended;
+        try {
+          const res2 = await fetch('/api/user-concerts', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(stripped),
+          });
+          if (res2.status === 401 || res2.ok) return;
+        } catch {}
+      }
       queuePending({ kind:'upsert', item });
       toast.error(t('concerts.syncFailedRetry'));
     } catch {

@@ -368,16 +368,35 @@ export async function POST() {
 
     const isFest = isFestivalEvent(ev);
 
+    // Title-extracted headliner — used both for the truncation
+    // heuristic below and the final prepend pass. Only computed for
+    // non-festival events (festival titles like "Wacken Open Air"
+    // aren't band names). When the extracted name is ONE word
+    // (Igorrr, Mayhem, Slayer, Behemoth), we trust it as a high-
+    // confidence band name; that drives an extra trip to the event
+    // detail page so the walker can fill in supports we missed.
+    // Multi-word titles ("Polish Satanist", "Sounds Of A Playground
+    // Fading") get the conservative empty-lineup-only treatment so
+    // we don't pollute the journal with album/tour names.
+    const titleHead = !isFest ? extractHeadlinerFromTitle(ev.title) : null;
+    const singleWordTitleHead = !!titleHead && /^\S+$/.test(String(titleHead).trim());
+    const titleHeadInLineup = titleHead && (ev.lineup || []).some(n =>
+      normaliseBandName(n) === normaliseBandName(titleHead));
+
     // Enrich lineup from event detail page. The events-listing
     // page only renders 3-5 performer names per row for layout
     // reasons; bigger gigs (festivals, multi-act tours) hide the
-    // rest behind a "+N more" link. We fetch the detail page when
-    // either the URL says /festival/ OR the visible lineup looks
-    // truncated for a non-festival (less than 2 acts on a row that
-    // also has a venue + city — strong hint there's more behind
-    // the "more" cutoff).
+    // rest behind a "+N more" link. We fetch the detail page when:
+    //   - the URL says /festival/, OR
+    //   - the visible lineup looks truncated for a non-festival
+    //     (≤1 acts on a row that also has a venue), OR
+    //   - the title clearly extracts to a single-word band that's
+    //     NOT in the lineup yet (the IGORRRR case: title="Igorrr",
+    //     lineup=[Dvne, Thoughtcrimes] — Igorrr is the actual
+    //     headliner but LFM's user-events cell only showed supports).
     const looksTruncated = isFest
-      || (Array.isArray(ev.lineup) && ev.lineup.length <= 1 && ev.venue);
+      || (Array.isArray(ev.lineup) && ev.lineup.length <= 1 && ev.venue)
+      || (singleWordTitleHead && !titleHeadInLineup && ev.venue);
     if (looksTruncated && ev.ticketsUrl) {
       lineups_attempted++;
       try {
@@ -419,23 +438,24 @@ export async function POST() {
 
     // Non-festival events: maybe prepend the title-extracted headliner.
     //
-    // ONLY prepend when the lineup is EMPTY (the original Katatonia bug
-    // — title = "Katatonia", lineup = "Agent Fresco, VOLA"; without
-    // prepend Katatonia is lost). When the lineup already has ≥1 band
-    // we TRUST the lineup cell — earlier broken titles like
-    // "Sounds Of A Playground Fading" (an In Flames album, not a band)
-    // or "Polish Satanist" (event promo title, not a band) ended up in
-    // the journal because we blindly prepended even when In Flames was
-    // already in the lineup cell.
-    //
-    // Threshold: lineup.length === 0 only. Single-band lineup that
-    // DOESN'T match the title-extracted headliner is fine — the cell
-    // probably has the right band already and the title is promo noise.
-    if (!isFest) {
-      const lineupLen = (ev.lineup || []).length;
-      if (lineupLen === 0) {
-        const headliner = extractHeadlinerFromTitle(ev.title);
-        if (headliner) ev.lineup = [headliner];
+    // Two-tier rule based on confidence the title is a real band:
+    //   HIGH (single word — Igorrr, Mayhem, Slayer): ALWAYS prepend
+    //     if not already in lineup. The walker above also gets a
+    //     chance to add it via the union; this is the last-resort
+    //     fallback in case the walker timed out or hit rate-limit.
+    //   LOW (multi-word — "Polish Satanist", "Sounds Of A Playground
+    //     Fading"): only prepend when lineup is EMPTY (Katatonia
+    //     case). Otherwise trust the LFM cell — multi-word titles
+    //     are too often album / tour / event names that shouldn't
+    //     land in the band journal.
+    if (!isFest && titleHead) {
+      const stillMissing = (ev.lineup || []).every(n =>
+        normaliseBandName(n) !== normaliseBandName(titleHead));
+      const lineupEmpty  = (ev.lineup || []).length === 0;
+      if (singleWordTitleHead && stillMissing) {
+        ev.lineup = [titleHead, ...(ev.lineup || [])];
+      } else if (lineupEmpty) {
+        ev.lineup = [titleHead];
       }
     }
     const venueNorm = normaliseVenueName(venueName);
