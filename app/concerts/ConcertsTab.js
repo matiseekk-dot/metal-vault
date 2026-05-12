@@ -729,8 +729,28 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   };
 
   // Stats
+  //
+  // Inverted-attended logic (commit 4dec409): rows count toward
+  // "I saw this band live" only when the user explicitly ticked ✓.
+  // LFM imports stamp attended=false; manual entries (typed in the
+  // +Dodaj koncert form) default attended=true.
+  //
+  // Pre-inversion bandMap counted every row including 100-band
+  // festival lineups the user hadn't curated — Behemoth showed as
+  // 8× live just because they imported 8 festivals where Behemoth
+  // was in the bill, even if the user only saw Behemoth at 2 of
+  // them. Ranking + stats were comically inflated.
+  //
+  // Now bandMap + concertsAttended both filter to attended=true.
+  // Per-row "Nx widziane" badge (bandSeenCount, computed above)
+  // also follows the same rule. Three counts, one source of truth.
   const bandMap = {};
-  concerts.forEach(c=>{bandMap[c.band]=(bandMap[c.band]||[]);bandMap[c.band].push(c);});
+  concerts.forEach(c=>{
+    if (c.attended !== true) return;
+    bandMap[c.band]=(bandMap[c.band]||[]);
+    bandMap[c.band].push(c);
+  });
+  const concertsAttended = concerts.filter(c => c.attended === true);
   // Cross-currency total: normalise every row to USD via fx rates,
   // then formatPrice() renders the sum in the user's chosen display
   // currency. Without this step, a PLN row got summed AS IF it were
@@ -865,7 +885,12 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
       {/* Stats strip */}
       <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,background:C.bg2}}>
         {[
-          {icon:'🎸',val:concerts.length,label:t('concerts.stats.shows')},
+          // "Shows" + "Bands" both count attended only — see the
+          // bandMap comment above for the rationale. Without this
+          // filter the stats inflated by ~10× for power users who
+          // imported deep festival history (every 100-band lineup
+          // counted toward the totals).
+          {icon:'🎸',val:concertsAttended.length,label:t('concerts.stats.shows')},
           {icon:'🏆',val:Object.keys(bandMap).length,label:t('concerts.stats.bands')},
           {icon:'🎟',val:totalSpent>0 ? formatPrice(totalSpent, cur, fx) : '—',label:t('concerts.stats.spent')},
         ].map(s=>(
