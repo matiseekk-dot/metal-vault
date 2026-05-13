@@ -2091,11 +2091,30 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
           </div>
         )}
 
-        {tab === 'list' && upcoming.length > 0 && (
+        {tab === 'list' && upcoming.length > 0 && (() => {
+          // Pre-compute the event count so the header reads "Nadchodzące
+          // (8 wydarzeń)" instead of "(15)" — counting bands when the
+          // user thinks in events was confusing. Same two-pass bucket
+          // logic the inner IIFE uses; we duplicate to keep the header
+          // independent of the render loop.
+          const _ub = new Map();
+          let _solo = 0;
+          for (const c of upcoming) {
+            const dk = c.planned_date;
+            if (!c.venueId || !dk) { _solo++; continue; }
+            const k = c.venueId + '::' + dk;
+            if (!_ub.has(k)) _ub.set(k, 0);
+            _ub.set(k, _ub.get(k) + 1);
+          }
+          let eventCount = _solo;
+          for (const cnt of _ub.values()) {
+            eventCount += cnt >= 2 ? 1 : cnt;
+          }
+          return (
           <div style={{marginBottom: 16}}>
             <div style={{fontSize: 10, color: '#60a5fa', ...MONO,
               letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8}}>
-              📅 {t('concerts.upcoming') || 'Nadchodzące'} ({upcoming.length})
+              📅 {t('concerts.upcoming') || 'Nadchodzące'} ({eventCount})
             </div>
             <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
               {(() => {
@@ -2185,11 +2204,24 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                   ? (t('concerts.bandCount.one') || 'zespół')
                                   : (t('concerts.bandCount.many') || 'zespołów')}
                               </span>
+                              {/* One ticket per event — flat "kupiony / brak"
+                                  language. Earlier "0/3 biletów" was
+                                  confusing because there's ONE ticket for
+                                  the whole multi-band show, not one per
+                                  band. Partial state (3/9 bands have
+                                  bought) is shown as "Częściowo" only
+                                  when the user toggled per-band in the
+                                  expanded view; the normal group-toggle
+                                  flips everything together. */}
                               <span style={{fontSize: 11, ...MONO,
-                                color: allBought ? '#4ade80' : '#f5c842'}}>
+                                color: allBought ? '#4ade80'
+                                  : boughtN > 0 ? '#f5c842'
+                                  : '#f87171'}}>
                                 {allBought
-                                  ? '🎟 ' + (t('concerts.ticketsBought') || 'Bilety kupione')
-                                  : '❓ ' + boughtN + '/' + items.length + ' biletów'}
+                                  ? '🎟 ' + (t('concerts.ticketsBought') || 'Bilet kupiony')
+                                  : boughtN > 0
+                                    ? '🎟 ' + (t('concerts.ticketsPartial') || ('Częściowo ' + boughtN + '/' + items.length))
+                                    : '❓ ' + (t('concerts.ticketsNotShort') || 'Brak biletu')}
                               </span>
                             </div>
                           </div>
@@ -2354,7 +2386,8 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
               })()}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Koncerty tab — single concerts AND festival aggregates
             interleaved. Festival rows (venue.cat === 'Festival') auto-

@@ -412,8 +412,14 @@ export async function POST() {
     if (looksTruncated && ev.ticketsUrl) {
       lineups_attempted++;
       try {
+        // maxPages 12 (was 6). User reported a festival showing 9 bands
+        // when the actual lineup is 90+ — 6 pages × ~8 bands/page wasn't
+        // enough depth for big festivals. 12 covers up to ~100 bands per
+        // event; for the rare 200+ Wacken-class lineup, re-clicking 📻
+        // is idempotent and dedup-aware so a second pass adds the long
+        // tail without duplicating rows.
         const full = await lastfmEventFullLineup(ev.ticketsUrl, {
-          timeoutMs: 6000, maxPages: 6,
+          timeoutMs: 6000, maxPages: 12,
         });
         // UNION not REPLACE — the user-events page cell sometimes
         // contains bands the /lineup walker doesn't see (Last.fm
@@ -441,35 +447,30 @@ export async function POST() {
       await new Promise(rr => setTimeout(rr, 200));
     }
 
-    // Non-festival events: maybe prepend the title-extracted headliner.
+    // Non-festival events: prepend the title-extracted headliner
+    // whenever it's missing from the final lineup. The earlier
+    // "walker succeeded so trust its silence" gate misfired on the
+    // Born of Osiris case — the event-page walker returned the same
+    // [Volumes, Veil of Maya, BCI] as the cell-parser (BoO wasn't
+    // listed there either, even though the title says "Born of
+    // Osiris"). Both surfaces missed the headliner; the title's the
+    // only place we know it.
     //
-    // Three-way decision tree:
-    //   1. Empty lineup → always prepend (Katatonia case from way back).
-    //   2. Single-word title-head (IGORRR, MAYHEM) → always prepend
-    //      regardless of walker state; these are high-confidence.
-    //   3. Multi-word title-head, walker NEVER SUCCEEDED
-    //      (didn't run, timed out, returned 0) → prepend as last-
-    //      resort fallback. Born of Osiris case: walker timed out for
-    //      old 2018-deprecated events, but the title carries the
-    //      headliner name. Accepts the occasional "Polish Satanist"
-    //      false positive — user can × delete those and the tombstone
-    //      keeps them away on re-import.
-    //   4. Multi-word title-head, walker SUCCEEDED but didn't include
-    //      this title-head → skip prepend. The walker had access to
-    //      the actual event page lineup and didn't list the title-
-    //      head as a band; trust that. Protects against
-    //      "Polish Satanist" / "Sounds Of A Playground Fading" /
-    //      tour-name garbage.
+    // Accepts the occasional "Polish Satanist"-style promo-as-band
+    // false positive (multi-word title that isn't really a band).
+    // extractHeadlinerFromTitle already filters tour / festival /
+    // live / open-air vocabulary, and 60-char-plus descriptions
+    // get rejected. What survives is band-shaped; if it's wrong,
+    // the user × deletes it once and the migration-039 tombstone
+    // keeps it away on every re-import.
+    //
+    // (walkerSucceeded is kept in scope for diag/future use even
+    // though the gate is gone.)
     if (!isFest && titleHead) {
       const stillMissing = (ev.lineup || []).every(n =>
         normaliseBandName(n) !== normaliseBandName(titleHead));
-      const lineupEmpty  = (ev.lineup || []).length === 0;
       if (stillMissing) {
-        if (lineupEmpty || singleWordTitleHead || !walkerSucceeded) {
-          ev.lineup = [titleHead, ...(ev.lineup || [])];
-        }
-        // else: multi-word title-head, walker fetched a real lineup
-        // and excluded this name → treat as promo title noise.
+        ev.lineup = [titleHead, ...(ev.lineup || [])];
       }
     }
     const venueNorm = normaliseVenueName(venueName);
