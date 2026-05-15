@@ -48,6 +48,13 @@ export default function LoginPage() {
   const [error,    setError]    = useState('');
   const [info,     setInfo]     = useState('');
   const [cooldown, setCooldown] = useState(0);
+  // OTP-code fallback for cross-device login. Magic-link clicks rely on
+  // PKCE which only works in the same browser that requested the email —
+  // so a user requesting on PC and clicking the link on phone (or vice
+  // versa) gets a "Sign-in failed" error. The 6-digit code from the email
+  // body works regardless of device: paste it here, hit Verify.
+  const [otpCode, setOtpCode]   = useState('');
+  const [verifying, setVerifying] = useState(false);
   const supabase = useRef(createClient()).current;
 
   // Surface contextual banners coming from the redirect:
@@ -104,6 +111,32 @@ export default function LoginPage() {
     await signInWithEmail();
   };
 
+  // Cross-device OTP verification. User pasted the 6-digit code from the
+  // email body — we exchange it for a session via Supabase's verifyOtp
+  // (type 'email' covers both magic-link OTP and email-confirmation OTP).
+  // Same end result as clicking the link, but no PKCE dependency on
+  // browser-of-origin.
+  const verifyCode = async () => {
+    const token = otpCode.trim().replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(token)) {
+      setError(plainT('login.error.codeFormat') || 'Wpisz 6-cyfrowy kod z maila');
+      return;
+    }
+    setVerifying(true); setError('');
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token,
+      type: 'email',
+    });
+    if (error) {
+      setVerifying(false);
+      setError(friendlyError(error.message));
+      return;
+    }
+    // Session is now set in cookies. Redirect to app root.
+    window.location.href = '/';
+  };
+
   return (
     <div style={{
       minHeight: '100vh', background: C.bg, display: 'flex',
@@ -147,6 +180,56 @@ export default function LoginPage() {
             </div>
             <div style={{ fontSize: 10, color: '#86efac', ...MONO, marginTop: 14, lineHeight: 1.6 }}>
               {t('login.checkEmailTip')}
+            </div>
+
+            {/* OTP code fallback — paste the 6-digit code from the email.
+                Useful when the magic link was opened on a different
+                device than where the email was requested (PKCE fails in
+                that case). The code works regardless of which browser
+                you're in. */}
+            <div style={{
+              marginTop: 18, padding: 14,
+              background: 'rgba(0,0,0,0.3)', border: '1px solid ' + C.border,
+              borderRadius: 8,
+            }}>
+              <div style={{ fontSize: 10, color: C.dim, ...MONO, marginBottom: 8,
+                letterSpacing: '0.06em' }}>
+                {plainT('login.otpHint') || 'Albo wpisz 6-cyfrowy kod z maila:'}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  value={otpCode}
+                  onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={e => e.key === 'Enter' && verifyCode()}
+                  placeholder="123456"
+                  style={{
+                    flex: 1, background: C.bg3, border: '1px solid ' + C.border,
+                    borderRadius: 6, color: C.text, padding: '10px 12px',
+                    fontSize: 18, letterSpacing: '0.3em', textAlign: 'center',
+                    ...MONO, outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={verifyCode}
+                  disabled={verifying || otpCode.length !== 6}
+                  style={{
+                    background: otpCode.length === 6 ? '#14532d' : C.bg3,
+                    border: '1px solid ' + (otpCode.length === 6 ? '#166534' : C.border),
+                    borderRadius: 6,
+                    color: otpCode.length === 6 ? '#86efac' : C.dim,
+                    padding: '10px 16px',
+                    cursor: otpCode.length === 6 && !verifying ? 'pointer' : 'default',
+                    ...BEBAS, fontSize: 14, letterSpacing: '0.06em',
+                    opacity: verifying ? 0.6 : 1,
+                  }}>
+                  {verifying ? '…' : (plainT('login.otpVerify') || 'Zaloguj')}
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
