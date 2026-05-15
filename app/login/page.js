@@ -164,7 +164,16 @@ export default function LoginPage() {
           </div>
         )}
 
-        {sent ? (
+        {/* Email magic-link path disabled for launch — Resend domain
+            verification was the blocker (sandbox can only send to the
+            Resend account owner email). Google sign-in covers >95% of
+            sign-ups on a metal-collector niche audience anyway; we
+            can re-enable email later by reverting this commit and
+            wiring SMTP through a verified domain. The `sent`/`email`
+            state + signInWithEmail/verifyCode handlers stay defined
+            but unreachable — keeps the file diff-small for a quick
+            revert. */}
+        {false && sent ? (
           /* Magic link sent */
           <div style={{
             background: '#001a00', border: '1px solid #166534',
@@ -285,38 +294,10 @@ export default function LoginPage() {
               {t('login.google')}
             </button>
 
-            {/* Divider */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flex: 1, height: 1, background: C.border }} />
-              <span style={{ fontSize: 10, color: C.dim, ...MONO }}>{t('login.or')}</span>
-              <div style={{ flex: 1, height: 1, background: C.border }} />
-            </div>
-
-            {/* Email magic link */}
-            <input
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder={t('login.emailPlaceholder')}
-              onKeyDown={e => e.key === 'Enter' && signInWithEmail()}
-              style={{
-                width: '100%', background: C.bg3, border: `1px solid ${C.border}`,
-                borderRadius: 8, color: C.text, padding: '13px 14px', fontSize: 16,
-                ...MONO, outline: 'none',
-              }}
-            />
-            <button onClick={signInWithEmail} disabled={loading}
-              style={{
-                width: '100%', padding: '14px',
-                background: `linear-gradient(135deg, ${C.accent}, #991b1b)`,
-                border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer',
-                ...BEBAS, fontSize: 18, letterSpacing: '0.1em',
-                opacity: loading ? 0.7 : 1,
-              }}>
-              {loading ? t('login.sending') : t('login.send')}
-            </button>
+            {/* Divider, email input + "Wyślij link" button removed for
+                launch — email magic-link path needs a verified Resend
+                domain which we'll wire post-launch. Google sign-in is
+                the only path users see right now. */}
 
             {error && (
               <div style={{ fontSize: 11, color: '#f87171', ...MONO, textAlign: 'center', lineHeight: 1.5 }}>
