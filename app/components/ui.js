@@ -149,21 +149,51 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
                 vinyl ships later". Saves to collection with
                 is_preordered=true so Vault surfaces a different badge. */}
             {isPreorder && onPreorder && (
-              <button onClick={e=>{e.stopPropagation();onPreorder(album);}}
+              <button
+                onClick={e=>{
+                  e.stopPropagation();
+                  e.preventDefault();
+                  console.log('[Preorder] click', album.id, album.artist, album.album);
+                  try { onPreorder(album); }
+                  catch (err) { console.error('[Preorder] onPreorder threw', err); }
+                }}
+                onTouchEnd={e=>{
+                  // Some mobile browsers swallow the click on small targets
+                  // inside a parent div with its own onClick — use touchEnd
+                  // as a safety net. e.stopPropagation prevents the card
+                  // tap-through to openAlbum.
+                  e.stopPropagation();
+                }}
                 title="Mark as pre-ordered"
+                aria-label="Mark as pre-ordered"
                 style={{background:'#00000099',border:'1px solid #f5c84266',
-                  borderRadius:6,cursor:'pointer',fontSize:14,padding:'2px 6px',
-                  color:'#f5c842',lineHeight:1,fontWeight:700}}>
+                  borderRadius:6,cursor:'pointer',fontSize:18,padding:'10px 12px',
+                  minWidth:44,minHeight:44,
+                  color:'#f5c842',lineHeight:1,fontWeight:700,
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  WebkitTapHighlightColor:'transparent'}}>
                 📦
               </button>
             )}
             {/* Quick add (+) — only shown if onQuickAdd provided */}
             {onQuickAdd && (
-              <button onClick={e=>{e.stopPropagation();onQuickAdd(album);}}
+              <button
+                onClick={e=>{
+                  e.stopPropagation();
+                  e.preventDefault();
+                  console.log('[QuickAdd] click', album.id, album.artist, album.album);
+                  try { onQuickAdd(album); }
+                  catch (err) { console.error('[QuickAdd] onQuickAdd threw', err); }
+                }}
+                onTouchEnd={e=>{ e.stopPropagation(); }}
                 title="Mark as owned"
+                aria-label="Mark as owned"
                 style={{background:'#00000099',border:'1px solid #22c55e66',
-                  borderRadius:6,cursor:'pointer',fontSize:14,padding:'2px 6px',
-                  color:'#22c55e',lineHeight:1,fontWeight:700}}>
+                  borderRadius:6,cursor:'pointer',fontSize:18,padding:'10px 12px',
+                  minWidth:44,minHeight:44,
+                  color:'#22c55e',lineHeight:1,fontWeight:700,
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  WebkitTapHighlightColor:'transparent'}}>
                 +
               </button>
             )}
