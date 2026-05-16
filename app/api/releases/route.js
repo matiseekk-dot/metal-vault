@@ -268,7 +268,11 @@ export async function GET(request) {
   const today    = new Date(todayStr);
   const curYear  = today.getFullYear();
   const nextYear = curYear + 1;
-  const recentFrom = new Date(today.getTime() - 180 * 24 * 60 * 60 * 1000)
+  // Feed window: 30 days back, unlimited forward. Vinyl preorder tracker —
+  // user cares about what's coming, recent releases get a short tail.
+  // Anything older than 30 days has presumably already shipped and is
+  // searchable via the catalog tab.
+  const recentFrom = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
     .toISOString().split('T')[0];
 
   try {

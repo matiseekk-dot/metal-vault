@@ -41,8 +41,13 @@ const METAL_TAGS = [
 ];
 
 const MB_CACHE_SECONDS = 30 * 60;       // 30min — was 6h
-const WINDOW_MONTHS    = 9;             // was 6 — Anthrax-style summer LPs announced in Q1 fall outside a 6-mo window
-const PER_ARTIST_LIMIT = 15;
+// Window: 30 days back, +3 years forward. "Effectively unlimited" forward —
+// no real vinyl is announced more than 2 years out. The wide forward window
+// catches Q3/Q4 LPs announced in Q1 (Anthrax case) and lets users see
+// far-out preorders for whales like Tool or Wintersun.
+const WINDOW_BACK_DAYS    = 30;
+const WINDOW_FORWARD_YEARS = 3;
+const PER_ARTIST_LIMIT = 25;            // bumped — artists like Anthrax have lots of comps/re-issues, real LP can hide
 const TAG_QUERY_LIMIT  = 100;
 const MAX_ARTISTS      = 100;           // cap parallel artist queries — MB tolerates this fine
                                         // (no auth, edge-cached, our 30min cache absorbs repeats)
@@ -101,11 +106,12 @@ function reshapeGroup(g, today) {
 
 export async function GET(request) {
   try {
-    // ── Window: today → +9 months ─────────────────────────────────
+    // ── Window: today - 30d  →  today + 3 years ──────────────────
     const today = new Date();
+    const past = new Date(today.getTime() - WINDOW_BACK_DAYS * 24 * 60 * 60 * 1000);
     const future = new Date();
-    future.setMonth(future.getMonth() + WINDOW_MONTHS);
-    const dateFilter = 'firstreleasedate:[' + toISO(today) + ' TO ' + toISO(future) + ']';
+    future.setFullYear(future.getFullYear() + WINDOW_FORWARD_YEARS);
+    const dateFilter = 'firstreleasedate:[' + toISO(past) + ' TO ' + toISO(future) + ']';
     const typeFilter = '(primarytype:Album OR primarytype:EP)';
 
     // ── Parse ?artists= param ─────────────────────────────────────
@@ -150,9 +156,9 @@ export async function GET(request) {
         seenMbid.add(g.id);
         const item = reshapeGroup(g, today);
         if (!item.artist || !item.album || !item.releaseDate) continue;
-        // Only keep items inside the window
+        // Only keep items inside the window (30d back → 3y forward)
         const rd = new Date(item.releaseDate);
-        if (rd < today || rd > future) continue;
+        if (rd < past || rd > future) continue;
         items.push(item);
         if (r.kind === 'tag') debug.tag++; else debug.artist++;
       }
@@ -169,7 +175,7 @@ export async function GET(request) {
         tagMatches:      debug.tag,
         perArtistMatches: debug.artist,
         artistsQueried:   followedArtists.length,
-        queryWindow:      toISO(today) + ' → ' + toISO(future),
+        queryWindow:      toISO(past) + ' → ' + toISO(future),
         errors:           debug.errors,
       },
     });

@@ -601,10 +601,20 @@ export default function MetalVault() {
       return true;
     })
     .filter(r => !search || r.artist.toLowerCase().includes(search.toLowerCase()) || r.album.toLowerCase().includes(search.toLowerCase()))
-    .filter(r => genreInterests.length===0
-      || genreInterests.includes(r.genre)
-      || (r.genres||[]).some(g => genreInterests.includes(g))
-      || (r.styles||[]).some(s => genreInterests.includes(s)))
+    .filter(r => {
+      // Follow-bypass: if user follows this artist explicitly, show the
+      // release regardless of genre tag. Fixes the case where MusicBrainz
+      // entries arrive untagged (fresh announcements) and the user has
+      // narrow genre interests selected — the band itself is the signal,
+      // not the tag.
+      if (col.followedArtists.some(a =>
+        (a.artist_name || '').toLowerCase() === (r.artist || '').toLowerCase()
+      )) return true;
+      return genreInterests.length===0
+        || genreInterests.includes(r.genre)
+        || (r.genres||[]).some(g => genreInterests.includes(g))
+        || (r.styles||[]).some(s => genreInterests.includes(s));
+    })
     .sort((a,b) => {
       if (sort==='date_desc') return new Date(b.releaseDate)-new Date(a.releaseDate);
       if (sort==='date_asc')  return new Date(a.releaseDate)-new Date(b.releaseDate);
