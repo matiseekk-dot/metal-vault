@@ -366,8 +366,15 @@ export default function MetalVault() {
   useEffect(() => {
     let cancelled = false;
     setFeedLoading(true); setFeedError('');
-    // Pass followed artists so Discogs API can include their upcoming releases
-    const artists = col.followedArtists.map(a => a.artist_name).filter(Boolean);
+    // Pass followed artists so Discogs API can include their upcoming releases.
+    // SORT ALPHABETICALLY so the MB per-request cache-budget (8 niecached per
+    // call) consumes artists in a deterministic order. Across multiple refreshes
+    // the same artists get warmed first → predictable for users, lets cron
+    // pre-warm work alongside live traffic.
+    const artists = col.followedArtists
+      .map(a => a.artist_name)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     const discogsUrl = artists.length > 0
       ? '/api/releases?artists=' + encodeURIComponent(artists.join(','))
       : '/api/releases';
