@@ -20,6 +20,9 @@ const COLLECTION_WRITABLE = [
   // The vinyl × concert bridge — points at a user_concerts.client_id
   // the user bought this record AT. Migration 041.
   'bought_at_concert_id',
+  // Pre-order flag — set TRUE when the user committed to buying but
+  // the record hasn't shipped/arrived yet. Migration 043.
+  'is_preordered',
 ];
 
 function filterWritable(body) {

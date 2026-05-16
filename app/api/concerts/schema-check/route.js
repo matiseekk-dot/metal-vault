@@ -46,6 +46,7 @@ export async function GET() {
   const attended            = await columnExists(admin, 'user_concerts',        'attended');
   const isHeadliner         = await columnExists(admin, 'user_concerts',        'is_headliner');
   const boughtAtConcertId   = await columnExists(admin, 'collection',           'bought_at_concert_id');
+  const isPreordered        = await columnExists(admin, 'collection',           'is_preordered');
   const concertExcludes     = await columnExists(admin, 'user_concert_excludes', 'exclude_key');
 
   return NextResponse.json({
@@ -53,6 +54,7 @@ export async function GET() {
       'user_concerts.attended':                  attended,
       'user_concerts.is_headliner':              isHeadliner,
       'collection.bought_at_concert_id':         boughtAtConcertId,
+      'collection.is_preordered':                isPreordered,
       'user_concert_excludes.exclude_key':       concertExcludes,
     },
     // Convenience aggregate: any missing column means the UI should
@@ -60,6 +62,7 @@ export async function GET() {
     needs_migration: attended === false
                   || isHeadliner === false
                   || boughtAtConcertId === false
+                  || isPreordered === false
                   || concertExcludes === false,
   });
 }

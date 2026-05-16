@@ -1596,6 +1596,7 @@ export function CollectionTab({
             {[
               ['all',       t('vault.filter.all')],
               ['for_sale',  t('vault.filter.forSale') || '💲 Na sprzedaż'],
+              ['preorder',  t('vault.filter.preorder') || '📦 W przedsprzedaży'],
               ['vinyl',     t('vault.filter.vinyl')],
               ['cd',        t('vault.filter.cd')],
               ['cassette',  t('vault.filter.cassette')],
@@ -1749,6 +1750,9 @@ export function CollectionTab({
                   // user is asking "show me what I'm currently selling".
                   // Mirrors the badge rendered on each card below.
                   if (vaultFilter === 'for_sale') return item.for_sale === true;
+                  // Pre-order filter — items the user committed to but
+                  // hasn't received yet (migration 043).
+                  if (vaultFilter === 'preorder') return item.is_preordered === true;
                   return true;
                 });
                 if (visibleItems.length === 0) return (
@@ -1812,6 +1816,23 @@ export function CollectionTab({
                               💲 {item.asking_price
                                   ? Number(item.asking_price).toFixed(0) + ' USD'
                                   : (t('forSale.listedShort') || 'LISTED')}
+                            </span>
+                          )}
+                          {/* 📦 PRE-ORDER badge — surfaces items the user
+                              committed to but haven't received yet.
+                              Migration 043 stamps is_preordered=true
+                              when user clicks 📦 button on a feed card.
+                              Date counter relies on item.year (or
+                              future enhancement: a separate
+                              release_date column). */}
+                          {item.is_preordered && (
+                            <span title={(t('vault.preorderTitle') || 'Pre-ordered — waiting for delivery') + (item.year ? ' · ' + item.year : '')}
+                              style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3,
+                                background: '#2a1a05', color: '#f5c842',
+                                border: '1px solid #f5c84266', ...MONO,
+                                letterSpacing: '0.05em' }}>
+                              📦 {t('vault.preorderShort') || 'PRE-ORDER'}
+                              {item.year && ' · ' + item.year}
                             </span>
                           )}
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>{formatPrice(paid, cur, fx)}</span>}
@@ -2023,6 +2044,48 @@ export function CollectionTab({
                             </button>
                           );
                         })()}
+
+                        {/* Pre-order → Delivered toggle. When the record
+                            actually arrives, user clicks "📬 Dostarczono"
+                            and is_preordered flips to false — item then
+                            behaves like any other owned vinyl (gain
+                            tracking re-engages, market price comparison,
+                            etc.). Only shown when row is_preordered. */}
+                        {item.is_preordered && (
+                          <button onClick={async () => {
+                            const optimistic = collection.map(c =>
+                              c.id === item.id ? { ...c, is_preordered: false } : c);
+                            onUpdate(optimistic);
+                            try {
+                              const r = await fetch('/api/collection?id=' + item.id, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ is_preordered: false }),
+                              });
+                              if (!r.ok) throw new Error('PATCH failed');
+                              const body = await r.json().catch(() => ({}));
+                              if (body && body.item) {
+                                const merged = collection.map(c =>
+                                  c.id === item.id ? { ...c, ...body.item } : c);
+                                onUpdate(merged);
+                              }
+                              haptic.success?.();
+                            } catch {
+                              const reverted = collection.map(c =>
+                                c.id === item.id ? { ...c, is_preordered: true } : c);
+                              onUpdate(reverted);
+                              toast.error(t('vault.preorderFlipFailed') || 'Save failed');
+                            }
+                          }} style={{
+                            width: '100%', marginBottom: 10, padding: '10px 12px',
+                            background: '#0d1a0d', border: '1px solid #4ade8055',
+                            borderRadius: 8, color: '#4ade80', cursor: 'pointer',
+                            ...MONO, fontSize: 11, fontWeight: 600,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          }}>
+                            📬 {t('vault.markDelivered') || 'Dostarczono — przenieś do kolekcji'}
+                          </button>
+                        )}
 
                         {/* Grade */}
                         <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>

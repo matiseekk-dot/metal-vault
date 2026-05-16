@@ -1979,6 +1979,9 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
           if (missing.includes('user_concerts.is_headliner')) {
             sqlBits.push("ALTER TABLE user_concerts\n  ADD COLUMN IF NOT EXISTS is_headliner boolean NOT NULL DEFAULT false;\nCREATE INDEX IF NOT EXISTS idx_user_concerts_headliner\n  ON user_concerts(user_id)\n  WHERE is_headliner = true;");
           }
+          if (missing.includes('collection.is_preordered')) {
+            sqlBits.push("ALTER TABLE collection\n  ADD COLUMN IF NOT EXISTS is_preordered boolean NOT NULL DEFAULT false;\nCREATE INDEX IF NOT EXISTS idx_collection_preordered\n  ON collection(user_id, year)\n  WHERE is_preordered = true;");
+          }
           if (missing.includes('collection.bought_at_concert_id')) {
             sqlBits.push("ALTER TABLE collection\n  ADD COLUMN IF NOT EXISTS bought_at_concert_id text;\nCREATE INDEX IF NOT EXISTS idx_collection_bought_at_concert\n  ON collection(user_id, bought_at_concert_id)\n  WHERE bought_at_concert_id IS NOT NULL;");
           }

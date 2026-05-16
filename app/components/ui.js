@@ -106,7 +106,7 @@ export function StatsBar({releases}){
 
 
 // ── AlbumCard ─────────────────────────────────────────────────
-export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,onFollowToggle,user,isInCollection,onQuickAdd}){
+export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFollowed,onFollowToggle,user,isInCollection,onQuickAdd,onPreorder}){
   const t = useT();
   const cur = useCurrency();
   const fx  = useFx();
@@ -144,6 +144,19 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
         {/* Watch / Quick-add — hidden when already owned */}
         {!owned && (
           <div style={{position:'absolute',top:4,right:4,display:'flex',gap:4}}>
+            {/* Pre-order (📦) — only for upcoming releases. Distinct
+                from "+" (owned-now) — pre-order means "I committed,
+                vinyl ships later". Saves to collection with
+                is_preordered=true so Vault surfaces a different badge. */}
+            {isPreorder && onPreorder && (
+              <button onClick={e=>{e.stopPropagation();onPreorder(album);}}
+                title="Mark as pre-ordered"
+                style={{background:'#00000099',border:'1px solid #f5c84266',
+                  borderRadius:6,cursor:'pointer',fontSize:14,padding:'2px 6px',
+                  color:'#f5c842',lineHeight:1,fontWeight:700}}>
+                📦
+              </button>
+            )}
             {/* Quick add (+) — only shown if onQuickAdd provided */}
             {onQuickAdd && (
               <button onClick={e=>{e.stopPropagation();onQuickAdd(album);}}
