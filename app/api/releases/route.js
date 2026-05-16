@@ -366,6 +366,63 @@ export async function GET(request) {
     const valid = detailed.filter(r => r && r.artist && r.album);
     if (!valid.length) throw new Error('No upcoming results');
 
+    // ── Layer 4: merge in MusicBrainz upcoming (next 6 months) ──
+    // User reported "Anthrax announced August release but it's not in
+    // the feed". Cause: Discogs indexes vinyl releases with year-level
+    // granularity and 1-2 weeks of catch-up lag after a label
+    // announcement. MusicBrainz (queried via /api/releases/metal-
+    // archives) tracks album announcements directly and catches them
+    // earlier. Cron-side notifications already use MB, but the live
+    // UI was Discogs-only — that gap is the bug.
+    //
+    // Strategy: union, dedup by (artist, album) lowercase. Discogs
+    // entries win on conflict because they have more metadata (cover,
+    // label, lowest_price, country). MB-only entries are appended.
+    let mbAdded = 0;
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
+      const r = await fetch(appUrl + '/api/releases/metal-archives', {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const seen2 = new Set(valid.map(v =>
+          (v.artist || '').toLowerCase().trim() + '::' + (v.album || '').toLowerCase().trim()
+        ));
+        for (const it of (j.items || [])) {
+          const key = (it.artist || '').toLowerCase().trim() + '::' + (it.album || '').toLowerCase().trim();
+          if (!key || seen2.has(key)) continue;
+          seen2.add(key);
+          // Reshape MB item into the same record-list contract Discogs
+          // entries use. Some fields (label, country, lowest_price) are
+          // empty — UI handles missing gracefully.
+          valid.push({
+            id:           it.id,
+            artist:       it.artist,
+            album:        it.album,
+            cover:        it.cover || null,
+            releaseDate:  it.releaseDate,
+            year:         it.releaseDate ? it.releaseDate.slice(0, 4) : '',
+            genre:        it.genre || 'Metal',
+            styles:       [],
+            format:       'Vinyl',
+            preorder:     !!it.preorder,
+            limited:      !!it.limited,
+            boxset:       false,
+            reissue:      false,
+            label:        '',
+            country:      '',
+            discogsUrl:   it.discogs_url || '',
+            lowest_price: 0,
+            spotifyUrl:   '',
+            source:       'musicbrainz',
+          });
+          mbAdded++;
+        }
+      }
+    } catch {}
+
     // Sort: upcoming soonest first, then recent newest first
     valid.sort((a, b) => {
       const aUp = a.preorder, bUp = b.preorder;
@@ -376,12 +433,13 @@ export async function GET(request) {
 
     return NextResponse.json({
       releases:  valid,
-      source:    'discogs',
+      source:    mbAdded > 0 ? 'discogs+musicbrainz' : 'discogs',
       count:     valid.length,
       upcoming:  valid.filter(r => r.preorder).length,
       recent:    valid.filter(r => !r.preorder).length,
       today:     todayStr,
-      cached:    globalCached,  // useful for debugging
+      cached:    globalCached,
+      mb_added:  mbAdded,        // how many entries the MB merge contributed
     });
 
   } catch (e) {
