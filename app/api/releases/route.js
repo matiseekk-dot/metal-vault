@@ -401,7 +401,10 @@ export async function GET(request) {
             : '');
       const r = await fetch(mbUrl, {
         cache: 'no-store',
-        signal: AbortSignal.timeout(8000),
+        // 15s — MB endpoint can take up to ~9s for 8 niecached queries
+        // (throttled at 1.1s/query). 8s timeout was aborting before the
+        // response arrived, losing all MB items.
+        signal: AbortSignal.timeout(15000),
       });
       if (r.ok) {
         const j = await r.json();

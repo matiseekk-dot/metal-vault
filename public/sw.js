@@ -1,7 +1,7 @@
 // ── Metal Vault Service Worker ────────────────────────────────
 // Auto-updates on every new deploy — no manual cache clearing needed.
 
-const VERSION    = 'mv-local-mp19-mb-throttle';  // bump this on every deploy
+const VERSION    = 'mv-local-mp20-mb-timeout';  // bump this on every deploy
 const CACHE_APP  = VERSION + '-app';
 const CACHE_DATA = VERSION + '-data';
 const CACHE_IMG  = VERSION + '-img';
