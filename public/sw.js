@@ -1,7 +1,7 @@
 // ── Metal Vault Service Worker ────────────────────────────────
 // Auto-updates on every new deploy — no manual cache clearing needed.
 
-const VERSION    = 'mv-local-mp14r1vi';  // bump this on every deploy
+const VERSION    = 'mv-local-mp16-mb-fresh';  // bump this on every deploy
 const CACHE_APP  = VERSION + '-app';
 const CACHE_DATA = VERSION + '-data';
 const CACHE_IMG  = VERSION + '-img';
@@ -12,7 +12,11 @@ const CACHE_API = [
   '/api/collection',
   '/api/watchlist',
   '/api/portfolio',
-  '/api/releases',
+  // NOTE: /api/releases intentionally EXCLUDED. Release announcements are
+  // time-sensitive — stale-while-revalidate caused the "Anthrax LP missing
+  // for hours after MB had it" bug. Server-side caching (Discogs + MB
+  // layers) already absorbs the load; we don't need a second cache layer
+  // hiding fresh data from users.
   '/api/artists',
   '/api/barcode',     // cache barcode lookups so re-scanning offline returns cached result
 ];

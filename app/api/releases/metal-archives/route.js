@@ -44,7 +44,8 @@ const MB_CACHE_SECONDS = 30 * 60;       // 30min — was 6h
 const WINDOW_MONTHS    = 9;             // was 6 — Anthrax-style summer LPs announced in Q1 fall outside a 6-mo window
 const PER_ARTIST_LIMIT = 15;
 const TAG_QUERY_LIMIT  = 100;
-const MAX_ARTISTS      = 30;            // cap parallel artist queries to stay polite to MB
+const MAX_ARTISTS      = 100;           // cap parallel artist queries — MB tolerates this fine
+                                        // (no auth, edge-cached, our 30min cache absorbs repeats)
 
 function toISO(d) { return d.toISOString().split('T')[0]; }
 

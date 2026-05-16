@@ -397,8 +397,14 @@ export default function MetalVault() {
     let dRel = [];
     let maRel = [];
 
+    // Cache-bust: Service Worker has historically served stale /api/releases
+    // copies after deploys (saw the "Anthrax LP in MB but missing from feed"
+    // case). Append millisecond timestamp + cache:'no-store' to force network.
+    const cb = '_t=' + Date.now();
+    const discogsUrlCb = discogsUrl + (discogsUrl.includes('?') ? '&' : '?') + cb;
+
     // Fire both in parallel, but render whichever arrives first.
-    const discogsP = fetch(discogsUrl)
+    const discogsP = fetch(discogsUrlCb, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : { releases: [] })
       .catch(() => ({ releases: [] }))
       .then(d => {
@@ -416,7 +422,8 @@ export default function MetalVault() {
     const maUrl = artists.length > 0
       ? '/api/releases/metal-archives?artists=' + encodeURIComponent(artists.join(','))
       : '/api/releases/metal-archives';
-    const maP = fetch(maUrl)
+    const maUrlCb = maUrl + (maUrl.includes('?') ? '&' : '?') + cb;
+    const maP = fetch(maUrlCb, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : { items: [] })
       .catch(() => ({ items: [] }))
       .then(ma => {

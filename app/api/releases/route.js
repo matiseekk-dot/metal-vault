@@ -251,9 +251,13 @@ async function getArtistSearches(artists, headers, sb, curYear, nextYear) {
 // ── Main handler ──────────────────────────────────────────────────────
 export async function GET(request) {
   const artistParam = new URL(request.url).searchParams.get('artists') || '';
-  const followedArtists = artistParam
-    ? artistParam.split(',').map(a => a.trim()).filter(Boolean).slice(0, 20)
+  // Used for Discogs per-artist queries (expensive, rate-limited) and to forward
+  // to MB. Discogs side keeps the 20-cap; MB side gets full list to maximize
+  // the per-artist hit-rate (cheap, parallel, no auth limit).
+  const followedArtistsFull = artistParam
+    ? artistParam.split(',').map(a => a.trim()).filter(Boolean)
     : [];
+  const followedArtists = followedArtistsFull.slice(0, 20);
 
   const token = auth();
   if (!token) return NextResponse.json({ releases: MOCK, source: 'mock' });
@@ -385,9 +389,11 @@ export async function GET(request) {
       // of tag coverage. Catches freshly announced LPs that haven't
       // been tagged `metal` yet (Anthrax-style "announced today, tagged
       // next week" gap).
+      // Pass FULL artist list to MB (not the 20-cap). MB queries are cheap
+      // and parallel — no reason to clip just because Discogs side has to.
       const mbUrl = appUrl + '/api/releases/metal-archives'
-        + (followedArtists.length
-            ? '?artists=' + encodeURIComponent(followedArtists.join(','))
+        + (followedArtistsFull.length
+            ? '?artists=' + encodeURIComponent(followedArtistsFull.join(','))
             : '');
       const r = await fetch(mbUrl, {
         cache: 'no-store',
