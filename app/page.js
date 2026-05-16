@@ -824,7 +824,27 @@ export default function MetalVault() {
             {!feedLoading && !feedError && (feedTab!=='following' || followedNames.size>0) && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, padding:'10px 16px 16px' }}>
                 {filtered.map(album=>(
-                  <AlbumCard key={album.id} album={album} isWatched={isWatched(album.id)} onWatchToggle={col.toggleWatch} onClick={()=>openAlbum(album)} vinylData={col.vinylCache[album.id]||null} isFollowed={isFollowed(album.artist)} onFollowToggle={col.toggleFollow} user={user} isInCollection={isInCollection(album.id)} onQuickAdd={a => col.addToCollection({ id:a.id, discogs_id:a.id, artist:a.artist, album:a.album, cover:a.cover, year:(a.releaseDate||'').slice(0,4) })} onPreorder={a => col.addToCollection({ id:a.id, discogs_id:a.id, artist:a.artist, album:a.album, cover:a.cover, year:(a.releaseDate||'').slice(0,4), is_preordered:true })}/>
+                  <AlbumCard key={album.id} album={album} isWatched={isWatched(album.id)} onWatchToggle={col.toggleWatch} onClick={()=>openAlbum(album)} vinylData={col.vinylCache[album.id]||null} isFollowed={isFollowed(album.artist)} onFollowToggle={col.toggleFollow} user={user} isInCollection={isInCollection(album.id)} onQuickAdd={a => {
+                  // MB IDs (mb_<uuid>) can't go into discogs_id (bigint).
+                  // Strip discogs_id when adding an MB item — artist+album
+                  // is still unique enough for the collection contract.
+                  const isMB = String(a.id || '').startsWith('mb_');
+                  col.addToCollection({
+                    id: a.id,
+                    ...(isMB ? {} : { discogs_id: a.id }),
+                    artist: a.artist, album: a.album, cover: a.cover,
+                    year: (a.releaseDate||'').slice(0,4),
+                  });
+                }} onPreorder={a => {
+                  const isMB = String(a.id || '').startsWith('mb_');
+                  col.addToCollection({
+                    id: a.id,
+                    ...(isMB ? {} : { discogs_id: a.id }),
+                    artist: a.artist, album: a.album, cover: a.cover,
+                    year: (a.releaseDate||'').slice(0,4),
+                    is_preordered: true,
+                  });
+                }}/>
                 ))}
               </div>
             )}
