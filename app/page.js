@@ -436,6 +436,10 @@ export default function MetalVault() {
           cover:        i.cover,
           releaseDate:  i.releaseDate,
           genre:        i.genre,
+          // Forward MB's rich tag list — UI filter falls back to these
+          // for narrow subgenre selections.
+          genres:       i.genres || [i.genre || 'Metal'],
+          styles:       i.styles || [i.genre || 'Metal'],
           preorder:     i.preorder,
           limited:      false,
           type:         i.type,
@@ -602,18 +606,32 @@ export default function MetalVault() {
     })
     .filter(r => !search || r.artist.toLowerCase().includes(search.toLowerCase()) || r.album.toLowerCase().includes(search.toLowerCase()))
     .filter(r => {
-      // Follow-bypass: if user follows this artist explicitly, show the
-      // release regardless of genre tag. Fixes the case where MusicBrainz
-      // entries arrive untagged (fresh announcements) and the user has
-      // narrow genre interests selected — the band itself is the signal,
-      // not the tag.
+      // No genre filter active → everything passes.
+      if (genreInterests.length === 0) return true;
+
+      // Universal pass-through #1: bare "Metal" is the umbrella tag. The
+      // entire app is metal-only, so anything tagged generically "Metal"
+      // (without a subgenre) gets shown regardless of subgenre filter.
+      // Otherwise fresh MB announcements — which arrive without subgenre
+      // tags — would silently disappear for every user with any subgenre
+      // selected. Better to over-surface umbrella items than hide
+      // legitimate releases waiting for community tagging.
+      const allTags = [
+        r.genre,
+        ...(r.genres || []),
+        ...(r.styles || []),
+      ].filter(Boolean).map(g => String(g).toLowerCase());
+      if (allTags.includes('metal')) return true;
+
+      // Universal pass-through #2: user follows the artist. Explicit
+      // follow is a stronger signal than the genre filter.
       if (col.followedArtists.some(a =>
         (a.artist_name || '').toLowerCase() === (r.artist || '').toLowerCase()
       )) return true;
-      return genreInterests.length===0
-        || genreInterests.includes(r.genre)
-        || (r.genres||[]).some(g => genreInterests.includes(g))
-        || (r.styles||[]).some(s => genreInterests.includes(s));
+
+      // Normal genre matching — any tag intersects user's selection.
+      const selectedLower = genreInterests.map(g => g.toLowerCase());
+      return allTags.some(t => selectedLower.includes(t));
     })
     .sort((a,b) => {
       if (sort==='date_desc') return new Date(b.releaseDate)-new Date(a.releaseDate);

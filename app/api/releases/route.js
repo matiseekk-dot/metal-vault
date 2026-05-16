@@ -423,7 +423,10 @@ export async function GET(request) {
             releaseDate:  it.releaseDate,
             year:         it.releaseDate ? it.releaseDate.slice(0, 4) : '',
             genre:        it.genre || 'Metal',
-            styles:       [],
+            // Forward MB's rich genre tag list — without these, narrow
+            // subgenre filters silently drop MB items.
+            genres:       it.genres || ['Metal'],
+            styles:       it.styles || ['Metal'],
             format:       'Vinyl',
             preorder:     !!it.preorder,
             limited:      !!it.limited,

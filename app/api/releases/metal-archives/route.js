@@ -78,14 +78,27 @@ async function mbFetchGroups(query, limit) {
   }
 }
 
+// Normalize "thrash-metal" → "Thrash Metal" for UI display.
+function prettyTag(t) {
+  return String(t).replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function reshapeGroup(g, today) {
   const mbid       = g.id;
   const artists    = (g['artist-credit'] || []).map(a => a.name || a.artist?.name).filter(Boolean);
   const artistName = artists.join(', ') || 'Unknown';
   const releaseDate = g['first-release-date'] || null;
   const tagNames   = (g.tags || []).map(t => t.name);
-  const primaryTag = tagNames.find(t => METAL_TAGS.includes(t)) || tagNames[0] || 'metal';
-  const cover      = 'https://coverartarchive.org/release-group/' + mbid + '/front-250';
+  // Build a rich tag list:
+  //  - every metal-family tag MB has on this release-group
+  //  - plus "Metal" umbrella (always — keeps subgenre-filtered users seeing
+  //    untagged releases, which is the whole point of being a metal-only app)
+  const metalSubTags = tagNames.filter(t => METAL_TAGS.includes(t));
+  const allMetalTags = ['metal', ...metalSubTags];
+  const uniqueTags   = Array.from(new Set(allMetalTags));
+  const prettyTags   = uniqueTags.map(prettyTag);
+  const primaryTag   = metalSubTags[0] || tagNames[0] || 'metal';
+  const cover        = 'https://coverartarchive.org/release-group/' + mbid + '/front-250';
 
   return {
     id:             'mb_' + mbid,
@@ -96,7 +109,13 @@ function reshapeGroup(g, today) {
     cover,
     releaseDate,
     releaseDateRaw: releaseDate,
-    genre:          primaryTag.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    genre:          prettyTag(primaryTag),
+    // Genres array lets the UI filter match on EITHER the primary tag
+    // OR the umbrella "Metal" OR any subgenre MB has on the release.
+    // Critical for users with narrow subgenre filters — without this,
+    // a "Death Metal" filter would drop releases tagged just "metal".
+    genres:         prettyTags,
+    styles:         prettyTags,
     preorder:       releaseDate ? new Date(releaseDate) > today : true,
     limited:        false,
     type:           g['primary-type'] || 'Album',
