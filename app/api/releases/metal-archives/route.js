@@ -45,6 +45,55 @@ const PER_ARTIST_LIMIT     = 25;
 const TAG_QUERY_LIMIT      = 100;
 const MAX_ARTISTS          = 100;
 
+// Popular metal artists — hardcoded baseline so the "All Metal" feed
+// has guaranteed coverage of major bands even before any user follows
+// them, and even when MB hasn't tagged a release yet. Cron warms these
+// nightly into the global cache; live endpoint unions them in.
+// Curated for relevance to the vinyl-collecting metal community.
+const POPULAR_METAL_ARTISTS = [
+  // Big 4 thrash + classic
+  'Metallica', 'Megadeth', 'Slayer', 'Anthrax', 'Iron Maiden', 'Judas Priest',
+  'Black Sabbath', 'Motörhead', 'Pantera', 'Sepultura', 'Testament', 'Exodus',
+  'Overkill', 'Kreator', 'Destruction', 'Sodom', 'Death Angel',
+  // Death metal classics + active
+  'Death', 'Morbid Angel', 'Cannibal Corpse', 'Deicide', 'Obituary', 'Suffocation',
+  'Immolation', 'Nile', 'Behemoth', 'Vader', 'Decapitated', 'Bloodbath',
+  'At the Gates', 'In Flames', 'Dark Tranquillity', 'Arch Enemy', 'Amon Amarth',
+  'Children of Bodom', 'Carcass', 'Entombed', 'Dismember', 'Bolt Thrower',
+  'Gojira', 'Cattle Decapitation', 'Tomb Mold', 'Blood Incantation',
+  // Black metal
+  'Mayhem', 'Burzum', 'Darkthrone', 'Emperor', 'Immortal', 'Marduk',
+  'Dimmu Borgir', 'Cradle of Filth', 'Watain', 'Mgła', 'Batushka',
+  'Behexen', 'Taake', 'Enslaved', 'Wolves in the Throne Room',
+  'Spectral Wound', 'Krallice',
+  // Doom / sludge / stoner
+  'Candlemass', 'Electric Wizard', 'Sleep', 'Saint Vitus', 'Yob',
+  'Pallbearer', 'Bell Witch', 'Mastodon', 'Baroness', 'High on Fire',
+  'Sleep', 'Boris', 'Conan',
+  // Progressive / power
+  'Tool', 'Opeth', 'Dream Theater', 'Mastodon', 'Devin Townsend',
+  'Between the Buried and Me', 'Leprous', 'Haken', 'Voivod',
+  'Blind Guardian', 'Helloween', 'Stratovarius', 'Symphony X', 'Kamelot',
+  'Sonata Arctica', 'Wintersun', 'Nightwish', 'Epica',
+  // Modern / metalcore / deathcore
+  'Lamb of God', 'Killswitch Engage', 'Trivium', 'Architects',
+  'Parkway Drive', 'August Burns Red', 'Whitechapel', 'Suicide Silence',
+  'Lorna Shore', 'Thy Art Is Murder', 'Born of Osiris', 'Veil of Maya',
+  'After the Burial', 'Periphery', 'Meshuggah', 'Animals as Leaders',
+  'Bring Me the Horizon', 'Spiritbox', 'Sleep Token',
+  // Folk / viking
+  'Ensiferum', 'Eluveitie', 'Korpiklaani', 'Finntroll', 'Moonsorrow',
+  'Tyr', 'Heilung',
+  // Polish scene (app's main audience)
+  'Vader', 'Behemoth', 'Decapitated', 'Mgła', 'Batushka', 'Furia',
+  'Riverside', 'Mastodon', 'Hate', 'Vesania',
+  // Recent buzz / underground darlings
+  'Sumac', 'Cult of Luna', 'Russian Circles', 'Pelican', 'ISIS',
+  'Neurosis', 'Converge', 'Dillinger Escape Plan',
+  'Ghost', 'Power Trip', 'Knocked Loose', 'Code Orange',
+  'Fit for an Autopsy', 'Frozen Soul',
+];
+
 // Cache TTLs
 const TAG_CACHE_MS    = 60 * 60 * 1000;          // 1h — tag query
 const ARTIST_CACHE_MS = 24 * 60 * 60 * 1000;     // 24h — per-artist
@@ -53,7 +102,10 @@ const ARTIST_CACHE_MS = 24 * 60 * 60 * 1000;     // 24h — per-artist
 // can do at most ~8 niecached queries; we cap at 5 to leave slack
 // for the tag query + JSON marshaling.
 const RL_DELAY_MS         = 1100;
-const NICACHED_BUDGET     = 8;          // 8 * 1.1s = 8.8s, fits under maxDuration=30
+// 15 = enough for: 1 tag query + ~8 popular-list batches + ~3 followed
+// batches + 3 budget margin. Worst-case ~17s with throttling, still
+// under maxDuration=30. Subsequent requests hit cache → <500ms.
+const NICACHED_BUDGET     = 15;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -144,36 +196,115 @@ function reshapeGroup(g) {
   };
 }
 
-// ── Per-artist fetch with Supabase cache (24h) ───────────────────
-async function getArtistItems(sb, artist, dateFilter, typeFilter, rlState) {
-  const key = 'mb:artist:' + artist.toLowerCase().replace(/\s+/g, '_');
+// ── Batched per-artist fetch ─────────────────────────────────────
+// Instead of one MB query per artist (budget-limited), pack 20 artists
+// into a single Lucene OR query: (artist:"A1" OR artist:"A2" OR ...).
+// 57 followed artists → 3 batched queries → ~3.5s total. All hit.
+//
+// Per-artist Supabase cache (24h) is still maintained — we split the
+// batched result back to individual artists by name match. Cached
+// artists are skipped, so a warm user pays zero MB cost.
+async function getBatchedArtistItems(sb, artists, dateFilter, typeFilter, rlState) {
+  // 1. Partition: cache hits vs misses.
+  const cachedItems = [];
+  const niecached = [];
+  await Promise.all(artists.map(async (artist) => {
+    const key = 'mb:artist:' + artist.toLowerCase().replace(/\s+/g, '_');
+    const cached = await cacheRead(sb, key, ARTIST_CACHE_MS);
+    if (cached) {
+      cachedItems.push(...cached);
+    } else {
+      niecached.push(artist);
+    }
+  }));
 
-  // Try cache first — independent of rate-limit budget.
-  const cached = await cacheRead(sb, key, ARTIST_CACHE_MS);
-  if (cached) return { items: cached, cached: true };
-
-  // Niecached → check per-request budget.
-  if (rlState.budget <= 0) {
-    return { items: [], cached: false, skipped: true };
+  // 2. Batch niecached into groups of BATCH_SIZE and fire one MB query per batch.
+  const BATCH_SIZE = 20;
+  const batches = [];
+  for (let i = 0; i < niecached.length; i += BATCH_SIZE) {
+    batches.push(niecached.slice(i, i + BATCH_SIZE));
   }
-  rlState.budget--;
 
-  // Throttle: enforce 1.1s gap between MB hits within this request.
-  const now = Date.now();
-  const wait = Math.max(0, rlState.nextOkAt - now);
-  if (wait > 0) await sleep(wait);
-  rlState.nextOkAt = Date.now() + RL_DELAY_MS;
+  let freshItems = [];
+  let batchErrors = 0;
+  let batchesProcessed = 0;
+  let artistsProcessed = 0;
+  for (const batch of batches) {
+    if (rlState.budget <= 0) break;
+    rlState.budget--;
+    batchesProcessed++;
+    artistsProcessed += batch.length;
 
-  const q = 'artist:' + escArtist(artist) + ' AND ' + dateFilter + ' AND ' + typeFilter;
-  const res = await mbRawFetch(q, PER_ARTIST_LIMIT);
-  if (!res.ok) {
-    // Don't poison cache on transient errors — let next request retry.
-    return { items: [], cached: false, error: res.status };
+    // Throttle to MB's 1 req/sec
+    const now = Date.now();
+    const wait = Math.max(0, rlState.nextOkAt - now);
+    if (wait > 0) await sleep(wait);
+    rlState.nextOkAt = Date.now() + RL_DELAY_MS;
+
+    const orList = batch.map(a => 'artist:' + escArtist(a)).join(' OR ');
+    const q = '(' + orList + ') AND ' + dateFilter + ' AND ' + typeFilter;
+    // Limit scales with batch size — 20 artists * ~5 LPs each = ~100 max.
+    const limit = Math.min(100, batch.length * 8);
+    const res = await mbRawFetch(q, limit);
+    if (!res.ok) { batchErrors++; continue; }
+
+    const batchItems = res.groups
+      .map(reshapeGroup)
+      .filter(it => it.artist && it.album && it.releaseDate);
+    freshItems.push(...batchItems);
+
+    // 3. Split batch result back to per-artist cache.
+    // An item's `artist` field may be "Anthrax" or "Anthrax & Public Enemy"
+    // (collabs/credits). Match each batch artist by case-insensitive
+    // substring on the credit field.
+    for (const artist of batch) {
+      const artistLower = artist.toLowerCase();
+      const itemsForArtist = batchItems.filter(it =>
+        (it.artist || '').toLowerCase().includes(artistLower)
+      );
+      const key = 'mb:artist:' + artist.toLowerCase().replace(/\s+/g, '_');
+      // Persist even empty arrays — distinguishes "never queried" from
+      // "queried, MB has nothing" so we don't waste budget re-querying.
+      await cacheWrite(sb, key, itemsForArtist);
+    }
   }
 
-  const items = res.groups.map(reshapeGroup).filter(it => it.artist && it.album && it.releaseDate);
-  await cacheWrite(sb, key, items);
-  return { items, cached: false };
+  return {
+    items: [...cachedItems, ...freshItems],
+    cachedArtists: artists.length - niecached.length,
+    freshArtists: niecached.length - (batches.length > 0 && rlState.budget < 0 ? 0 : 0),
+    batchesFired: Math.min(batches.length, batches.length - batchErrors),
+    batchErrors,
+  };
+}
+
+// ── Scan ALL cached artists in Supabase ──────────────────────────
+// The global "All Metal" feed shows everything anyone has ever pre-
+// warmed: every followed artist of every user, plus every entry in
+// the hardcoded popular-artists list. Without this scan the feed
+// would only show tag-tagged MB items (very narrow) + the calling
+// user's followed artists (zero, if they didn't follow anyone).
+//
+// Anthrax / Megadeth / any major metal band lands here regardless
+// of who follows them — that's the user's expectation for "All Metal".
+async function getGlobalCachedArtistItems(sb) {
+  try {
+    const { data } = await sb
+      .from('discogs_cache')
+      .select('data, created_at')
+      .like('cache_key', 'mb:artist:%');
+    if (!data) return [];
+    const fresh = data.filter(row =>
+      Date.now() - new Date(row.created_at).getTime() < ARTIST_CACHE_MS
+    );
+    const all = [];
+    for (const row of fresh) {
+      if (Array.isArray(row.data)) all.push(...row.data);
+    }
+    return all;
+  } catch {
+    return [];
+  }
 }
 
 // ── Tag-based bulk fetch with 1h cache ───────────────────────────
@@ -217,27 +348,39 @@ export async function GET(request) {
     const sb = getAdminClient();
     const rlState = { budget: NICACHED_BUDGET, nextOkAt: 0 };
 
-    // 1. Tag-based bulk (cached 1h)
+    // 1. Tag-based bulk (cached 1h) — anything MB tagged metal.
     const tagRes = await getTagItems(sb, dateFilter, typeFilter, rlState);
 
-    // 2. Per-artist — all from cache OR small budget for fresh ones.
-    //    Sequential so we respect the rate-limit budget correctly.
-    let perArtistResults = [];
-    let cachedCount = 0;
-    let freshCount = 0;
-    let skippedCount = 0;
-    for (const artist of followedArtists) {
-      const r = await getArtistItems(sb, artist, dateFilter, typeFilter, rlState);
-      if (r.cached) cachedCount++;
-      else if (r.skipped) { skippedCount++; continue; }
-      else freshCount++;
-      perArtistResults.push(...r.items);
-    }
+    // 2. Popular metal artists — hardcoded baseline. Batched MB
+    //    queries cached 24h per artist. First call seeds the cache
+    //    (~5s for all ~150 artists across ~8 batches); subsequent
+    //    calls are instant. Means Anthrax/Megadeth/Slayer always
+    //    appear in "All Metal" — even for users following nobody,
+    //    even when MB hasn't tagged a release yet.
+    const popularRes = await getBatchedArtistItems(
+      sb, POPULAR_METAL_ARTISTS, dateFilter, typeFilter, rlState
+    );
 
-    // 3. Union + dedup by mbid, filter by window.
+    // 3. Global cached artists — every artist EVER pre-warmed by any
+    //    user's follow + cron. Pulled from Supabase, ~zero latency.
+    const globalCachedItems = await getGlobalCachedArtistItems(sb);
+
+    // 4. Caller's followed artists — batched MB queries with 24h cache.
+    //    Niecached → fired now; cached → instant.
+    const batchedRes = followedArtists.length > 0
+      ? await getBatchedArtistItems(sb, followedArtists, dateFilter, typeFilter, rlState)
+      : { items: [], cachedArtists: 0, freshArtists: 0, batchesFired: 0, batchErrors: 0 };
+    const perArtistResults = batchedRes.items;
+
+    // 5. Union + dedup by mbid, filter by window.
     const seen = new Set();
     const items = [];
-    for (const it of [...(tagRes.items || []), ...perArtistResults]) {
+    for (const it of [
+      ...(tagRes.items || []),
+      ...(popularRes.items || []),
+      ...globalCachedItems,
+      ...perArtistResults,
+    ]) {
       if (!it.mbid || seen.has(it.mbid)) continue;
       seen.add(it.mbid);
       const rd = new Date(it.releaseDate);
@@ -252,12 +395,17 @@ export async function GET(request) {
       count:  items.length,
       source: 'musicbrainz',
       debug: {
-        artistsQueried:     followedArtists.length,
-        artistsFromCache:   cachedCount,
-        artistsFreshFetched: freshCount,
-        artistsBudgetSkipped: skippedCount,  // niecached + budget exhausted; pre-warm via cron
-        tagFromCache:       !!tagRes.cached,
-        queryWindow:        toISO(past) + ' → ' + toISO(future),
+        artistsQueried:    followedArtists.length,
+        artistsFromCache:  batchedRes.cachedArtists,
+        artistsFresh:      batchedRes.freshArtists,
+        batchesFired:      batchedRes.batchesFired,
+        batchErrors:       batchedRes.batchErrors,
+        popularFromCache:  popularRes.cachedArtists,
+        popularFresh:      popularRes.freshArtists,
+        popularBatches:    popularRes.batchesFired,
+        globalCachedItems: globalCachedItems.length,
+        tagFromCache:      !!tagRes.cached,
+        queryWindow:       toISO(past) + ' → ' + toISO(future),
       },
     });
   } catch (e) {

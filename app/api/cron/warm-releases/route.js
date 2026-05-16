@@ -32,6 +32,43 @@ const RL_DELAY_MS = 1100;       // MB anon rate limit: 1 req/sec, +safety margin
 const PER_ARTIST_LIMIT = 25;
 const WARM_BUDGET_MS = 4 * 60 * 1000;  // 4min; rest of 5min cap for /api/releases warmup
 
+// Baseline popular metal artists — guaranteed coverage for "All Metal"
+// feed even if no user follows them yet. Curated for vinyl-collecting
+// audience. Same list as in /api/releases/metal-archives route.
+const POPULAR_METAL_ARTISTS = [
+  'Metallica', 'Megadeth', 'Slayer', 'Anthrax', 'Iron Maiden', 'Judas Priest',
+  'Black Sabbath', 'Motörhead', 'Pantera', 'Sepultura', 'Testament', 'Exodus',
+  'Overkill', 'Kreator', 'Destruction', 'Sodom', 'Death Angel',
+  'Death', 'Morbid Angel', 'Cannibal Corpse', 'Deicide', 'Obituary', 'Suffocation',
+  'Immolation', 'Nile', 'Behemoth', 'Vader', 'Decapitated', 'Bloodbath',
+  'At the Gates', 'In Flames', 'Dark Tranquillity', 'Arch Enemy', 'Amon Amarth',
+  'Children of Bodom', 'Carcass', 'Entombed', 'Dismember', 'Bolt Thrower',
+  'Gojira', 'Cattle Decapitation', 'Tomb Mold', 'Blood Incantation',
+  'Mayhem', 'Burzum', 'Darkthrone', 'Emperor', 'Immortal', 'Marduk',
+  'Dimmu Borgir', 'Cradle of Filth', 'Watain', 'Mgła', 'Batushka',
+  'Behexen', 'Taake', 'Enslaved', 'Wolves in the Throne Room',
+  'Spectral Wound', 'Krallice',
+  'Candlemass', 'Electric Wizard', 'Sleep', 'Saint Vitus', 'Yob',
+  'Pallbearer', 'Bell Witch', 'Mastodon', 'Baroness', 'High on Fire',
+  'Boris', 'Conan',
+  'Tool', 'Opeth', 'Dream Theater', 'Devin Townsend',
+  'Between the Buried and Me', 'Leprous', 'Haken', 'Voivod',
+  'Blind Guardian', 'Helloween', 'Stratovarius', 'Symphony X', 'Kamelot',
+  'Sonata Arctica', 'Wintersun', 'Nightwish', 'Epica',
+  'Lamb of God', 'Killswitch Engage', 'Trivium', 'Architects',
+  'Parkway Drive', 'August Burns Red', 'Whitechapel', 'Suicide Silence',
+  'Lorna Shore', 'Thy Art Is Murder', 'Born of Osiris', 'Veil of Maya',
+  'After the Burial', 'Periphery', 'Meshuggah', 'Animals as Leaders',
+  'Bring Me the Horizon', 'Spiritbox', 'Sleep Token',
+  'Ensiferum', 'Eluveitie', 'Korpiklaani', 'Finntroll', 'Moonsorrow',
+  'Tyr', 'Heilung',
+  'Furia', 'Riverside', 'Hate', 'Vesania',
+  'Sumac', 'Cult of Luna', 'Russian Circles', 'Pelican', 'ISIS',
+  'Neurosis', 'Converge', 'Dillinger Escape Plan',
+  'Ghost', 'Power Trip', 'Knocked Loose', 'Code Orange',
+  'Fit for an Autopsy', 'Frozen Soul',
+];
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function escArtist(name) {
@@ -96,10 +133,14 @@ async function warmPerArtistMB(startedAt) {
   const { data: follows } = await supabaseAdmin
     .from('artist_follows')
     .select('artist_name');
-  if (!follows) return { artistsWarmed: 0, error: 'no-follows-query' };
+  const followNames = follows
+    ? follows.map(f => (f.artist_name || '').trim()).filter(Boolean)
+    : [];
 
+  // Union with hardcoded popular list — guaranteed baseline coverage
+  // for the global "All Metal" feed. Dedup case-insensitively.
   const unique = Array.from(new Set(
-    follows.map(f => (f.artist_name || '').trim()).filter(Boolean)
+    [...followNames, ...POPULAR_METAL_ARTISTS].map(n => n.trim()).filter(Boolean)
   ));
 
   // Build window matching the live endpoint

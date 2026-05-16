@@ -401,10 +401,11 @@ export async function GET(request) {
             : '');
       const r = await fetch(mbUrl, {
         cache: 'no-store',
-        // 15s — MB endpoint can take up to ~9s for 8 niecached queries
-        // (throttled at 1.1s/query). 8s timeout was aborting before the
-        // response arrived, losing all MB items.
-        signal: AbortSignal.timeout(15000),
+        // 25s — MB endpoint cold-cache path: tag + ~8 popular batches +
+        // ~3 followed batches throttled at 1.1s each = ~13s worst-case.
+        // 25s leaves comfortable headroom. Once cache is warm, response
+        // returns in <500ms regardless.
+        signal: AbortSignal.timeout(25000),
       });
       if (r.ok) {
         const j = await r.json();
