@@ -411,7 +411,12 @@ export default function MetalVault() {
         setFeedLoading(false);
       });
 
-    const maP = fetch('/api/releases/metal-archives')
+    // MB merge also takes followed artists so per-artist queries fire
+    // (catches LPs not yet tagged `metal` in MB — Anthrax August LP case).
+    const maUrl = artists.length > 0
+      ? '/api/releases/metal-archives?artists=' + encodeURIComponent(artists.join(','))
+      : '/api/releases/metal-archives';
+    const maP = fetch(maUrl)
       .then(r => r.ok ? r.json() : { items: [] })
       .catch(() => ({ items: [] }))
       .then(ma => {

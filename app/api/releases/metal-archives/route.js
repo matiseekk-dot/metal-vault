@@ -1,9 +1,31 @@
 // ────────────────────────────────────────────────────────────────
 // Upcoming releases via MusicBrainz (open, no API key, allows cloud IPs).
 // Replaces Metal Archives (Cloudflare-blocked Vercel).
-// Endpoint: /release?query=primarytype:album AND tag:metal AND date:[NOW TO NOW+6MONTHS]
-// Covers via Cover Art Archive (https://coverartarchive.org/release-group/<mbid>/front-250)
 // Route is still /api/releases/metal-archives for backward compat.
+//
+// TWO QUERY MODES (results are unioned + de-duped by mbid):
+//
+//   1. Tag-based discovery (always runs):
+//      (tag:metal OR tag:black-metal OR ...) AND firstreleasedate:[today TO +9mo]
+//      AND (primarytype:Album OR primarytype:EP)
+//      Catches anything the crowd has tagged with a metal subgenre.
+//
+//   2. Per-artist lookup (when ?artists=Anthrax,Mayhem,... is provided):
+//      For each followed artist, fire:
+//        artist:"NAME" AND firstreleasedate:[today TO +9mo]
+//        AND (primarytype:Album OR primarytype:EP)
+//      Does NOT depend on tags — catches fresh announcements that
+//      haven't been tagged yet (root cause of the "Anthrax August LP
+//      missing from feed" bug: MB had the release-group but with no
+//      metal tag yet, so tag-mode missed it).
+//
+// Covers via Cover Art Archive
+//   (https://coverartarchive.org/release-group/<mbid>/front-250)
+//
+// Cache:
+//   Shortened from 6h → 30min. Fresh metal announcements are time-
+//   sensitive (we want them visible same-day), and MB's own infra
+//   already caches at the edge, so we're not hammering them.
 // ────────────────────────────────────────────────────────────────
 
 import { NextResponse } from 'next/server';
@@ -18,77 +40,136 @@ const METAL_TAGS = [
   'stoner-metal', 'folk-metal', 'melodic-death-metal', 'technical-death-metal',
 ];
 
+const MB_CACHE_SECONDS = 30 * 60;       // 30min — was 6h
+const WINDOW_MONTHS    = 9;             // was 6 — Anthrax-style summer LPs announced in Q1 fall outside a 6-mo window
+const PER_ARTIST_LIMIT = 15;
+const TAG_QUERY_LIMIT  = 100;
+const MAX_ARTISTS      = 30;            // cap parallel artist queries to stay polite to MB
+
 function toISO(d) { return d.toISOString().split('T')[0]; }
 
-export async function GET() {
+// MB Lucene escape — quote the value and escape any embedded quotes/backslashes
+function escArtist(name) {
+  return '"' + String(name).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
+// One MB release-group fetch returning the raw groups array (or []).
+async function mbFetchGroups(query, limit) {
+  const url = 'https://musicbrainz.org/ws/2/release-group/'
+    + '?query=' + encodeURIComponent(query)
+    + '&limit=' + limit
+    + '&offset=0&fmt=json';
   try {
-    // Window: today → +6 months. MB Lucene: date:[YYYY-MM-DD TO YYYY-MM-DD]
-    const today = new Date();
-    const future = new Date();
-    future.setMonth(future.getMonth() + 6);
-    // MB release-group uses `firstreleasedate` (no hyphen), not `date`
-    const dateFilter = 'firstreleasedate:[' + toISO(today) + ' TO ' + toISO(future) + ']';
-
-    // Query: metal tag + primary album/EP + upcoming window (status not valid for release-group)
-    const query = '(' + METAL_TAGS.map(t => 'tag:' + t).join(' OR ') + ')'
-      + ' AND ' + dateFilter
-      + ' AND (primarytype:Album OR primarytype:EP)';
-
-    const url = 'https://musicbrainz.org/ws/2/release-group/'
-      + '?query=' + encodeURIComponent(query)
-      + '&limit=100&offset=0&fmt=json';
-
     const r = await fetch(url, {
       headers: { 'User-Agent': UA, 'Accept': 'application/json' },
-      next: { revalidate: 60 * 60 * 6 }, // 6h cache
+      next: { revalidate: MB_CACHE_SECONDS },
     });
+    if (!r.ok) return { ok: false, status: r.status, groups: [] };
+    const data = await r.json();
+    return { ok: true, groups: data['release-groups'] || [], totalFound: data.count };
+  } catch (e) {
+    return { ok: false, status: 0, groups: [], error: e.message };
+  }
+}
 
-    if (!r.ok) {
-      return NextResponse.json({
-        items: [], error: 'MusicBrainz ' + r.status, count: 0,
-      });
+function reshapeGroup(g, today) {
+  const mbid       = g.id;
+  const artists    = (g['artist-credit'] || []).map(a => a.name || a.artist?.name).filter(Boolean);
+  const artistName = artists.join(', ') || 'Unknown';
+  const releaseDate = g['first-release-date'] || null;
+  const tagNames   = (g.tags || []).map(t => t.name);
+  const primaryTag = tagNames.find(t => METAL_TAGS.includes(t)) || tagNames[0] || 'metal';
+  const cover      = 'https://coverartarchive.org/release-group/' + mbid + '/front-250';
+
+  return {
+    id:             'mb_' + mbid,
+    mbid,
+    source:         'musicbrainz',
+    artist:         artistName,
+    album:          g.title || '',
+    cover,
+    releaseDate,
+    releaseDateRaw: releaseDate,
+    genre:          primaryTag.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    preorder:       releaseDate ? new Date(releaseDate) > today : true,
+    limited:        false,
+    type:           g['primary-type'] || 'Album',
+    discogs_url:    'https://musicbrainz.org/release-group/' + mbid,
+  };
+}
+
+export async function GET(request) {
+  try {
+    // ── Window: today → +9 months ─────────────────────────────────
+    const today = new Date();
+    const future = new Date();
+    future.setMonth(future.getMonth() + WINDOW_MONTHS);
+    const dateFilter = 'firstreleasedate:[' + toISO(today) + ' TO ' + toISO(future) + ']';
+    const typeFilter = '(primarytype:Album OR primarytype:EP)';
+
+    // ── Parse ?artists= param ─────────────────────────────────────
+    const artistParam = new URL(request.url).searchParams.get('artists') || '';
+    const followedArtists = artistParam
+      ? artistParam.split(',').map(a => a.trim()).filter(Boolean).slice(0, MAX_ARTISTS)
+      : [];
+
+    // ── Fire all queries in parallel ──────────────────────────────
+    // Tag-based always fires; per-artist only if param present.
+    const tagQuery = '(' + METAL_TAGS.map(t => 'tag:' + t).join(' OR ') + ')'
+      + ' AND ' + dateFilter + ' AND ' + typeFilter;
+
+    const queries = [
+      { kind: 'tag', label: 'tag', exec: () => mbFetchGroups(tagQuery, TAG_QUERY_LIMIT) },
+      ...followedArtists.map(a => ({
+        kind:  'artist',
+        label: a,
+        exec:  () => mbFetchGroups(
+          'artist:' + escArtist(a) + ' AND ' + dateFilter + ' AND ' + typeFilter,
+          PER_ARTIST_LIMIT,
+        ),
+      })),
+    ];
+
+    const results = await Promise.all(queries.map(q =>
+      q.exec().then(r => ({ ...r, kind: q.kind, label: q.label }))
+    ));
+
+    // ── Union + dedup by mbid ─────────────────────────────────────
+    const seenMbid = new Set();
+    const items = [];
+    const debug = { tag: 0, artist: 0, errors: [] };
+
+    for (const r of results) {
+      if (!r.ok) {
+        debug.errors.push({ kind: r.kind, label: r.label, status: r.status, err: r.error });
+        continue;
+      }
+      for (const g of r.groups) {
+        if (!g?.id || seenMbid.has(g.id)) continue;
+        seenMbid.add(g.id);
+        const item = reshapeGroup(g, today);
+        if (!item.artist || !item.album || !item.releaseDate) continue;
+        // Only keep items inside the window
+        const rd = new Date(item.releaseDate);
+        if (rd < today || rd > future) continue;
+        items.push(item);
+        if (r.kind === 'tag') debug.tag++; else debug.artist++;
+      }
     }
 
-    const data = await r.json();
-    const groups = data['release-groups'] || [];
-
-    // Map to our format. Use first release-event date if available, else `first-release-date`.
-    const items = groups.map(g => {
-      const mbid = g.id;
-      const artists = (g['artist-credit'] || []).map(a => a.name || a.artist?.name).filter(Boolean);
-      const artistName = artists.join(', ') || 'Unknown';
-      const releaseDate = g['first-release-date'] || null;
-      const tagNames = (g.tags || []).map(t => t.name);
-      const primaryTag = tagNames.find(t => METAL_TAGS.includes(t)) || tagNames[0] || 'metal';
-      // Cover Art Archive — front-250 works for release-groups too
-      const cover = 'https://coverartarchive.org/release-group/' + mbid + '/front-250';
-
-      return {
-        id:            'mb_' + mbid,
-        source:        'musicbrainz',
-        artist:        artistName,
-        album:         g.title || '',
-        cover,
-        releaseDate,
-        releaseDateRaw: releaseDate,
-        genre:         primaryTag.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-        preorder:      releaseDate ? new Date(releaseDate) > today : true,
-        limited:       false,
-        type:          g['primary-type'] || 'Album',
-        discogs_url:   'https://musicbrainz.org/release-group/' + mbid,
-      };
-    }).filter(x => x.artist && x.album && x.releaseDate);
-
-    // Sort by release date ascending (soonest upcoming first)
+    // Sort by release date ascending (soonest first)
     items.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate));
 
     return NextResponse.json({
       items,
-      count: items.length,
+      count:  items.length,
       source: 'musicbrainz',
       debug: {
-        totalFound: data.count,
-        queryWindow: toISO(today) + ' → ' + toISO(future),
+        tagMatches:      debug.tag,
+        perArtistMatches: debug.artist,
+        artistsQueried:   followedArtists.length,
+        queryWindow:      toISO(today) + ' → ' + toISO(future),
+        errors:           debug.errors,
       },
     });
   } catch (e) {

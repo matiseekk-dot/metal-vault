@@ -381,9 +381,17 @@ export async function GET(request) {
     let mbAdded = 0;
     try {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
-      const r = await fetch(appUrl + '/api/releases/metal-archives', {
+      // Pass followed artists so MB does per-artist lookup independent
+      // of tag coverage. Catches freshly announced LPs that haven't
+      // been tagged `metal` yet (Anthrax-style "announced today, tagged
+      // next week" gap).
+      const mbUrl = appUrl + '/api/releases/metal-archives'
+        + (followedArtists.length
+            ? '?artists=' + encodeURIComponent(followedArtists.join(','))
+            : '');
+      const r = await fetch(mbUrl, {
         cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(8000),
       });
       if (r.ok) {
         const j = await r.json();
