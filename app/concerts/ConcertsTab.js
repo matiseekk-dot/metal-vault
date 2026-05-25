@@ -441,6 +441,67 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
     if (v !== venues) { setVenues(v); saveLS(LS_VENUES, v); }
   };
 
+  // ── Dismiss an upcoming concert ("Nie idę") ────────────────────
+  // Soft-skip: flip is_planned=false so the row drops out of the
+  // upcoming section, but DON'T delete it — keep the rating/note/
+  // ticket history so a user who changes their mind can re-flag
+  // it (edit → is_planned=true). For Last.fm-imported rows we ALSO
+  // add an exclude tombstone so the next nightly cron doesn't
+  // helpfully reimport the same event tomorrow morning.
+  //
+  // For aggregate festival cards, dismissing the whole event means
+  // dismissing every band in the lineup at once — same venueId+date
+  // group. Caller passes either a single concert or an array of
+  // bands sharing the same event.
+  const dismissUpcoming = async (concertOrList) => {
+    const list = Array.isArray(concertOrList) ? concertOrList : [concertOrList];
+    const ids = new Set(list.map(c => c.id));
+    const updated = concerts.map(x => ids.has(x.id)
+      ? { ...x, is_planned: false }
+      : x);
+    save(updated);
+
+    // Persist the is_planned flip + add exclude tombstones in
+    // parallel — both are best-effort, failures just leave the
+    // user with a dismissed row that might re-appear after next
+    // LFM import (still better than the row staying in upcoming).
+    for (const c of list) {
+      const after = updated.find(x => x.id === c.id);
+      if (after) {
+        // Fire syncConcert — same retry/queue pattern as other
+        // mutations in this file.
+        syncConcert(after);
+      }
+      // Build the exclude_key the LFM importer uses for dedup.
+      // Same shape as migration 039 / import-lastfm route.
+      const venueNorm = (() => {
+        const v = findVenue(c.venueId);
+        return String(v?.name || '').toLowerCase().trim()
+          .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+      })();
+      const bandNorm = String(c.band || '').normalize('NFC')
+        .toLowerCase().trim();
+      const dateKey = c.planned_date
+        ? String(c.planned_date).slice(0, 10)
+        : '';
+      const excludeKey = dateKey
+        ? bandNorm + '::d::' + dateKey + '::' + venueNorm
+        : bandNorm + '::y::' + String(c.year || '').trim() + '::' + venueNorm;
+      try {
+        await fetch('/api/user-concerts/exclude', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            exclude_key: excludeKey,
+            band: c.band,
+            year: c.year,
+            venue_norm: venueNorm,
+          }),
+        });
+      } catch { /* best-effort */ }
+    }
+  };
+
   // ── Ranking-tab band photos ────────────────────────────────────
   // When the Ranking tab opens we eagerly fetch artist images for
   // every unique band on the list (capped at 60 to stay polite). The
@@ -2265,6 +2326,33 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                               ? '✓ ' + (t('concerts.ticketsBoughtShort') || 'Mam')
                               : '🎟 ' + (t('concerts.ticketsMark') || 'Kupię/mam')}
                           </button>
+                          {/* "Nie idę" — dismisses the WHOLE festival
+                              (every band sharing this venue+date). Useful
+                              when the user realises they can't make it
+                              and wants to wipe the entire event off
+                              upcoming without per-band cleanup. */}
+                          <button onClick={async (e) => {
+                              e.stopPropagation();
+                              if (await mvConfirm(
+                                t('concerts.dismissEventConfirm', {
+                                  venue: (v?.name || (t('concerts.unknownVenue') || 'wydarzenie')),
+                                  n: items.length,
+                                }) || `Zrezygnować z całego wydarzenia (${items.length} kapel)?`,
+                                { confirmLabel: t('concerts.dismissOk') || 'Nie idę' }
+                              )) {
+                                dismissUpcoming(items);
+                              }
+                            }}
+                            title={t('concerts.dismissEventTitle') || 'Nie idę na to wydarzenie'}
+                            style={{background: 'none',
+                              border: '1px solid ' + C.border,
+                              borderRadius: 8, color: '#888',
+                              padding: '8px 12px', cursor: 'pointer',
+                              fontSize: 12, ...MONO, marginLeft: 4,
+                              fontWeight: 500, letterSpacing: '0.04em',
+                              whiteSpace: 'nowrap', flexShrink: 0}}>
+                            🚫
+                          </button>
                           <span style={{...MONO, fontSize: 14, color: C.dim, marginLeft: 6}}>
                             {isOpen ? '▲' : '▼'}
                           </span>
@@ -2297,6 +2385,23 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                                 <button onClick={(e) => { e.stopPropagation(); edit(c); }}
                                   style={{background: 'none', border: 'none', color: C.dim,
                                     cursor: 'pointer', fontSize: 14, padding: '4px 8px'}}>✏</button>
+                                {/* Per-band "Nie idę" inside an aggregate
+                                    festival/group card — drops just one
+                                    band from the lineup the user is
+                                    attending without nuking the whole event. */}
+                                <button onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (await mvConfirm(
+                                    t('concerts.dismissConfirm', { band: c.band })
+                                      || `Zrezygnować z "${c.band}"?`,
+                                    { confirmLabel: t('concerts.dismissOk') || 'Nie idę' }
+                                  )) {
+                                    dismissUpcoming(c);
+                                  }
+                                }}
+                                  title={t('concerts.dismissTitle') || 'Nie biorę udziału w tej kapeli'}
+                                  style={{background: 'none', border: 'none', color: '#888',
+                                    cursor: 'pointer', fontSize: 14, padding: '4px 8px'}}>🚫</button>
                                 <button onClick={async (e) => {
                                   e.stopPropagation();
                                   if (await mvConfirm(t('concerts.deleteConfirm', { band: c.band }),
@@ -2371,6 +2476,26 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
                           borderRadius: 6, color: C.dim, cursor: 'pointer',
                           padding: '6px 10px', fontSize: 12, ...MONO}}>
                         ✏
+                      </button>
+                      {/* "Nie idę" — soft-skip. Flips is_planned=false (drops
+                          from upcoming) + persists exclude tombstone so a
+                          LFM re-import doesn't re-add the event tomorrow.
+                          Record itself isn't deleted — user can re-flag it
+                          via the edit modal if they change their mind. */}
+                      <button onClick={async () => {
+                        if (await mvConfirm(
+                          t('concerts.dismissConfirm', { band: c.band })
+                            || `Zrezygnować z udziału w "${c.band}"?`,
+                          { confirmLabel: t('concerts.dismissOk') || 'Nie idę' }
+                        )) {
+                          dismissUpcoming(c);
+                        }
+                      }}
+                        title={t('concerts.dismissTitle') || 'Nie biorę udziału — usuń z nadchodzących'}
+                        style={{background: 'none', border: '1px solid ' + C.border,
+                          borderRadius: 6, color: '#888', cursor: 'pointer',
+                          padding: '6px 10px', fontSize: 12, ...MONO}}>
+                        🚫
                       </button>
                       <button onClick={async () => {
                         if (await mvConfirm(t('concerts.deleteConfirm', { band: c.band }),
