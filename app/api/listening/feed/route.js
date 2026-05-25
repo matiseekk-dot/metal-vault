@@ -139,11 +139,14 @@ export async function GET(request) {
   // Only when filter allows lastfm/streaming. Each row = one album
   // with play_count = N. matched_collection_id tells us if user owns it.
   //
-  // Last.fm's played_at is synthetic (sync time) so it can't honour a
-  // time-range filter — for any since-restricted view we omit Last.fm
-  // entirely. User who wants "last 30 days" expects per-event truth,
-  // not an all-time aggregate mislabelled into the window.
-  if ((source === 'all' || source === 'lastfm' || source === 'streaming') && !sinceIso) {
+  // Last.fm: played_at is now the REAL date of the most-recent scrobble
+  // per album (sync route writes date.uts × 1000 from getRecentTracks).
+  // So the since-filter naturally semantics-matches: "albums played in
+  // the last 30 days" → played_at >= now - 30d. Old sync rows (pre-fix)
+  // still carry a synthetic played_at ≈ sync time, which for users who
+  // sync'd recently lands inside the 30d window anyway (visible, just
+  // not date-accurate per individual play) — next sync upgrades them.
+  if (source === 'all' || source === 'lastfm' || source === 'streaming') {
     // Pull a buffer beyond the requested limit so the dedupe pass below
     // has enough source rows to merge — old syncs (pre-dedup fix) may
     // have inserted the same album 3-5x, so without padding we'd return
@@ -155,19 +158,23 @@ export async function GET(request) {
     // power users with thousands of unique albums.
     const RAW_LIMIT = Math.min(limit + 500, 10000);
 
-    let r2 = await sb
+    let q2 = sb
       .from('streaming_history')
       .select('artist, album, artist_norm, album_norm, played_at, source, matched_collection_id, play_count')
       .eq('user_id', user.id)
-      .eq('source', 'lastfm')
+      .eq('source', 'lastfm');
+    if (sinceIso) q2 = q2.gte('played_at', sinceIso);
+    let r2 = await q2
       .order('play_count', { ascending: false })
       .range(0, RAW_LIMIT - 1);
     if (r2.error && /column.*play_count|does not exist/i.test(r2.error.message || '')) {
-      r2 = await sb
+      let q2b = sb
         .from('streaming_history')
         .select('artist, album, artist_norm, album_norm, played_at, source, matched_collection_id')
         .eq('user_id', user.id)
-        .eq('source', 'lastfm')
+        .eq('source', 'lastfm');
+      if (sinceIso) q2b = q2b.gte('played_at', sinceIso);
+      r2 = await q2b
         .order('played_at', { ascending: false })
         .range(0, RAW_LIMIT - 1);
     }

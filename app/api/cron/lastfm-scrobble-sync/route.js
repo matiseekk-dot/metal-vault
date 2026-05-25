@@ -111,7 +111,9 @@ export async function GET(request) {
         continue;
       }
 
-      // Aggregate per album.
+      // Aggregate per album. Capture real played_at from each scrobble
+      // (date.uts) so existing rows can advance their played_at to the
+      // most-recent listen — enables the listening-feed 30d/90d filter.
       const merged = new Map();
       for (const t of tracks) {
         const artistName = t.artist?.name || t.artist?.['#text'] || '';
@@ -120,17 +122,20 @@ export async function GET(request) {
         const artistNorm = normaliseArtist(artistName);
         const albumNorm  = normaliseAlbumTitle(albumName);
         if (!artistNorm || !albumNorm) continue;
+        const playedTs = Number(t.date?.uts) > 0 ? Number(t.date.uts) * 1000 : 0;
         const key = artistNorm + '::' + albumNorm;
         const existing = merged.get(key);
         if (existing) {
           existing.delta_plays += 1;
+          if (playedTs > existing.lastPlayedMs) existing.lastPlayedMs = playedTs;
         } else {
           merged.set(key, {
-            artist:      artistName,
-            album:       albumName,
+            artist:       artistName,
+            album:        albumName,
             artistNorm,
             albumNorm,
-            delta_plays: 1,
+            delta_plays:  1,
+            lastPlayedMs: playedTs,
           });
         }
       }
@@ -172,11 +177,19 @@ export async function GET(request) {
       for (const a of merged.values()) {
         const key = a.artistNorm + '::' + a.albumNorm;
         const existing = existingByKey.get(key);
+        const playedAt = a.lastPlayedMs > 0
+          ? new Date(a.lastPlayedMs).toISOString()
+          : new Date(nowMs - idx * 1000).toISOString();
         if (existing) {
-          toUpdate.push({
+          // Bump play_count AND advance played_at to most-recent listen
+          // so the 30d/90d filter reflects current activity instead of
+          // the original sync date.
+          const update = {
             id:         existing.id,
             play_count: (Number(existing.play_count) || 1) + a.delta_plays,
-          });
+          };
+          if (a.lastPlayedMs > 0) update.played_at = playedAt;
+          toUpdate.push(update);
         } else {
           toInsert.push({
             user_id:               tok.user_id,
@@ -185,7 +198,7 @@ export async function GET(request) {
             album:                 a.album,
             artist_norm:           a.artistNorm,
             album_norm:            a.albumNorm,
-            played_at:             new Date(nowMs - idx * 1000).toISOString(),
+            played_at:             playedAt,
             matched_collection_id: collectionIndex.get(key) || null,
             play_count:            a.delta_plays,
           });
@@ -215,8 +228,10 @@ export async function GET(request) {
       }
       for (const u of toUpdate) {
         try {
+          const patch = { play_count: u.play_count };
+          if (u.played_at) patch.played_at = u.played_at;
           await admin.from('streaming_history')
-            .update({ play_count: u.play_count })
+            .update(patch)
             .eq('id', u.id);
           totals.rows_upserted += 1;
         } catch { totals.errors++; }

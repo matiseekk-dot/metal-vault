@@ -169,17 +169,28 @@ export async function POST() {
     const artistNorm = normaliseArtist(artistName);
     const albumNorm  = normaliseAlbumTitle(albumName);
     if (!artistNorm || !albumNorm) continue;
+    // Real scrobble timestamp from Last.fm. date.uts is a Unix timestamp
+    // in seconds; missing for the "currently playing" item (no .date at
+    // all on that one). We use the most-recent date.uts across tracks
+    // sharing an album as that album's `played_at` — enables the
+    // listening feed's 30d/90d/365d time-range filter to actually
+    // include Last.fm rows. Previously played_at was synthetic (sync
+    // time) so the time-range filter silently omitted EVERY Last.fm
+    // album, making /vault/listening?since=30d look empty.
+    const playedTs = Number(t.date?.uts) > 0 ? Number(t.date.uts) * 1000 : 0;
     const key = artistNorm + '::' + albumNorm;
     const existing = merged.get(key);
     if (existing) {
       existing.playcount += 1;
+      if (playedTs > existing.lastPlayedMs) existing.lastPlayedMs = playedTs;
     } else {
       merged.set(key, {
-        artist:     artistName,
-        album:      albumName,
+        artist:       artistName,
+        album:        albumName,
         artistNorm,
         albumNorm,
-        playcount:  1,
+        playcount:    1,
+        lastPlayedMs: playedTs,
       });
     }
   }
@@ -219,10 +230,12 @@ export async function POST() {
   }
 
   // Build per-album rows. play_count = aggregate from Last.fm (post-dedupe).
-  // played_at is synthetic (now() − i*1s) so the unique index
-  // (user, source, played_at, artist_norm, album_norm) doesn't collide.
-  // Listen UI's FormatPlayedAt swaps timestamp for "{N} plays" when
-  // kind === 'lastfm', so the synthetic value is never displayed.
+  // played_at = the MOST RECENT real scrobble of this album from Last.fm
+  // (lastPlayedMs). When unavailable (topAlbums-only album, or "currently
+  // playing" with no .date.uts) fall back to a synthetic now-offset so the
+  // unique index (user, source, played_at, artist_norm, album_norm)
+  // doesn't collide. Real timestamps enable the 30d/90d filter; synthetic
+  // ones land in the "now" window (still visible, just not date-accurate).
   const nowMs = Date.now();
   let matched   = 0;
   let unmatched = 0;
@@ -234,6 +247,10 @@ export async function POST() {
     if (collectionItemId) matched++;
     else                  unmatched++;
 
+    const playedAt = a.lastPlayedMs > 0
+      ? new Date(a.lastPlayedMs).toISOString()
+      : new Date(nowMs - i * 1000).toISOString();
+
     rows.push({
       user_id:               user.id,
       source:                'lastfm',
@@ -241,7 +258,7 @@ export async function POST() {
       album:                 a.album,
       artist_norm:           a.artistNorm,
       album_norm:            a.albumNorm,
-      played_at:             new Date(nowMs - i * 1000).toISOString(),
+      played_at:             playedAt,
       matched_collection_id: collectionItemId,
       play_count:            a.playcount,
     });
