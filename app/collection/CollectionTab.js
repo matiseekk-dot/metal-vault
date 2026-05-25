@@ -1597,6 +1597,7 @@ export function CollectionTab({
               ['all',       t('vault.filter.all')],
               ['for_sale',  t('vault.filter.forSale') || '💲 Na sprzedaż'],
               ['preorder',  t('vault.filter.preorder') || '📦 W przedsprzedaży'],
+              ['sold',      t('vault.filter.sold') || '💰 Sprzedane'],
               ['vinyl',     t('vault.filter.vinyl')],
               ['cd',        t('vault.filter.cd')],
               ['cassette',  t('vault.filter.cassette')],
@@ -1740,6 +1741,14 @@ export function CollectionTab({
                 const visibleItems = collection.filter(item => {
                   const q = vaultSearch.toLowerCase();
                   if (q && !item.artist?.toLowerCase().includes(q) && !item.album?.toLowerCase().includes(q)) return false;
+                  // Sold-record handling (migration 044):
+                  //   - 'sold' filter → only sold rows
+                  //   - any other filter → hide sold rows from the
+                  //     view. User explicitly opted out of seeing them
+                  //     by NOT picking the sold filter.
+                  if (vaultFilter === 'sold') return item.is_sold === true;
+                  if (item.is_sold === true)  return false;
+
                   if (vaultFilter === 'vinyl')    return (item.format || '').toLowerCase().includes('vinyl') || !item.format;
                   if (vaultFilter === 'cd')       return (item.format || '').toLowerCase().includes('cd');
                   if (vaultFilter === 'cassette') return (item.format || '').toLowerCase().includes('cassette');
@@ -1827,12 +1836,27 @@ export function CollectionTab({
                               release_date column). */}
                           {item.is_preordered && (
                             <span title={(t('vault.preorderTitle') || 'Pre-ordered — waiting for delivery') + (item.year ? ' · ' + item.year : '')}
-                              style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3,
+                              style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3,
                                 background: '#2a1a05', color: '#f5c842',
                                 border: '1px solid #f5c84266', ...MONO,
-                                letterSpacing: '0.05em' }}>
+                                letterSpacing: '0.05em', fontWeight: 600 }}>
                               📦 {t('vault.preorderShort') || 'PRE-ORDER'}
                               {item.year && ' · ' + item.year}
+                            </span>
+                          )}
+                          {/* 💰 SOLD badge (migration 044). Shows sold price
+                              + date when available. The row also gets
+                              opacity treatment lower in the card styling
+                              so the user instantly sees it's "out". */}
+                          {item.is_sold && (
+                            <span title={'Sold' + (item.sold_date ? ' on ' + item.sold_date : '') + (item.sold_price ? ' for ' + Number(item.sold_price).toFixed(0) : '')}
+                              style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3,
+                                background: '#1a1505', color: '#f5c842',
+                                border: '1px solid #f5c84299', ...MONO,
+                                letterSpacing: '0.05em', fontWeight: 700 }}>
+                              💰 {t('vault.soldShort') || 'SOLD'}
+                              {item.sold_price ? ' · ' + Number(item.sold_price).toFixed(0) : ''}
+                              {item.sold_date ? ' · ' + item.sold_date.slice(5) : ''}
                             </span>
                           )}
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>{formatPrice(paid, cur, fx)}</span>}
@@ -2085,6 +2109,98 @@ export function CollectionTab({
                           }}>
                             📬 {t('vault.markDelivered') || 'Dostarczono — przenieś do kolekcji'}
                           </button>
+                        )}
+
+                        {/* Mark as sold / Unmark sold (migration 044).
+                            Soft-delete pattern — row stays in DB,
+                            hidden from default Vault, surfaces under
+                            "Sprzedane" filter. Sold price drives
+                            realized-PnL. Two-step: opens a tiny inline
+                            prompt to capture sold price (date defaults
+                            to today). Confirm/cancel inline so we don't
+                            need a modal. */}
+                        {!item.is_preordered && (
+                          item.is_sold ? (
+                            <button onClick={async () => {
+                              const optimistic = collection.map(c =>
+                                c.id === item.id ? { ...c, is_sold: false, sold_date: null, sold_price: null } : c);
+                              onUpdate(optimistic);
+                              try {
+                                const r = await fetch('/api/collection?id=' + item.id, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ is_sold: false, sold_date: null, sold_price: null }),
+                                });
+                                if (!r.ok) throw new Error('PATCH failed');
+                                const body = await r.json().catch(() => ({}));
+                                if (body && body.item) {
+                                  const merged = collection.map(c =>
+                                    c.id === item.id ? { ...c, ...body.item } : c);
+                                  onUpdate(merged);
+                                }
+                                haptic.success?.();
+                              } catch {
+                                const reverted = collection.map(c =>
+                                  c.id === item.id ? { ...c, is_sold: true, sold_date: item.sold_date, sold_price: item.sold_price } : c);
+                                onUpdate(reverted);
+                                toast.error(t('vault.soldRevertFailed') || 'Save failed');
+                              }
+                            }} style={{
+                              width: '100%', marginBottom: 10, padding: '10px 12px',
+                              background: '#1a1505', border: '1px solid #f5c84255',
+                              borderRadius: 8, color: '#f5c842', cursor: 'pointer',
+                              ...MONO, fontSize: 11, fontWeight: 600,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                            }}>
+                              ↩ {t('vault.unsold') || 'Cofnij sprzedaż'}
+                            </button>
+                          ) : (
+                            <button onClick={async () => {
+                              const priceStr = window.prompt(
+                                (t('vault.soldPrompt') || 'Sold price (in your currency, leave blank if unknown):'),
+                                String(item.purchase_price || '')
+                              );
+                              if (priceStr === null) return;  // cancel
+                              const price = priceStr.trim() === '' ? null : Number(priceStr);
+                              if (priceStr.trim() !== '' && (isNaN(price) || price < 0)) {
+                                toast.error('Invalid price');
+                                return;
+                              }
+                              const today = new Date().toISOString().slice(0, 10);
+                              const optimistic = collection.map(c =>
+                                c.id === item.id ? { ...c, is_sold: true, sold_date: today, sold_price: price, for_sale: false } : c);
+                              onUpdate(optimistic);
+                              try {
+                                const r = await fetch('/api/collection?id=' + item.id, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ is_sold: true, sold_date: today, sold_price: price, for_sale: false }),
+                                });
+                                if (!r.ok) throw new Error('PATCH failed');
+                                const body = await r.json().catch(() => ({}));
+                                if (body && body.item) {
+                                  const merged = collection.map(c =>
+                                    c.id === item.id ? { ...c, ...body.item } : c);
+                                  onUpdate(merged);
+                                }
+                                haptic.success?.();
+                                toast.success(t('vault.soldOk') || 'Marked as sold');
+                              } catch {
+                                const reverted = collection.map(c =>
+                                  c.id === item.id ? { ...c, is_sold: false, sold_date: null, sold_price: null } : c);
+                                onUpdate(reverted);
+                                toast.error(t('vault.soldFailed') || 'Save failed');
+                              }
+                            }} style={{
+                              width: '100%', marginBottom: 10, padding: '10px 12px',
+                              background: '#1a1505', border: '1px solid #f5c84255',
+                              borderRadius: 8, color: '#f5c842', cursor: 'pointer',
+                              ...MONO, fontSize: 11, fontWeight: 600,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                            }}>
+                              💰 {t('vault.markSold') || 'Oznacz jako sprzedane'}
+                            </button>
+                          )
                         )}
 
                         {/* Grade */}

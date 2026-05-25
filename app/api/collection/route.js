@@ -23,6 +23,12 @@ const COLLECTION_WRITABLE = [
   // Pre-order flag — set TRUE when the user committed to buying but
   // the record hasn't shipped/arrived yet. Migration 043.
   'is_preordered',
+  // Sold-record tracking (migration 044). Soft-delete pattern:
+  // the row stays in the table but is_sold=true → hidden from
+  // default Vault, surfaces under the "Sold" filter chip,
+  // excluded from portfolio current-value calculations.
+  // PnL = sold_price - purchase_price.
+  'is_sold', 'sold_date', 'sold_price',
 ];
 
 function filterWritable(body) {
@@ -91,18 +97,31 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Compute summary
-  const totalPaid    = (data || []).reduce((s, i) => s + (Number(i.purchase_price) || 0), 0);
-  const totalCurrent = (data || []).reduce((s, i) => s + (Number(i.median_price || i.current_price || i.purchase_price) || 0), 0);
+  // Compute summary. Sold items DON'T count toward live portfolio
+  // value — we no longer hold them — but they do count toward the
+  // lifetime PnL line (sold price contributes alongside what we
+  // received). Realized PnL = sum(sold_price - purchase_price)
+  // over sold rows. Unrealized PnL = totalCurrent - totalPaid
+  // restricted to held rows.
+  const held = (data || []).filter(i => !i.is_sold);
+  const sold = (data || []).filter(i =>  i.is_sold);
+  const totalPaid    = held.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0);
+  const totalCurrent = held.reduce((s, i) => s + (Number(i.median_price || i.current_price || i.purchase_price) || 0), 0);
+  const realizedPnl  = sold.reduce((s, i) =>
+    s + ((Number(i.sold_price) || 0) - (Number(i.purchase_price) || 0)), 0);
+  const soldRevenue  = sold.reduce((s, i) => s + (Number(i.sold_price) || 0), 0);
 
   return NextResponse.json({
     items: data,
     summary: {
-      itemCount:      (data || []).length,
-      totalPaid,
-      totalCurrent,
+      itemCount:      held.length,         // held only — what the user sees in Vault
+      soldCount:      sold.length,
+      totalPaid,                            // held only
+      totalCurrent,                         // held only
       gain:           totalCurrent - totalPaid,
       gainPct:        totalPaid > 0 ? ((totalCurrent - totalPaid) / totalPaid * 100).toFixed(1) : '0',
+      realizedPnl,                          // from sold rows
+      soldRevenue,
     },
   });
 }
