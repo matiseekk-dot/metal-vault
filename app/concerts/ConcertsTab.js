@@ -442,38 +442,25 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
   };
 
   // ── Dismiss an upcoming concert ("Nie idę") ────────────────────
-  // Soft-skip: flip is_planned=false so the row drops out of the
-  // upcoming section, but DON'T delete it — keep the rating/note/
-  // ticket history so a user who changes their mind can re-flag
-  // it (edit → is_planned=true). For Last.fm-imported rows we ALSO
-  // add an exclude tombstone so the next nightly cron doesn't
-  // helpfully reimport the same event tomorrow morning.
+  // Hard delete + exclude tombstone. Previous version flipped
+  // is_planned=false hoping the row would "soft-skip"; but the
+  // archive query treats !is_planned rows as PAST gigs, so the
+  // dismissed concert reappeared in the user's history as if they
+  // attended — opposite of what they meant. Real fix: delete the
+  // row entirely AND add the exclude tombstone so the next LFM
+  // re-import doesn't helpfully add it back tomorrow morning.
   //
   // For aggregate festival cards, dismissing the whole event means
-  // dismissing every band in the lineup at once — same venueId+date
-  // group. Caller passes either a single concert or an array of
-  // bands sharing the same event.
+  // dismissing every band in the lineup at once. Caller passes
+  // either a single concert or an array of bands sharing the same
+  // event.
   const dismissUpcoming = async (concertOrList) => {
     const list = Array.isArray(concertOrList) ? concertOrList : [concertOrList];
-    const ids = new Set(list.map(c => c.id));
-    const updated = concerts.map(x => ids.has(x.id)
-      ? { ...x, is_planned: false }
-      : x);
-    save(updated);
 
-    // Persist the is_planned flip + add exclude tombstones in
-    // parallel — both are best-effort, failures just leave the
-    // user with a dismissed row that might re-appear after next
-    // LFM import (still better than the row staying in upcoming).
+    // 1. Add exclude tombstones FIRST. If delete fails for some
+    //    reason, at least the LFM re-import won't ressurect the
+    //    row tomorrow.
     for (const c of list) {
-      const after = updated.find(x => x.id === c.id);
-      if (after) {
-        // Fire syncConcert — same retry/queue pattern as other
-        // mutations in this file.
-        syncConcert(after);
-      }
-      // Build the exclude_key the LFM importer uses for dedup.
-      // Same shape as migration 039 / import-lastfm route.
       const venueNorm = (() => {
         const v = findVenue(c.venueId);
         return String(v?.name || '').toLowerCase().trim()
@@ -499,6 +486,29 @@ export default function ConcertsTab({ followedArtists = [], collection = [] } = 
           }),
         });
       } catch { /* best-effort */ }
+    }
+
+    // 2. Optimistic local removal — drop all dismissed rows from
+    //    UI immediately. Same `del()` helper that the trash-can
+    //    button uses for single deletes, just batched.
+    const idsToRemove = new Set(list.map(c => c.id));
+    const updated = concerts.filter(x => !idsToRemove.has(x.id));
+    save(updated);
+
+    // 3. Persist deletions to the server. Failures get queued for
+    //    replay by flushPending() on next mount — same fault-
+    //    tolerance pattern as the single-row delete.
+    for (const c of list) {
+      try {
+        const res = await fetch('/api/user-concerts?id=' + encodeURIComponent(c.id), {
+          method: 'DELETE',
+        });
+        if (!res.ok && res.status !== 401) {
+          queuePending({ kind: 'delete', id: c.id });
+        }
+      } catch {
+        queuePending({ kind: 'delete', id: c.id });
+      }
     }
   };
 

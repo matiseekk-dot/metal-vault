@@ -1921,20 +1921,76 @@ export function CollectionTab({
                           )}
                           {/* 💰 SOLD badge (migration 044). Sold price is
                               stored as USD; formatPrice converts to the
-                              user's display currency. Without formatPrice
-                              the badge showed raw 200 while the matching
-                              PnL line showed 727 (converted) — confusing
-                              math reported in QA. */}
+                              user's display currency. Click to edit the
+                              sold price — needed for rows saved before
+                              the currency-conversion fix landed (their
+                              sold_price column has the raw local-currency
+                              number, displayed as USD-times-rate = wrong). */}
                           {item.is_sold && (
-                            <span title={'Sold' + (item.sold_date ? ' on ' + item.sold_date : '') + (item.sold_price ? ' for ' + formatPrice(Number(item.sold_price), cur, fx) : '')}
+                            <button onClick={async (e) => {
+                              e.stopPropagation();
+                              if (cur !== 'USD' && !fx?.ready) {
+                                toast.error('Loading exchange rates, try again in a moment');
+                                return;
+                              }
+                              const currentLocal = item.sold_price != null
+                                ? convertFromUsd(Number(item.sold_price), cur, fx).toFixed(0)
+                                : '';
+                              const priceStr = window.prompt(
+                                (t('vault.editSoldPrompt') || 'Sold price') + ' [' + cur + ']:',
+                                currentLocal
+                              );
+                              if (priceStr === null) return;
+                              const priceLocal = priceStr.trim() === '' ? null : Number(priceStr);
+                              if (priceStr.trim() !== '' && (isNaN(priceLocal) || priceLocal < 0)) {
+                                toast.error('Invalid price');
+                                return;
+                              }
+                              let priceUsd = null;
+                              if (priceLocal !== null) {
+                                if (!cur || cur === 'USD') priceUsd = priceLocal;
+                                else {
+                                  const rate = fx?.rates?.[cur];
+                                  priceUsd = (rate && Number.isFinite(rate))
+                                    ? priceLocal / rate
+                                    : priceLocal;
+                                }
+                              }
+                              const optimistic = collection.map(c =>
+                                c.id === item.id ? { ...c, sold_price: priceUsd } : c);
+                              onUpdate(optimistic);
+                              try {
+                                const r = await fetch('/api/collection?id=' + item.id, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ sold_price: priceUsd }),
+                                });
+                                if (!r.ok) throw new Error('PATCH failed');
+                                const body = await r.json().catch(() => ({}));
+                                if (body && body.item) {
+                                  const merged = collection.map(c =>
+                                    c.id === item.id ? { ...c, ...body.item } : c);
+                                  onUpdate(merged);
+                                }
+                                haptic.success?.();
+                              } catch {
+                                const reverted = collection.map(c =>
+                                  c.id === item.id ? { ...c, sold_price: item.sold_price } : c);
+                                onUpdate(reverted);
+                                toast.error(t('vault.soldFailed') || 'Save failed');
+                              }
+                            }}
+                              title={(t('vault.editSoldTitle') || 'Click to edit sold price')
+                                + (item.sold_date ? ' · sold on ' + item.sold_date : '')}
                               style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3,
                                 background: '#1a1505', color: '#f5c842',
                                 border: '1px solid #f5c84299', ...MONO,
-                                letterSpacing: '0.05em', fontWeight: 700 }}>
+                                letterSpacing: '0.05em', fontWeight: 700,
+                                cursor: 'pointer' }}>
                               💰 {t('vault.soldShort') || 'SOLD'}
                               {item.sold_price != null ? ' · ' + formatPrice(Number(item.sold_price), cur, fx) : ''}
                               {item.sold_date ? ' · ' + item.sold_date.slice(5) : ''}
-                            </span>
+                            </button>
                           )}
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>{formatPrice(paid, cur, fx)}</span>}
                           {/* Sold-price + PnL inline. Shown ONLY for sold
@@ -2278,6 +2334,16 @@ export function CollectionTab({
                               // is already USD-stored) converted to the
                               // user's currency, so the prompt shows
                               // "200" if they paid 200 PLN equivalent.
+                              // Block when rates haven't loaded yet for a
+                              // non-USD user — otherwise the conversion
+                              // silently writes raw value as USD and the
+                              // display layer multiplies it by the rate
+                              // that loads moments later, producing the
+                              // garbled-number QA bug all over again.
+                              if (cur !== 'USD' && !fx?.ready) {
+                                toast.error('Loading exchange rates, try again in a moment');
+                                return;
+                              }
                               const suggestUsd = Number(item.purchase_price) || 0;
                               const suggestLocal = suggestUsd > 0
                                 ? convertFromUsd(suggestUsd, cur, fx).toFixed(0)
