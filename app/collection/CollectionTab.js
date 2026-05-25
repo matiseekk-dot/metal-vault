@@ -15,7 +15,7 @@ import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm as mvConfirm } from '@/app/components/Toast';
 import WishlistsManager from '@/app/components/WishlistsManager';
 import ListenButton from '@/app/components/ListenButton';
-import { useCurrency, useFx, formatPrice, formatChange } from '@/lib/currency';
+import { useCurrency, useFx, formatPrice, formatChange, convertFromUsd } from '@/lib/currency';
 import ManualAddForm from '@/app/collection/ManualAddForm';
 import PriceModal from '@/app/collection/PriceModal';
 import ConcertPicker from '@/app/collection/ConcertPicker';
@@ -1919,18 +1919,20 @@ export function CollectionTab({
                               {item.year && ' · ' + item.year}
                             </span>
                           )}
-                          {/* 💰 SOLD badge (migration 044). Shows sold price
-                              + date when available. The row also gets
-                              opacity treatment lower in the card styling
-                              so the user instantly sees it's "out". */}
+                          {/* 💰 SOLD badge (migration 044). Sold price is
+                              stored as USD; formatPrice converts to the
+                              user's display currency. Without formatPrice
+                              the badge showed raw 200 while the matching
+                              PnL line showed 727 (converted) — confusing
+                              math reported in QA. */}
                           {item.is_sold && (
-                            <span title={'Sold' + (item.sold_date ? ' on ' + item.sold_date : '') + (item.sold_price ? ' for ' + Number(item.sold_price).toFixed(0) : '')}
+                            <span title={'Sold' + (item.sold_date ? ' on ' + item.sold_date : '') + (item.sold_price ? ' for ' + formatPrice(Number(item.sold_price), cur, fx) : '')}
                               style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3,
                                 background: '#1a1505', color: '#f5c842',
                                 border: '1px solid #f5c84299', ...MONO,
                                 letterSpacing: '0.05em', fontWeight: 700 }}>
                               💰 {t('vault.soldShort') || 'SOLD'}
-                              {item.sold_price ? ' · ' + Number(item.sold_price).toFixed(0) : ''}
+                              {item.sold_price != null ? ' · ' + formatPrice(Number(item.sold_price), cur, fx) : ''}
                               {item.sold_date ? ' · ' + item.sold_date.slice(5) : ''}
                             </span>
                           )}
@@ -2261,25 +2263,57 @@ export function CollectionTab({
                             </button>
                           ) : (
                             <button onClick={async () => {
+                              // Currency convention: ALL money fields in
+                              // collection store USD. formatPrice() converts
+                              // to the user's display currency on the way
+                              // out. So we MUST convert the user-entered
+                              // local-currency value to USD before saving,
+                              // otherwise the display layer double-converts
+                              // (e.g. user types 200 PLN → if we stored
+                              // 200 raw, formatPrice would display
+                              // 200 × USD-PLN-rate = 727 PLN — the bug
+                              // reported in QA).
+                              //
+                              // Default-suggest the purchase_price (which
+                              // is already USD-stored) converted to the
+                              // user's currency, so the prompt shows
+                              // "200" if they paid 200 PLN equivalent.
+                              const suggestUsd = Number(item.purchase_price) || 0;
+                              const suggestLocal = suggestUsd > 0
+                                ? convertFromUsd(suggestUsd, cur, fx).toFixed(0)
+                                : '';
                               const priceStr = window.prompt(
-                                (t('vault.soldPrompt') || 'Sold price (in your currency, leave blank if unknown):'),
-                                String(item.purchase_price || '')
+                                (t('vault.soldPrompt') || 'Sold price (in your currency, leave blank if unknown):')
+                                  + ' [' + cur + ']',
+                                suggestLocal
                               );
                               if (priceStr === null) return;  // cancel
-                              const price = priceStr.trim() === '' ? null : Number(priceStr);
-                              if (priceStr.trim() !== '' && (isNaN(price) || price < 0)) {
+                              const priceLocal = priceStr.trim() === '' ? null : Number(priceStr);
+                              if (priceStr.trim() !== '' && (isNaN(priceLocal) || priceLocal < 0)) {
                                 toast.error('Invalid price');
                                 return;
                               }
+                              // Convert local-currency input → USD for storage.
+                              // Reverse of convertFromUsd: divide by rate.
+                              let priceUsd = null;
+                              if (priceLocal !== null) {
+                                if (!cur || cur === 'USD') priceUsd = priceLocal;
+                                else {
+                                  const rate = fx?.rates?.[cur];
+                                  priceUsd = (rate && Number.isFinite(rate))
+                                    ? priceLocal / rate
+                                    : priceLocal;   // no rate → store as-is (best effort)
+                                }
+                              }
                               const today = new Date().toISOString().slice(0, 10);
                               const optimistic = collection.map(c =>
-                                c.id === item.id ? { ...c, is_sold: true, sold_date: today, sold_price: price, for_sale: false } : c);
+                                c.id === item.id ? { ...c, is_sold: true, sold_date: today, sold_price: priceUsd, for_sale: false } : c);
                               onUpdate(optimistic);
                               try {
                                 const r = await fetch('/api/collection?id=' + item.id, {
                                   method: 'PATCH',
                                   headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ is_sold: true, sold_date: today, sold_price: price, for_sale: false }),
+                                  body: JSON.stringify({ is_sold: true, sold_date: today, sold_price: priceUsd, for_sale: false }),
                                 });
                                 if (!r.ok) throw new Error('PATCH failed');
                                 const body = await r.json().catch(() => ({}));
