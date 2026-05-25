@@ -1,40 +1,17 @@
 {
+  "comment": "Vercel Hobby tier registers only the first ~3 cron entries. We had 9 listed; only prices, releases, repress were actually scheduled — the other 6 (warm-releases, daily-digest, weekly-report, this-day, lastfm-sync, lastfm-scrobble-sync) silently never ran. Workaround: /api/cron/prices is now the MASTER cron that fans out to those sub-tasks via internal fetch (see route.js). When upgrading to Pro, restore the original 9-cron config from git history.",
   "crons": [
     {
       "path": "/api/cron/prices",
       "schedule": "0 9 * * *"
     },
     {
-      "path": "/api/cron/releases",
-      "schedule": "0 10 * * 1"
-    },
-    {
-      "path": "/api/cron/daily-digest",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/weekly-report",
-      "schedule": "0 18 * * 0"
-    },
-    {
-      "path": "/api/cron/warm-releases",
-      "schedule": "30 7 * * *"
-    },
-    {
       "path": "/api/cron/repress",
       "schedule": "30 9 * * *"
     },
     {
-      "path": "/api/cron/this-day",
-      "schedule": "0 17 * * *"
-    },
-    {
-      "path": "/api/cron/lastfm-sync",
-      "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/lastfm-scrobble-sync",
-      "schedule": "0 4 * * *"
+      "path": "/api/cron/releases",
+      "schedule": "0 10 * * 1"
     }
   ]
 }

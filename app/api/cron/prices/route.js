@@ -403,6 +403,48 @@ export async function GET(request) {
     }
   }
 
+  // ── Master cron orchestration (Vercel Hobby tier hack) ─────────
+  // Hobby plan caps at 3 cron slots. We have 9 task-shaped jobs;
+  // /api/cron/prices doubles as the "master" that fan-outs to all
+  // the other cron paths inline. Each sub-task is self-incremental
+  // (skip-if-cached, batched), so multi-day execution is fine even
+  // if a single invocation only completes part of the work.
+  //
+  // Order matters: warm-releases first because MB cache is most
+  // user-visible (feed). Then scrobble-sync (data freshness for
+  // listening tab). Then this-day (notifications). Daily-digest
+  // last because it can read the freshly-updated state.
+  //
+  // Each sub-call: fire-and-forget with internal fetch + own auth.
+  // We DON'T await them all sequentially — that'd blow the 60s
+  // Hobby maxDuration ceiling. Instead we kick them off in parallel
+  // and let Vercel handle each as its own function invocation.
+  const subTasks = [
+    'warm-releases',
+    'lastfm-scrobble-sync',
+    'this-day',
+    'daily-digest',
+    'lastfm-sync',
+  ];
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
+  results.masterFanout = [];
+  for (const task of subTasks) {
+    // Fire-and-forget with a short timeout — we don't wait for
+    // completion, just for the kickoff to land. Each task runs in
+    // its own Vercel function with its own duration budget.
+    try {
+      // Don't await — let it fly. .catch() prevents unhandled
+      // rejection warnings if the kickoff itself fails.
+      fetch(appUrl + '/api/cron/' + task, {
+        headers: { authorization: 'Bearer ' + process.env.CRON_SECRET },
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => {});
+      results.masterFanout.push(task + ':kickoff');
+    } catch (e) {
+      results.masterFanout.push(task + ':' + (e.message || 'err').slice(0, 30));
+    }
+  }
+
   results.durationMs = Date.now() - startedAt;
   return NextResponse.json({ success: true, ...results });
 }
