@@ -1,7 +1,7 @@
 // ── Shared UI components — extracted from app/page.js ────────────
 'use client';
 import { useState } from 'react';
-import { C, MONO, BEBAS, BADGE_STYLES, GENRE_COLOR } from '@/lib/theme';
+import { C, MONO, BEBAS, BADGE_STYLES, GENRE_COLOR, FS, LH } from '@/lib/theme';
 import MarketComparison from '@/app/components/MarketComparison';
 import PhotoUploader from '@/app/components/PhotoUploader';
 import ForSaleToggle from '@/app/components/ForSaleToggle';
@@ -94,10 +94,10 @@ export function StatsBar({releases}){
   return(
     <div style={{display:'flex',borderBottom:'1px solid '+C.border,background:C.bg2}}>
       {[{icon:'🔥',val:releases.length,label:t('stats.releases')},{icon:'⏳',val:upcoming,label:t('stats.upcoming')},{icon:'🆕',val:recent,label:t('stats.released')}].map(s=>(
-        <div key={s.label} style={{flex:1,textAlign:'center',padding:'10px 4px'}}>
-          <div style={{fontSize:11,...MONO,color:C.dim}}>{s.icon}</div>
-          <div style={{...BEBAS,fontSize:22,color:C.accent,lineHeight:1}}>{s.val}</div>
-          <div style={{fontSize:9,color:C.dim,...MONO,letterSpacing:'0.1em',textTransform:'uppercase'}}>{s.label}</div>
+        <div key={s.label} style={{flex:1,textAlign:'center',padding:'12px 4px'}}>
+          <div style={{fontSize:FS.body,...MONO,color:C.muted}}>{s.icon}</div>
+          <div style={{...BEBAS,fontSize:FS.mega,color:C.accent,lineHeight:LH.tight,marginTop:2}}>{s.val}</div>
+          <div style={{fontSize:FS.micro,color:C.muted,...MONO,letterSpacing:'0.12em',textTransform:'uppercase',marginTop:2}}>{s.label}</div>
         </div>
       ))}
     </div>
@@ -134,12 +134,12 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
         <div style={{position:'absolute',inset:0}}>
           <AlbumCover src={album.cover} artist={album.artist} size='100%'/>
         </div>
-        {/* Badges overlay */}
-        <div style={{position:'absolute',top:6,left:6,display:'flex',gap:3,flexWrap:'wrap'}}>
-          {owned&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#22c55edd',color:'#fff',...MONO,fontWeight:700}}>✓ OWNED</span>}
-          {!owned&&isPreorder&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#dc262688',color:'#fff',...MONO}}>PRE</span>}
-          {!owned&&isLimited&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#f5c84288',color:'#fff',...MONO}}>LTD</span>}
-          {!owned&&isNew&&<span style={{fontSize:8,padding:'2px 5px',borderRadius:4,background:'#4ade8088',color:'#fff',...MONO}}>NEW</span>}
+        {/* Badges overlay — bumped from 8px to 11px per QA feedback */}
+        <div style={{position:'absolute',top:6,left:6,display:'flex',gap:4,flexWrap:'wrap'}}>
+          {owned&&<span style={{fontSize:FS.micro,padding:'3px 7px',borderRadius:4,background:'#22c55edd',color:'#fff',...MONO,fontWeight:700,letterSpacing:'0.05em'}}>✓ OWNED</span>}
+          {!owned&&isPreorder&&<span style={{fontSize:FS.micro,padding:'3px 7px',borderRadius:4,background:'#dc262688',color:'#fff',...MONO,fontWeight:600,letterSpacing:'0.05em'}}>PRE</span>}
+          {!owned&&isLimited&&<span style={{fontSize:FS.micro,padding:'3px 7px',borderRadius:4,background:'#f5c84288',color:'#fff',...MONO,fontWeight:600,letterSpacing:'0.05em'}}>LTD</span>}
+          {!owned&&isNew&&<span style={{fontSize:FS.micro,padding:'3px 7px',borderRadius:4,background:'#4ade8088',color:'#fff',...MONO,fontWeight:600,letterSpacing:'0.05em'}}>NEW</span>}
         </div>
         {/* Watch / Quick-add — hidden when already owned */}
         {!owned && (
@@ -208,28 +208,29 @@ export function AlbumCard({album,isWatched,onWatchToggle,onClick,vinylData,isFol
           </div>
         )}
       </div>
-      {/* Text */}
-      <div style={{padding:'8px 10px 10px'}}>
-        <div style={{...BEBAS,fontSize:14,letterSpacing:'0.04em',color:C.text,lineHeight:1.1,
+      {/* Text — typography bumped per QA report:
+          artist title 14→20 (BEBAS hero), album subtitle 10→14, date 9→13. */}
+      <div style={{padding:'10px 12px 12px'}}>
+        <div style={{...BEBAS,fontSize:FS.title1,letterSpacing:'0.04em',color:C.text,lineHeight:LH.tight,
           overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>
           {album.artist}
         </div>
-        <div style={{fontSize:10,color:C.muted,...MONO,marginTop:2,
-          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+        <div style={{fontSize:FS.body,color:C.text,...MONO,marginTop:4,lineHeight:LH.snug,
+          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',opacity:0.85}}>
           {album.album}
         </div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
-          <div style={{fontSize:9,color:isPreorder?C.accent:C.dim,...MONO}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}}>
+          <div style={{fontSize:FS.small,color:isPreorder?C.accent:C.muted,...MONO,fontWeight:isPreorder?600:400}}>
             {isPreorder?'🗓 '+formatDate(album.releaseDate||''):formatDate(album.releaseDate||'')}
           </div>
           {album.lowest_price>0&&(
-            <span style={{fontSize:10,color:'#4ade80',...MONO}}>{formatPrice(album.lowest_price, cur, fx)}</span>
+            <span style={{fontSize:FS.small,color:'#4ade80',...MONO,fontWeight:600}}>{formatPrice(album.lowest_price, cur, fx)}</span>
           )}
         </div>
         {user&&(
           <button onClick={e=>{e.stopPropagation();onFollowToggle(album.artist);}}
-            style={{marginTop:4,background:'none',border:'none',cursor:'pointer',fontSize:10,padding:0,
-              color:isFollowed?C.accent:C.dim,...MONO,display:'flex',alignItems:'center',gap:3}}>
+            style={{marginTop:6,background:'none',border:'none',cursor:'pointer',fontSize:FS.caption,padding:'4px 0',
+              color:isFollowed?C.accent:C.dim,...MONO,display:'flex',alignItems:'center',gap:4}}>
             {isFollowed?'🔔 following':'+ follow'}
           </button>
         )}
@@ -522,9 +523,9 @@ export function BottomNav({tab,onChange,watchCount,user,onScan}){
               </button>
               {/* Reserve label space below */}
               <span style={{
-                position:'absolute', bottom:6, fontSize:8,
-                color:'#888', fontFamily:'system-ui,sans-serif', fontWeight:600,
-                letterSpacing:'-0.01em',
+                position:'absolute', bottom:6, fontSize:11,
+                color:'#aaa', fontFamily:'system-ui,sans-serif', fontWeight:600,
+                letterSpacing:'0.01em',
               }}>{t.label}</span>
             </div>
           );
@@ -539,22 +540,22 @@ export function BottomNav({tab,onChange,watchCount,user,onScan}){
               borderTop: active ? '2px solid '+C.accent : '2px solid transparent',
               overflow:'hidden',minWidth:0,
             }}>
-            <Icon name={t.iconName} size={active?20:18}
-              color={active ? '#fff' : '#666'}/>
+            <Icon name={t.iconName} size={active?22:20}
+              color={active ? '#fff' : '#888'}/>
             <span style={{
-              fontSize:'9px',
-              color: active ? C.accent : '#555',
+              fontSize:'11px',
+              color: active ? C.accent : '#888',
               fontFamily:'system-ui,-apple-system,sans-serif',
-              fontWeight: active ? 600 : 400,
+              fontWeight: active ? 600 : 500,
               lineHeight:1.3,
-              marginTop:3,
+              marginTop:4,
               display:'block',
               width:'100%',
               textAlign:'center',
               overflow:'hidden',
               textOverflow:'ellipsis',
               whiteSpace:'nowrap',
-              letterSpacing:'-0.01em',
+              letterSpacing:'0.01em',
             }}>{t.label}</span>
           </button>
         );

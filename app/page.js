@@ -749,10 +749,10 @@ export default function MetalVault() {
                 { id:'all', label: t('feed.tab.all') },
               ].map(tab => (
                 <button key={tab.id} onClick={()=>setFeedTab(tab.id)} style={{
-                  flex:1, padding:'10px 0', background:'none', border:'none',
+                  flex:1, padding:'14px 0', background:'none', border:'none',
                   borderBottom: feedTab===tab.id ? '2px solid '+C.accent : '2px solid transparent',
-                  color: feedTab===tab.id ? C.text : C.dim,
-                  cursor:'pointer', fontSize:12, ...MONO,
+                  color: feedTab===tab.id ? C.text : C.muted,
+                  cursor:'pointer', fontSize:15, fontWeight: feedTab===tab.id ? 600 : 400, ...MONO,
                 }}>
                   {tab.label}
                 </button>
@@ -762,7 +762,7 @@ export default function MetalVault() {
               {FILTER_IDS.map(id => {
                 const label = t('feed.filter.' + (id === 'preorder' ? 'upcoming' : id));
                 return (
-                <button key={id} onClick={()=>setFilter(id)} style={{ padding:'5px 10px', borderRadius:20, whiteSpace:'nowrap', background:filter===id?C.accent+'22':C.bg3, color:filter===id?C.accent:C.dim, border:'1px solid '+(filter===id?C.accent+'66':C.border), cursor:'pointer', fontSize:10, ...MONO }}>
+                <button key={id} onClick={()=>setFilter(id)} style={{ padding:'8px 14px', borderRadius:20, whiteSpace:'nowrap', background:filter===id?C.accent+'22':C.bg3, color:filter===id?C.accent:C.muted, border:'1px solid '+(filter===id?C.accent+'66':C.border), cursor:'pointer', fontSize:13, fontWeight:filter===id?600:400, ...MONO, minHeight:36 }}>
                   {label}
                 </button>
                 );
@@ -775,22 +775,22 @@ export default function MetalVault() {
               </select>
             </div>
             {!feedLoading && (
-              <div style={{ padding:'4px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <div style={{ fontSize:10, color:C.dim, ...MONO }}>{filtered.length} {t('feed.count')}{genreInterests.length>0?' · '+t('feed.genres'):''}</div>
-                <button onClick={()=>setShowGenrePicker(p=>!p)} style={{ fontSize:10, color:genreInterests.length>0?C.accent:C.dim, ...MONO, background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>
+              <div style={{ padding:'8px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div style={{ fontSize:13, color:C.muted, ...MONO }}>{filtered.length} {t('feed.count')}{genreInterests.length>0?' · '+t('feed.genres'):''}</div>
+                <button onClick={()=>setShowGenrePicker(p=>!p)} style={{ fontSize:13, color:genreInterests.length>0?C.accent:C.muted, ...MONO, background:'none', border:'none', cursor:'pointer', padding:'6px 8px', minHeight:32 }}>
                   🎸 {genreInterests.length>0?genreInterests.length+' '+t('feed.genres'):t('feed.genres')}
                 </button>
               </div>
             )}
             {showGenrePicker && (
               <div style={{ padding:'8px 16px 12px', borderBottom:'1px solid '+C.border, background:C.bg2 }}>
-                <div style={{ fontSize:9, color:C.dim, ...MONO, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>Tap to filter by genre</div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                <div style={{ fontSize:12, color:C.muted, ...MONO, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:8 }}>Tap to filter by genre</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   {ALL_GENRES.map(g => {
                     const active = genreInterests.includes(g);
-                    return <button key={g} onClick={()=>{const next=active?genreInterests.filter(x=>x!==g):[...genreInterests,g];setGenreInterests(next);saveLS('mv_genre_interests',next);}} style={{fontSize:10,padding:'4px 9px',borderRadius:20,...MONO,cursor:'pointer',background:active?C.accent+'22':C.bg3,color:active?C.accent:C.dim,border:'1px solid '+(active?C.accent+'66':C.border)}}>{g}</button>;
+                    return <button key={g} onClick={()=>{const next=active?genreInterests.filter(x=>x!==g):[...genreInterests,g];setGenreInterests(next);saveLS('mv_genre_interests',next);}} style={{fontSize:13,padding:'7px 12px',borderRadius:20,...MONO,cursor:'pointer',background:active?C.accent+'22':C.bg3,color:active?C.accent:C.muted,border:'1px solid '+(active?C.accent+'66':C.border),minHeight:32}}>{g}</button>;
                   })}
-                  {genreInterests.length>0&&<button onClick={()=>{setGenreInterests([]);saveLS('mv_genre_interests',[]);}} style={{fontSize:10,padding:'4px 9px',borderRadius:20,...MONO,cursor:'pointer',background:'#1a0000',color:'#f87171',border:'1px solid #7f1d1d'}}>✕ Clear</button>}
+                  {genreInterests.length>0&&<button onClick={()=>{setGenreInterests([]);saveLS('mv_genre_interests',[]);}} style={{fontSize:13,padding:'7px 12px',borderRadius:20,...MONO,cursor:'pointer',background:'#1a0000',color:'#f87171',border:'1px solid #7f1d1d',minHeight:32}}>✕ Clear</button>}
                 </div>
               </div>
             )}
