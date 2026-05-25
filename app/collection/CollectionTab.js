@@ -1764,10 +1764,28 @@ export function CollectionTab({
                   if (vaultFilter === 'preorder') return item.is_preordered === true;
                   return true;
                 });
+                // Sold filter: sort by sold_date DESC so most-recent sales
+                // surface first — natural "sales history" ordering. Other
+                // filters keep the default added_at order from the API.
+                if (vaultFilter === 'sold') {
+                  visibleItems.sort((a, b) => {
+                    const da = a.sold_date ? new Date(a.sold_date).getTime() : 0;
+                    const db = b.sold_date ? new Date(b.sold_date).getTime() : 0;
+                    return db - da;
+                  });
+                }
+
                 if (visibleItems.length === 0) return (
                   <div style={{ textAlign: 'center', padding: '32px 0', color: C.dim, ...MONO, fontSize: 12 }}>
                     <div style={{ fontSize: 32, marginBottom: 10 }}>🔍</div>
-                    No records match
+                    {vaultFilter === 'sold'
+                      ? (t('vault.sold.emptyTitle') || 'Brak sprzedanych płyt')
+                      : 'No records match'}
+                    {vaultFilter === 'sold' && (
+                      <div style={{ marginTop: 6, fontSize: 10, color: C.dim, lineHeight: 1.5 }}>
+                        {t('vault.sold.emptyHint') || 'Sprzedaj płytę z Vault i pojawi się tutaj z PnL.'}
+                      </div>
+                    )}
                     <div style={{ marginTop: 12 }}>
                       <button onClick={() => { setVaultSearch(''); setVaultFilter('all'); }}
                         style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6, color: C.accent, padding: '6px 14px', cursor: 'pointer', ...MONO, fontSize: 10 }}>
@@ -1776,7 +1794,64 @@ export function CollectionTab({
                     </div>
                   </div>
                 );
-                return visibleItems.map(item => {
+
+                // Sold-history summary: when the filter is active surface
+                // the lifetime numbers right at the top of the list so the
+                // user immediately sees "I sold N records, made M total,
+                // earned profit P". This is the "ile się zarobiło" view
+                // user explicitly asked for.
+                const soldSummary = (() => {
+                  if (vaultFilter !== 'sold') return null;
+                  const count = visibleItems.length;
+                  const revenue = visibleItems.reduce((s, i) => s + (Number(i.sold_price) || 0), 0);
+                  const cost    = visibleItems.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0);
+                  const profit  = revenue - cost;
+                  return { count, revenue, cost, profit };
+                })();
+
+                return (
+                <>
+                  {soldSummary && (
+                    <div style={{
+                      background: C.bg2,
+                      border: '1px solid ' + C.border,
+                      borderRadius: 10,
+                      padding: '14px 16px',
+                      marginBottom: 4,
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: 12,
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                          {t('vault.sold.count') || 'Sprzedane'}
+                        </div>
+                        <div style={{ ...BEBAS, fontSize: 22, color: C.text, lineHeight: 1.1, marginTop: 4 }}>
+                          {soldSummary.count}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                          {t('vault.sold.revenue') || 'Przychód'}
+                        </div>
+                        <div style={{ ...BEBAS, fontSize: 22, color: '#f5c842', lineHeight: 1.1, marginTop: 4 }}>
+                          {formatPrice(soldSummary.revenue, cur, fx)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: C.dim, ...MONO, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                          {t('vault.sold.profit') || 'Zysk'}
+                        </div>
+                        <div style={{
+                          ...BEBAS, fontSize: 22, lineHeight: 1.1, marginTop: 4,
+                          color: soldSummary.profit >= 0 ? '#4ade80' : '#f87171',
+                        }}>
+                          {soldSummary.profit >= 0 ? '+' : ''}{formatPrice(soldSummary.profit, cur, fx)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {visibleItems.map(item => {
                   const isExpanded = expandedId === item.id;
                   const paid = Number(item.purchase_price) || 0;
                   const now  = Number(item.median_price || item.current_price) || 0;
@@ -1860,6 +1935,36 @@ export function CollectionTab({
                             </span>
                           )}
                           {paid > 0 && <span style={{ fontSize: 9, color: '#f5c842', ...MONO }}>{formatPrice(paid, cur, fx)}</span>}
+                          {/* Sold-price + PnL inline. Shown ONLY for sold
+                              rows (item.is_sold=true) — surfaces the
+                              "ile się zarobiło" answer right on the row
+                              without needing to expand. Color codes:
+                              green = profit, red = loss, yellow = even. */}
+                          {item.is_sold && item.sold_price != null && (() => {
+                            const soldPrice = Number(item.sold_price) || 0;
+                            const realizedPnl = paid > 0 ? soldPrice - paid : 0;
+                            const color = paid === 0 ? '#f5c842'
+                              : realizedPnl > 0 ? '#4ade80'
+                              : realizedPnl < 0 ? '#f87171'
+                              : '#f5c842';
+                            return (
+                              <span style={{ fontSize: 9, color, ...MONO, fontWeight: 600 }}
+                                title={paid > 0
+                                  ? 'Bought ' + formatPrice(paid, cur, fx) + ' → Sold ' + formatPrice(soldPrice, cur, fx) + (realizedPnl >= 0 ? ' (profit ' : ' (loss ') + formatPrice(Math.abs(realizedPnl), cur, fx) + ')'
+                                  : 'Sold for ' + formatPrice(soldPrice, cur, fx)
+                                }>
+                                💰 {formatPrice(soldPrice, cur, fx)}
+                                {paid > 0 && (
+                                  <>
+                                    {' '}
+                                    <span style={{ fontWeight: 700 }}>
+                                      {realizedPnl >= 0 ? '+' : ''}{formatPrice(realizedPnl, cur, fx)}
+                                    </span>
+                                  </>
+                                )}
+                              </span>
+                            );
+                          })()}
                           {/* "from X" market price — explicitly labelled
                               "od" (from) to make clear this is the LOWEST
                               currently-listed price across ALL variants on
@@ -2535,7 +2640,9 @@ export function CollectionTab({
                     )}
                   </div>
                   );
-                });
+                })}
+                </>
+                );
               })()}
             </div>
           )}
