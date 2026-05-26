@@ -527,16 +527,28 @@ export default function ListeningTab({ user, onAlbumClick, premium = false }) {
                       rotation, vs 10 scrobbles which is one casual
                       listen-through). */}
                   {(it.play_count || 0) > 0 && (
-                    <span style={{
-                      ...BEBAS,
-                      fontSize:    (it.kind === 'vinyl'
-                                       ? (it.play_count >= 10 ? 24 : it.play_count >= 3 ? 20 : 16)
-                                       : (it.play_count >= 50 ? 24 : it.play_count >= 10 ? 20 : 16)),
-                      color:       (it.kind === 'vinyl'
-                                       ? (it.play_count >= 10 ? '#f97316' : it.play_count >= 3 ? C.accent : C.muted)
-                                       : (it.play_count >= 50 ? '#f97316' : it.play_count >= 10 ? C.accent : C.muted)),
-                      lineHeight:  1,
-                      letterSpacing: '0.02em',
+                    <span
+                      // Title clarifies that the count is LIFETIME plays
+                      // (from Last.fm account history), not plays in the
+                      // selected time-range. User reported confusion seeing
+                      // "591×" on an album they hadn't played in years —
+                      // the album surfaces in 30d because its most recent
+                      // play landed inside that window, but the play count
+                      // itself is the all-time total.
+                      title={it.kind === 'lastfm' || it.kind === 'streaming'
+                        ? `${it.play_count} lifetime scrobbles (from your Last.fm history)`
+                        : `${it.play_count} vinyl spins logged`}
+                      style={{
+                        ...BEBAS,
+                        fontSize:    (it.kind === 'vinyl'
+                                         ? (it.play_count >= 10 ? 24 : it.play_count >= 3 ? 20 : 16)
+                                         : (it.play_count >= 50 ? 24 : it.play_count >= 10 ? 20 : 16)),
+                        color:       (it.kind === 'vinyl'
+                                         ? (it.play_count >= 10 ? '#f97316' : it.play_count >= 3 ? C.accent : C.muted)
+                                         : (it.play_count >= 50 ? '#f97316' : it.play_count >= 10 ? C.accent : C.muted)),
+                        lineHeight:  1,
+                        letterSpacing: '0.02em',
+                        cursor: 'help',
                     }}>
                       {it.play_count}×
                     </span>

@@ -170,20 +170,23 @@ export async function GET(request) {
       }
 
       // Apply upserts. Update existing rows in place; insert new.
+      // Undated fallback = epoch + offset (NOT now-offset) — see the
+      // comment in /api/lastfm/sync for why this matters.
       const toInsert = [];
       const toUpdate = [];
-      const nowMs = Date.now();
-      let idx = 0;
+      let undatedIdx = 0;
       for (const a of merged.values()) {
         const key = a.artistNorm + '::' + a.albumNorm;
         const existing = existingByKey.get(key);
         const playedAt = a.lastPlayedMs > 0
           ? new Date(a.lastPlayedMs).toISOString()
-          : new Date(nowMs - idx * 1000).toISOString();
+          : new Date(undatedIdx++ * 1000).toISOString();
         if (existing) {
           // Bump play_count AND advance played_at to most-recent listen
           // so the 30d/90d filter reflects current activity instead of
-          // the original sync date.
+          // the original sync date. ONLY when we have a real timestamp
+          // from this scrobble — otherwise we'd overwrite a previously-
+          // captured real date with our epoch fallback.
           const update = {
             id:         existing.id,
             play_count: (Number(existing.play_count) || 1) + a.delta_plays,
@@ -202,7 +205,6 @@ export async function GET(request) {
             matched_collection_id: collectionIndex.get(key) || null,
             play_count:            a.delta_plays,
           });
-          idx++;
         }
       }
 

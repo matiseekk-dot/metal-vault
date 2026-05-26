@@ -231,17 +231,25 @@ export async function POST() {
 
   // Build per-album rows. play_count = aggregate from Last.fm (post-dedupe).
   // played_at = the MOST RECENT real scrobble of this album from Last.fm
-  // (lastPlayedMs). When unavailable (topAlbums-only album, or "currently
-  // playing" with no .date.uts) fall back to a synthetic now-offset so the
-  // unique index (user, source, played_at, artist_norm, album_norm)
-  // doesn't collide. Real timestamps enable the 30d/90d filter; synthetic
-  // ones land in the "now" window (still visible, just not date-accurate).
+  // (lastPlayedMs). When unavailable — typical for getTopAlbums entries
+  // that fall OUTSIDE the getRecentTracks window (e.g. an album last
+  // listened to 5 years ago, with 500+ lifetime plays) — we fall back
+  // to NEAR-EPOCH instead of "now". Reason: synthetic "now" timestamps
+  // made every untracked-date album look like it was just played, so a
+  // user filtering for "last 30 days" saw BLINDEAD 591x even though they
+  // hadn't listened to it in years. Epoch puts them in a window no
+  // since-filter selects (all-time view still includes them).
+  //
+  // Use a tiny incrementing offset so the unique composite index
+  // (user, source, played_at, artist_norm, album_norm) doesn't collide
+  // when many albums share the no-real-date fallback.
   const nowMs = Date.now();
   let matched   = 0;
   let unmatched = 0;
   const errors  = [];
   const rows    = [];
   let i = 0;
+  let undatedIdx = 0;
   for (const a of merged.values()) {
     const collectionItemId = index.get(a.artistNorm + '::' + a.albumNorm) || null;
     if (collectionItemId) matched++;
@@ -249,7 +257,10 @@ export async function POST() {
 
     const playedAt = a.lastPlayedMs > 0
       ? new Date(a.lastPlayedMs).toISOString()
-      : new Date(nowMs - i * 1000).toISOString();
+      // Epoch + small offset so each undated row gets a unique value.
+      // 1970-01-01T00:00:00Z + N seconds — billion seconds = 2001, plenty
+      // of headroom even for 100k undated albums.
+      : new Date(undatedIdx++ * 1000).toISOString();
 
     rows.push({
       user_id:               user.id,
