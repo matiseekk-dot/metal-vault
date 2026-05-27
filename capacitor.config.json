@@ -1,0 +1,34 @@
+{
+  "appId": "pl.skudev.metalvault",
+  "appName": "Metal Vault",
+  "webDir": "public",
+  "server": {
+    "url": "https://metal-vault-six.vercel.app",
+    "cleartext": false,
+    "androidScheme": "https",
+    "allowNavigation": [
+      "metal-vault-six.vercel.app",
+      "*.supabase.co",
+      "accounts.google.com",
+      "*.googleusercontent.com",
+      "api.discogs.com",
+      "*.discogs.com",
+      "api.spotify.com",
+      "*.spotify.com",
+      "ws.audioscrobbler.com",
+      "www.last.fm",
+      "musicbrainz.org",
+      "coverartarchive.org"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "backgroundColor": "#0a0a0a",
+    "buildOptions": {
+      "keystorePath": "../metal-vault.keystore",
+      "keystoreAlias": "android"
+    }
+  }
+}
