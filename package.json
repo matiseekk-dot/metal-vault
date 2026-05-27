@@ -12,6 +12,9 @@
     "test:e2e:ci": "CI=1 playwright test --project=chromium-desktop"
   },
   "dependencies": {
+    "@capacitor/android": "8.3.4",
+    "@capacitor/cli": "8.3.4",
+    "@capacitor/core": "8.3.4",
     "@sentry/nextjs": "10.51.0",
     "@supabase/ssr": "0.5.2",
     "@supabase/supabase-js": "2.105.1",
