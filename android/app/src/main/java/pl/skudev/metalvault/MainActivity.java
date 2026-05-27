@@ -1,33 +1,38 @@
 package pl.skudev.metalvault;
 
 import android.os.Bundle;
-import android.webkit.PermissionRequest;
-import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
 
 /**
- * MainActivity — extends Capacitor's BridgeActivity with native WebView
- * tweaks that the JSON config layer can't express:
+ * MainActivity — extends Capacitor's BridgeActivity with WebView setting
+ * tweaks the JSON config layer can't express.
  *
- *  1. Disable pinch-zoom on the WebView. The PWA viewport meta tag
- *     allows pinch-zoom (WCAG accessibility — required for Play Store
- *     listing review), but inside the native wrapper that gesture
- *     caused the Calendar tab to zoom-out and lose the bottom nav. In
- *     a native app, content-zoom isn't expected — pinch-zoom should
- *     no-op. We turn it off ONLY in the WebView; the actual website
- *     served on the open web keeps its WCAG-compliant zoomability.
+ * Earlier revisions replaced the WebChromeClient outright to grant
+ * notification permissions. That removed Capacitor's own bridge
+ * handlers (file pickers, fullscreen video, JS console forwarding,
+ * permission delegate for camera) and didn't actually fix push —
+ * Android WebView's Notification API is fundamentally limited
+ * regardless of WebChromeClient overrides. The proper notification
+ * fix is the @capacitor/push-notifications plugin with Firebase Cloud
+ * Messaging, planned for v1.1. The mobile app now surfaces a clear
+ * "use the web version" prompt instead of letting the user tap a
+ * dead button.
  *
- *  2. Grant WebView notification + media permissions automatically.
- *     Android WebView denies these by default unless WebChromeClient
- *     overrides onPermissionRequest. Without the override, calling
- *     Notification.requestPermission() silently resolves to "denied"
- *     and Web Push subscribe fails — user clicks "Enable notifications"
- *     and nothing happens. Granting the JS-level permission here lets
- *     the in-app prompt + Android system POST_NOTIFICATIONS permission
- *     (declared in the manifest) flow do the actual user gate.
+ * What we still do here: disable pinch-zoom in the WebView. The PWA
+ * viewport meta allows pinch-zoom (WCAG / Play Store accessibility
+ * review needs it), but in the native wrapper the gesture fires
+ * accidentally on dense grids (Calendar tab) and zooms the page
+ * out, hiding the bottom nav. Native apps don't expect content-zoom,
+ * so disabling it is the correct UX. Open-web PWA keeps zoom.
+ *
+ * NOTE: the heavy lifting for pinch-zoom is now ALSO done at the JS
+ * layer in app/layout.js (Capacitor-only viewport patch + touchmove
+ * preventDefault). Native WebSettings here are a belt-and-braces
+ * second line of defence because Chrome WebView honors the meta tag
+ * inconsistently across Android versions / device manufacturers.
  */
 public class MainActivity extends BridgeActivity {
 
@@ -38,22 +43,8 @@ public class MainActivity extends BridgeActivity {
         WebView webView = this.bridge.getWebView();
         WebSettings settings = webView.getSettings();
 
-        // (1) Disable pinch-zoom — Calendar tab fix.
         settings.setBuiltInZoomControls(false);
         settings.setSupportZoom(false);
         settings.setDisplayZoomControls(false);
-
-        // (2) Grant WebChromeClient permissions (notifications, camera,
-        //     geolocation when JS requests them). We grant whatever the
-        //     page asks for here, then defer to the system-level permission
-        //     prompt declared in AndroidManifest (POST_NOTIFICATIONS,
-        //     CAMERA) for the actual user-facing approval.
-        WebChromeClient existing = new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                request.grant(request.getResources());
-            }
-        };
-        webView.setWebChromeClient(existing);
     }
 }

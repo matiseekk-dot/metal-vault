@@ -77,6 +77,43 @@ export default function RootLayout({ children }) {
         <ToastProvider />
         <script dangerouslySetInnerHTML={{
           __html: `
+            // ── Capacitor-only viewport hardening ────────────────────
+            // The PWA viewport meta intentionally allows pinch-zoom
+            // (WCAG / Play Store accessibility). Inside the native
+            // WebView wrapper the gesture was firing accidentally on
+            // dense grids (Calendar tab) and triggering a permanent
+            // zoom-out that pushed the bottom nav off-screen. Detect
+            // we're inside Capacitor and patch the viewport at runtime
+            // to block pinch-zoom — without touching the meta tag the
+            // open-web PWA uses.
+            (function lockViewportInApp() {
+              try {
+                var isCap = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+                if (!isCap) return;
+                var v = document.querySelector('meta[name=viewport]');
+                if (!v) {
+                  v = document.createElement('meta');
+                  v.setAttribute('name', 'viewport');
+                  document.head.appendChild(v);
+                }
+                v.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+                // CSS-level lock — touch-action manipulation tells the
+                // browser to only respond to taps + pan, no zoom gestures.
+                var s = document.createElement('style');
+                s.textContent = 'html, body { touch-action: manipulation; -ms-touch-action: manipulation; overscroll-behavior: contain; }';
+                document.head.appendChild(s);
+                // Last-resort: swallow any pinch attempts that slip through
+                // (some Android WebViews honor the meta tag inconsistently
+                // depending on Chrome WebView version on the device).
+                document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
+                document.addEventListener('touchmove', function(e) {
+                  if (e.touches && e.touches.length > 1) e.preventDefault();
+                }, { passive: false });
+                // Mark the body so CSS can target Capacitor-only tweaks.
+                document.body.classList.add('mv-capacitor');
+              } catch {}
+            })();
+
             // Mirror the user's app-locale choice onto <html lang> so
             // accessibility tools and browser translate behave correctly.
             (function syncLang() {

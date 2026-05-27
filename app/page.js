@@ -508,6 +508,36 @@ export default function MetalVault() {
 
   const togglePush = async () => {
     if (!user) { toast.error(t('auth.signInFirst')); return; }
+
+    // Capacitor / Android WebView guard. Android System WebView does
+    // NOT implement the Notification API the way Chrome the browser
+    // does — Notification.requestPermission() resolves to 'denied'
+    // instantly and PushManager.subscribe() silently fails. The
+    // proper fix is the @capacitor/push-notifications plugin backed
+    // by Firebase Cloud Messaging (planned for v1.1). For now,
+    // surface a clear explanation instead of letting the user tap
+    // a dead button. They can still enable push by opening the PWA
+    // in a Chrome / Edge browser (same account, same subscription
+    // table — fully usable).
+    if (typeof window !== 'undefined'
+        && window.Capacitor
+        && window.Capacitor.isNativePlatform
+        && window.Capacitor.isNativePlatform()) {
+      const { confirm } = await import('@/app/components/Toast');
+      const open = await confirm(
+        (t('push.appUnsupported')
+          || 'Powiadomienia w aplikacji mobilnej będą dostępne w wersji 1.1. Tymczasem włącz je w wersji webowej — to ten sam profil, te same powiadomienia.'),
+        {
+          confirmLabel: t('push.openWeb') || 'Otwórz w przeglądarce',
+          cancelLabel:  t('common.cancel') || 'Anuluj',
+        }
+      );
+      if (open) {
+        window.open('https://metal-vault-six.vercel.app/?notify=1', '_system');
+      }
+      return;
+    }
+
     setPushLoading(true);
     try {
       if (pushEnabled) {
