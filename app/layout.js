@@ -99,8 +99,22 @@ export default function RootLayout({ children }) {
                 v.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
                 // CSS-level lock — touch-action manipulation tells the
                 // browser to only respond to taps + pan, no zoom gestures.
+                // overflow-x:hidden defends against any layout child that
+                // accidentally extends beyond viewport-width (Calendar
+                // grid was leaking ~20px to the right on mid-density
+                // phones, causing horizontal scroll + the visual "page
+                // sliding to the side" QA reported).
                 var s = document.createElement('style');
-                s.textContent = 'html, body { touch-action: manipulation; -ms-touch-action: manipulation; overscroll-behavior: contain; }';
+                s.textContent = [
+                  'html, body {',
+                  '  touch-action: manipulation;',
+                  '  -ms-touch-action: manipulation;',
+                  '  overscroll-behavior: contain;',
+                  '  overflow-x: hidden;',
+                  '  max-width: 100vw;',
+                  '}',
+                  '#__next, main { overflow-x: hidden; max-width: 100vw; }',
+                ].join('\\n');
                 document.head.appendChild(s);
                 // Last-resort: swallow any pinch attempts that slip through
                 // (some Android WebViews honor the meta tag inconsistently

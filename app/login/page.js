@@ -79,11 +79,25 @@ export default function LoginPage() {
     return () => clearTimeout(t);
   }, [cooldown]);
 
+  // OAuth redirect target. NEXT_PUBLIC_APP_URL was sometimes UNDEFINED
+  // at build time on Vercel (the env var slipped out of the project
+  // config). That produced `redirectTo: 'undefined/auth/callback'`,
+  // which Google rejected with a flash 400 page before the session
+  // recovered via Supabase's fallback site URL. Fallback to
+  // window.location.origin so the redirect target is always the same
+  // host the user is already on — works identically in PWA and inside
+  // the Capacitor WebView (server.url makes origin = the Vercel domain).
+  const appOrigin = () => {
+    if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+    if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+    return 'https://metal-vault-six.vercel.app';
+  };
+
   const signInWithGoogle = async () => {
     setLoading(true); setError('');
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` },
+      options: { redirectTo: `${appOrigin()}/auth/callback` },
     });
     if (error) {
       setError(friendlyError(error.message));
@@ -96,7 +110,7 @@ export default function LoginPage() {
     setLoading(true); setError(''); setInfo('');
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` },
+      options: { emailRedirectTo: `${appOrigin()}/auth/callback` },
     });
     if (error) {
       setError(friendlyError(error.message));
