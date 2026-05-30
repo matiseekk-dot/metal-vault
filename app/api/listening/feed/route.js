@@ -158,6 +158,13 @@ export async function GET(request) {
     // power users with thousands of unique albums.
     const RAW_LIMIT = Math.min(limit + 500, 10000);
 
+    // Order column: when the user picks the 30d range, sort by
+    // recent_play_count so the top of the list is "what you actually
+    // played this month, most-played first". Other ranges sort by
+    // lifetime play_count (the recent column is a single 30-day window
+    // — meaningless for the 90d/365d/all-time views).
+    const orderColumn = sinceParam === '30d' ? 'recent_play_count' : 'play_count';
+
     let q2 = sb
       .from('streaming_history')
       .select('artist, album, artist_norm, album_norm, played_at, source, matched_collection_id, play_count, recent_play_count')
@@ -165,9 +172,10 @@ export async function GET(request) {
       .eq('source', 'lastfm');
     if (sinceIso) q2 = q2.gte('played_at', sinceIso);
     let r2 = await q2
-      .order('play_count', { ascending: false })
+      .order(orderColumn, { ascending: false })
       .range(0, RAW_LIMIT - 1);
     // Migration 045 (recent_play_count) not applied yet — retry without it.
+    // Fall back to play_count even for the 30d view (better than no data).
     if (r2.error && /recent_play_count/i.test(r2.error.message || '')) {
       let q2r = sb
         .from('streaming_history')
@@ -267,14 +275,20 @@ export async function GET(request) {
     }
   }
 
-  // Everything is per-album aggregated now → unified sort by play_count
-  // desc. "Most played first" reads consistently across vinyl, Spotify
-  // and Last.fm, and a time-range filter scopes the input rather than
-  // changing the sort. Tiebreaker: most recent activity wins, so two
-  // albums each played 3 times surface the one you played yesterday
-  // above the one you played 6 months ago.
+  // Unified sort. When the 30d range is active and the item carries
+  // recent_play_count (Last.fm rows do; vinyl/spotify don't yet — they
+  // fall back to play_count), sort by recent count so 'most listened
+  // last month' surfaces at the top. Otherwise sort by lifetime.
+  // Tiebreaker: most recent activity wins, so two albums each played
+  // 3 times put yesterday's above the one from 6 months ago.
+  const sortFieldOf = sinceParam === '30d'
+    ? (x) => (typeof x.recent_play_count === 'number'
+        ? x.recent_play_count
+        : (x.play_count || 0))
+    : (x) => (x.play_count || 0);
+
   items.sort((a, b) => {
-    const pc = (b.play_count || 0) - (a.play_count || 0);
+    const pc = sortFieldOf(b) - sortFieldOf(a);
     if (pc !== 0) return pc;
     return String(b.played_at || '').localeCompare(String(a.played_at || ''));
   });
