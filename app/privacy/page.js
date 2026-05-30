@@ -11,6 +11,7 @@
 // listed (Supabase, Discogs, Last.fm, Spotify, Stripe, RevenueCat,
 // Vercel, Sentry, PostHog).
 
+import Link from 'next/link';
 import { useT } from '@/lib/i18n';
 import { C, MONO, BEBAS } from '@/lib/theme';
 
@@ -78,10 +79,10 @@ export default function PrivacyPage() {
       fontSize: 14,
       lineHeight: 1.6,
     }}>
-      <a href="/" style={{
+      <Link href="/" style={{
         color: C.dim, ...MONO, fontSize: 12, textDecoration: 'none',
         display: 'inline-block', marginBottom: 24,
-      }}>← {t('privacy.back') || 'Back to app'}</a>
+      }}>← {t('privacy.back') || 'Back to app'}</Link>
 
       <h1 style={{
         ...BEBAS, fontSize: 36, letterSpacing: '0.04em',

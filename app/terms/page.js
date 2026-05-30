@@ -4,6 +4,7 @@
 // Companion to /privacy. Required by both Google OAuth consent
 // verification and the Play Store listing.
 
+import Link from 'next/link';
 import { useT } from '@/lib/i18n';
 import { C, MONO, BEBAS } from '@/lib/theme';
 
@@ -76,10 +77,10 @@ export default function TermsPage() {
       fontSize: 14,
       lineHeight: 1.6,
     }}>
-      <a href="/" style={{
+      <Link href="/" style={{
         color: C.dim, ...MONO, fontSize: 12, textDecoration: 'none',
         display: 'inline-block', marginBottom: 24,
-      }}>← {t('terms.back') || 'Back to app'}</a>
+      }}>← {t('terms.back') || 'Back to app'}</Link>
 
       <h1 style={{
         ...BEBAS, fontSize: 36, letterSpacing: '0.04em',
