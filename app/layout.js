@@ -105,33 +105,54 @@ export default function RootLayout({ children }) {
                 // phones, causing horizontal scroll + the visual "page
                 // sliding to the side" QA reported).
                 var s = document.createElement('style');
-                // Minimum-viable lockdown. Earlier we also forced
-                // body width:100vw + body>div overflow-x:hidden — that
-                // killed vertical scrolling on some Android Chrome
-                // WebView versions because the body's effective height
-                // got clamped to viewport. Calendar root now owns its
-                // own width constraint (in CalendarTab.js) so we only
-                // need touch-action + horizontal overflow guard here.
+                // Absolute-minimum lockdown. Each previous attempt to
+                // patch viewport / overflow on html|body broke scroll
+                // on some Android WebView build:
+                //  - width:100vw + max-width:100vw clamped body height
+                //  - overflow-x:hidden on body implicitly demoted
+                //    overflow-y to hidden on some Chrome WebView
+                //    versions (notably Huawei's bundled WebView), so
+                //    the list views couldn't scroll down at all.
+                // What we keep here is ONLY what doesn't touch overflow:
+                //   - touch-action: manipulation (block pinch-zoom)
+                //   - box-sizing: border-box (Calendar grid fix)
+                // Calendar tab + any future tab that needs an
+                // overflow lock does it ON THEIR OWN ROOT — not
+                // globally. Localising the lock keeps the rest of
+                // the app scrollable.
+                // touch-action: pan-x pan-y allows both horizontal AND
+                // vertical scrolling but blocks pinch-zoom + double-tap-
+                // zoom. Earlier 'manipulation' value was supposed to do
+                // the same but on Huawei's bundled WebView it interacted
+                // badly with our document-level touch listeners and
+                // killed vertical scroll. Explicit pan-x pan-y removes
+                // any ambiguity.
+                //
+                // box-sizing: border-box keeps the Calendar grid (and
+                // any future grid) from exceeding viewport when the
+                // child cells have padding.
                 s.textContent = [
                   'html, body {',
-                  '  touch-action: manipulation;',
-                  '  -ms-touch-action: manipulation;',
-                  '  overflow-x: hidden;',
+                  '  touch-action: pan-x pan-y;',
+                  '  -ms-touch-action: pan-x pan-y;',
                   '}',
-                  // Universal box-sizing — pads fold into the declared
-                  // width so 1fr grids don't quietly exceed viewport.
                   '*, *::before, *::after { box-sizing: border-box; }',
                 ].join('\\n');
                 document.head.appendChild(s);
-                // Last-resort: swallow any pinch attempts that slip through
-                // (some Android WebViews honor the meta tag inconsistently
-                // depending on Chrome WebView version on the device).
-                document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
-                document.addEventListener('touchmove', function(e) {
-                  if (e.touches && e.touches.length > 1) e.preventDefault();
-                }, { passive: false });
-                // Mark the body so CSS can target Capacitor-only tweaks.
+                // Mark the body so CSS can target Capacitor-only tweaks
+                // (none today; reserved for future need).
                 document.body.classList.add('mv-capacitor');
+                // NOTE: removed the document-level touchmove + gesturestart
+                // listeners. touchmove with { passive: false } was the
+                // culprit for the "can't scroll down" regression — even
+                // though the handler only preventDefault'd on >1 touches,
+                // declaring the listener as non-passive made some WebView
+                // builds optimistically queue every touchmove on the main
+                // thread for the JS handler to potentially block, and
+                // when the queue couldn't drain fast enough the scroll
+                // event got dropped. The viewport meta + WebSettings in
+                // MainActivity already block pinch-zoom; we don't need
+                // the JS belt on top of the suspenders.
               } catch {}
             })();
 
