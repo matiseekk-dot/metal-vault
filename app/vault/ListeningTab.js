@@ -526,33 +526,49 @@ export default function ListeningTab({ user, onAlbumClick, premium = false }) {
                       than streaming (10 vinyl spins is genuinely heavy
                       rotation, vs 10 scrobbles which is one casual
                       listen-through). */}
-                  {(it.play_count || 0) > 0 && (
-                    <span
-                      // Title clarifies that the count is LIFETIME plays
-                      // (from Last.fm account history), not plays in the
-                      // selected time-range. User reported confusion seeing
-                      // "591×" on an album they hadn't played in years —
-                      // the album surfaces in 30d because its most recent
-                      // play landed inside that window, but the play count
-                      // itself is the all-time total.
-                      title={it.kind === 'lastfm' || it.kind === 'streaming'
-                        ? `${it.play_count} lifetime scrobbles (from your Last.fm history)`
-                        : `${it.play_count} vinyl spins logged`}
-                      style={{
-                        ...BEBAS,
-                        fontSize:    (it.kind === 'vinyl'
-                                         ? (it.play_count >= 10 ? 24 : it.play_count >= 3 ? 20 : 16)
-                                         : (it.play_count >= 50 ? 24 : it.play_count >= 10 ? 20 : 16)),
-                        color:       (it.kind === 'vinyl'
-                                         ? (it.play_count >= 10 ? '#f97316' : it.play_count >= 3 ? C.accent : C.muted)
-                                         : (it.play_count >= 50 ? '#f97316' : it.play_count >= 10 ? C.accent : C.muted)),
-                        lineHeight:  1,
-                        letterSpacing: '0.02em',
-                        cursor: 'help',
-                    }}>
-                      {it.play_count}×
-                    </span>
-                  )}
+                  {(() => {
+                    // When the 30d range chip is active, prefer
+                    // recent_play_count (plays inside the window)
+                    // over the lifetime play_count. The window-
+                    // specific number is the actual "what I listened
+                    // to lately" signal — lifetime is misleading
+                    // ("591× plays this month" on an album the user
+                    // touched twice). Other ranges (90d/365d/all)
+                    // keep showing lifetime because the LFM sync
+                    // only computes recent_play_count for the 30-day
+                    // window; for wider windows lifetime is still
+                    // the most useful number on display.
+                    const useRecent = range === '30d'
+                      && (it.kind === 'lastfm' || it.kind === 'streaming')
+                      && typeof it.recent_play_count === 'number';
+                    const displayCount = useRecent
+                      ? it.recent_play_count
+                      : (it.play_count || 0);
+                    if (displayCount <= 0) return null;
+
+                    return (
+                      <span
+                        title={useRecent
+                          ? `${displayCount} plays in the last 30 days · ${it.play_count} lifetime`
+                          : (it.kind === 'lastfm' || it.kind === 'streaming'
+                              ? `${displayCount} lifetime scrobbles`
+                              : `${displayCount} vinyl spins logged`)}
+                        style={{
+                          ...BEBAS,
+                          fontSize:    (it.kind === 'vinyl'
+                                           ? (displayCount >= 10 ? 24 : displayCount >= 3 ? 20 : 16)
+                                           : (displayCount >= 50 ? 24 : displayCount >= 10 ? 20 : 16)),
+                          color:       (it.kind === 'vinyl'
+                                           ? (displayCount >= 10 ? '#f97316' : displayCount >= 3 ? C.accent : C.muted)
+                                           : (displayCount >= 50 ? '#f97316' : displayCount >= 10 ? C.accent : C.muted)),
+                          lineHeight:  1,
+                          letterSpacing: '0.02em',
+                          cursor: 'help',
+                      }}>
+                        {displayCount}×
+                      </span>
+                    );
+                  })()}
 
                   {/* "Where to buy" row — only for unowned streaming rows.
                       Two visual tiers:

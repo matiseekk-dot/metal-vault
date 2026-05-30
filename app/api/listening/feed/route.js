@@ -160,13 +160,25 @@ export async function GET(request) {
 
     let q2 = sb
       .from('streaming_history')
-      .select('artist, album, artist_norm, album_norm, played_at, source, matched_collection_id, play_count')
+      .select('artist, album, artist_norm, album_norm, played_at, source, matched_collection_id, play_count, recent_play_count')
       .eq('user_id', user.id)
       .eq('source', 'lastfm');
     if (sinceIso) q2 = q2.gte('played_at', sinceIso);
     let r2 = await q2
       .order('play_count', { ascending: false })
       .range(0, RAW_LIMIT - 1);
+    // Migration 045 (recent_play_count) not applied yet — retry without it.
+    if (r2.error && /recent_play_count/i.test(r2.error.message || '')) {
+      let q2r = sb
+        .from('streaming_history')
+        .select('artist, album, artist_norm, album_norm, played_at, source, matched_collection_id, play_count')
+        .eq('user_id', user.id)
+        .eq('source', 'lastfm');
+      if (sinceIso) q2r = q2r.gte('played_at', sinceIso);
+      r2 = await q2r
+        .order('play_count', { ascending: false })
+        .range(0, RAW_LIMIT - 1);
+    }
     if (r2.error && /column.*play_count|does not exist/i.test(r2.error.message || '')) {
       let q2b = sb
         .from('streaming_history')
@@ -193,6 +205,7 @@ export async function GET(request) {
         const existing = lastfmBuckets.get(key);
         if (existing) {
           existing.play_count += Number(row.play_count) || 1;
+          existing.recent_play_count += Number(row.recent_play_count) || 0;
           existing.matched_collection_id = existing.matched_collection_id || row.matched_collection_id;
           if (row.played_at > existing.played_at) existing.played_at = row.played_at;
         } else {
@@ -204,6 +217,7 @@ export async function GET(request) {
             played_at:             row.played_at,
             matched_collection_id: row.matched_collection_id,
             play_count:            Number(row.play_count) || 1,
+            recent_play_count:     Number(row.recent_play_count) || 0,
           });
         }
       }
@@ -242,6 +256,11 @@ export async function GET(request) {
           in_collection: !!row.matched_collection_id,
           collection_id: row.matched_collection_id || null,
           play_count:    Number(row.play_count) || 1,
+          // recent_play_count (migration 045) — populated by the sync
+          // route counting scrobbles whose date.uts is within 30 days.
+          // UI shows this instead of lifetime play_count when the
+          // user selects '30 days' in the listening tab filter.
+          recent_play_count: Number(row.recent_play_count) || 0,
           watched:       watchKeys.has((row.artist_norm || normaliseArtist(row.artist)) + '::' + (row.album_norm || normaliseAlbumTitle(row.album))),
         });
       }

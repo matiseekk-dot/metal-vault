@@ -162,6 +162,11 @@ export async function POST() {
   // singles or radio shows without album).
   const merged = new Map();   // key = artistNorm::albumNorm
 
+  // 30-day boundary for the recent-window play counter — anything
+  // older than this is lifetime-only, anything newer also bumps
+  // recent_play_count for the listening feed's '30d' filter.
+  const last30dCutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
   for (const t of tracks) {
     const artistName = t.artist?.name || t.artist?.['#text'] || '';
     const albumName  = t.album?.['#text'] || (typeof t.album === 'string' ? t.album : '') || '';
@@ -169,28 +174,24 @@ export async function POST() {
     const artistNorm = normaliseArtist(artistName);
     const albumNorm  = normaliseAlbumTitle(albumName);
     if (!artistNorm || !albumNorm) continue;
-    // Real scrobble timestamp from Last.fm. date.uts is a Unix timestamp
-    // in seconds; missing for the "currently playing" item (no .date at
-    // all on that one). We use the most-recent date.uts across tracks
-    // sharing an album as that album's `played_at` — enables the
-    // listening feed's 30d/90d/365d time-range filter to actually
-    // include Last.fm rows. Previously played_at was synthetic (sync
-    // time) so the time-range filter silently omitted EVERY Last.fm
-    // album, making /vault/listening?since=30d look empty.
+    // Real scrobble timestamp from Last.fm.
     const playedTs = Number(t.date?.uts) > 0 ? Number(t.date.uts) * 1000 : 0;
+    const inRecentWindow = playedTs > 0 && playedTs >= last30dCutoffMs;
     const key = artistNorm + '::' + albumNorm;
     const existing = merged.get(key);
     if (existing) {
       existing.playcount += 1;
+      if (inRecentWindow) existing.recentPlaycount += 1;
       if (playedTs > existing.lastPlayedMs) existing.lastPlayedMs = playedTs;
     } else {
       merged.set(key, {
-        artist:       artistName,
-        album:        albumName,
+        artist:           artistName,
+        album:            albumName,
         artistNorm,
         albumNorm,
-        playcount:    1,
-        lastPlayedMs: playedTs,
+        playcount:        1,
+        recentPlaycount:  inRecentWindow ? 1 : 0,
+        lastPlayedMs:     playedTs,
       });
     }
   }
@@ -208,13 +209,17 @@ export async function POST() {
     const serverCount = Number(a.playcount) || 0;
     if (existing) {
       if (serverCount > existing.playcount) existing.playcount = serverCount;
+      // topAlbums has no per-scrobble dates, so we don't touch
+      // recentPlaycount here — keep whatever recent-tracks counted.
     } else {
       merged.set(key, {
-        artist:     a.artist,
-        album:      a.album,
+        artist:           a.artist,
+        album:            a.album,
         artistNorm,
         albumNorm,
-        playcount:  serverCount,
+        playcount:        serverCount,
+        recentPlaycount:  0,    // unknown; defaults to 0 (not in recent window)
+        lastPlayedMs:     0,
       });
     }
   }
@@ -272,6 +277,10 @@ export async function POST() {
       played_at:             playedAt,
       matched_collection_id: collectionItemId,
       play_count:            a.playcount,
+      // recent_play_count is migration 045. Listening feed reads
+      // it when the user picks the 'last 30 days' filter so the
+      // number shown matches the window, not lifetime.
+      recent_play_count:     a.recentPlaycount || 0,
     });
     i++;
   }
@@ -296,9 +305,16 @@ export async function POST() {
     let { error: insErr } = await admin
       .from('streaming_history')
       .insert(slice);
+    // Graceful degradation if migration 045 (recent_play_count) isn't
+    // applied yet — retry without it.
+    if (insErr && /recent_play_count/i.test(insErr.message || '')) {
+      const stripped = slice.map(r => { const { recent_play_count, ...rest } = r; return rest; });
+      const r2 = await admin.from('streaming_history').insert(stripped);
+      insErr = r2.error;
+    }
     if (insErr && /column.*play_count|does not exist/i.test(insErr.message || '')) {
-      // pre-035 fallback
-      const stripped = slice.map(r => { const { play_count, ...rest } = r; return rest; });
+      // pre-035 fallback (play_count column missing entirely)
+      const stripped = slice.map(r => { const { play_count, recent_play_count, ...rest } = r; return rest; });
       const r2 = await admin.from('streaming_history').insert(stripped);
       insErr = r2.error;
     }
