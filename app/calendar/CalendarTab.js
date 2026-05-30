@@ -89,9 +89,14 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
   const selectedReleases = selected ? (byDate[selected]||[]) : [];
 
   return(
-    <div style={{padding:'0 0 16px'}}>
+    // Hard width lock so the 7-col grid below can never push the
+    // page wider than the viewport. With box-sizing:border-box on
+    // the children and overflow-x:hidden here, no single calendar
+    // cell can leak past the right edge — fixes the "calendar
+    // slides off-screen" issue users hit in the Capacitor wrapper.
+    <div style={{padding:'0 0 16px', maxWidth:'100vw', overflowX:'hidden', boxSizing:'border-box'}}>
       {/* Header */}
-      <div style={{padding:'16px 16px 8px',display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
+      <div style={{padding:'16px 16px 8px',display:'flex',justifyContent:'space-between',alignItems:'flex-end',maxWidth:'100%',boxSizing:'border-box',gap:8}}>
         <div>
           <div style={{...BEBAS,fontSize:26,color:C.text,letterSpacing:'0.06em',lineHeight:1}}>{t('header.calendar')}</div>
           <div style={{fontSize:10,color:C.accent,...MONO,letterSpacing:'0.2em',marginTop:2}}>{t('calendar.upcoming') + ' · ' + t('calendar.recent')}</div>
@@ -112,9 +117,9 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
       </div>
 
       {view==='calendar'&&(
-        <div style={{padding:'0 16px'}}>
+        <div style={{padding:'0 16px',maxWidth:'100%',boxSizing:'border-box',overflowX:'hidden'}}>
           {/* Month nav */}
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,maxWidth:'100%',gap:8}}>
             <button onClick={()=>{if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1);}}
               aria-label={t('calendar.prevMonth')}
               style={{background:C.bg3,border:'1px solid '+C.border,borderRadius:8,color:C.muted,padding:'8px 14px',cursor:'pointer',...MONO,fontSize:14,minWidth:44,minHeight:44}}>‹</button>
@@ -125,14 +130,14 @@ export default function CalendarTab({releases=[],followedArtists=[]}){
           </div>
 
           {/* Day headers */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7, minmax(0, 1fr))',gap:2,marginBottom:4}}>
             {[0,1,2,3,4,5,6].map(d=>(
               <div key={d} style={{textAlign:'center',fontSize:9,color:C.dim,...MONO,padding:'4px 0',textTransform:'capitalize'}}>{weekdayShort(d, locale)}</div>
             ))}
           </div>
 
           {/* Calendar grid */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7, minmax(0, 1fr))',gap:2}}>
             {cells.map((d,i)=>{
               const dk = dateKey(d);
               const releases = d ? (byDate[dk]||[]) : [];
