@@ -95,6 +95,72 @@ export default function LoginPage() {
 
   const signInWithGoogle = async () => {
     setLoading(true); setError('');
+
+    // ── Capacitor: native Google Sign-In via Android SDK ──────────
+    // Web OAuth flow was flashing a Google "400" error in the
+    // WebView before recovering — looks broken to users, kills
+    // installs. Native Google Sign-In bypasses the web redirect
+    // entirely: the system Google account picker fires natively,
+    // returns an idToken in-process, and we hand that to Supabase
+    // via signInWithIdToken. No redirect URLs, no PKCE, no 400.
+    const isCap = typeof window !== 'undefined'
+      && window.Capacitor
+      && window.Capacitor.isNativePlatform?.();
+    if (isCap) {
+      try {
+        const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+        // Initialize on first use. clientId is the Web client ID
+        // from Google Cloud Console (same one Supabase uses for
+        // its Google provider). The Android OAuth client is
+        // matched automatically by package name + SHA-1, no
+        // separate ID needed in the client code.
+        const webClientId = process.env.NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+        if (!webClientId) {
+          setError('Google Sign-In is not configured (missing client id).');
+          setLoading(false);
+          return;
+        }
+        try {
+          await GoogleAuth.initialize({
+            clientId: webClientId,
+            scopes: ['email', 'profile', 'openid'],
+            grantOfflineAccess: false,
+          });
+        } catch { /* second init is a no-op */ }
+
+        const user = await GoogleAuth.signIn();
+        const idToken = user?.authentication?.idToken;
+        if (!idToken) {
+          setError('Google did not return an idToken.');
+          setLoading(false);
+          return;
+        }
+
+        const { error: sErr } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        });
+        if (sErr) {
+          setError(friendlyError(sErr.message));
+          setLoading(false);
+          return;
+        }
+        // Success — auth state listener in the parent will push
+        // the user past the login page.
+      } catch (e) {
+        // User cancellation throws — present a benign message rather
+        // than the raw error.
+        if (/cancel|abort/i.test(e?.message || '')) {
+          setLoading(false);
+          return;
+        }
+        setError(friendlyError(e?.message || 'Google sign-in failed'));
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ── Web (PWA / browser): standard Supabase OAuth redirect ─────
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${appOrigin()}/auth/callback` },
