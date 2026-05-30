@@ -105,27 +105,22 @@ export default function RootLayout({ children }) {
                 // phones, causing horizontal scroll + the visual "page
                 // sliding to the side" QA reported).
                 var s = document.createElement('style');
+                // Minimum-viable lockdown. Earlier we also forced
+                // body width:100vw + body>div overflow-x:hidden — that
+                // killed vertical scrolling on some Android Chrome
+                // WebView versions because the body's effective height
+                // got clamped to viewport. Calendar root now owns its
+                // own width constraint (in CalendarTab.js) so we only
+                // need touch-action + horizontal overflow guard here.
                 s.textContent = [
                   'html, body {',
                   '  touch-action: manipulation;',
                   '  -ms-touch-action: manipulation;',
-                  '  overscroll-behavior: contain;',
                   '  overflow-x: hidden;',
-                  '  max-width: 100vw;',
-                  '  width: 100vw;',
                   '}',
-                  // Universal box-sizing — Calendar grid was adding
-                  // padding to content width on top of 1fr columns,
-                  // making the 7-column grid wider than viewport on
-                  // narrow phones. border-box folds padding into the
-                  // declared width so 1fr stays inside viewport.
+                  // Universal box-sizing — pads fold into the declared
+                  // width so 1fr grids don't quietly exceed viewport.
                   '*, *::before, *::after { box-sizing: border-box; }',
-                  // App Router doesn't use #__next; the root div is
-                  // the immediate body child. Force every direct body
-                  // descendant + any container element to respect
-                  // viewport width so a runaway grandchild can't
-                  // make the whole document scroll horizontally.
-                  'body > div { max-width: 100vw; overflow-x: hidden; }',
                 ].join('\\n');
                 document.head.appendChild(s);
                 // Last-resort: swallow any pinch attempts that slip through
