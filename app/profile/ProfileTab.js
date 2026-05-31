@@ -24,6 +24,7 @@ function ConcertLocationCard({ userId }) {
   const [error,  setError]  = useState(null);
   const [draftRadius, setDraftRadius] = useState(300);
   const [loaded, setLoaded] = useState(false);
+  const [cityInput, setCityInput] = useState('');   // manual city entry
 
   // Load existing location from profile
   useEffect(() => {
@@ -102,6 +103,52 @@ function ConcertLocationCard({ userId }) {
     );
   };
 
+  // Forward-geocode a typed city to lat/lng via Nominatim. Lets the
+  // user set a location WITHOUT granting GPS — important in
+  // Capacitor where the WebView permission flow is unreliable, and
+  // for privacy-conscious users who don't want to share precise
+  // coordinates. Same Nominatim endpoint as reverseGeocode above.
+  const setByCity = async () => {
+    const q = cityInput.trim();
+    if (!q) { setError('Wpisz nazwę miasta.'); return; }
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q), {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'MetalVault/1.0' },
+        signal: AbortSignal.timeout(6000),
+      });
+      const arr = await r.json();
+      if (!Array.isArray(arr) || arr.length === 0) {
+        setError('Nie znaleziono miasta. Spróbuj wpisać kraj, np. "Katowice, PL".');
+        setBusy(false);
+        return;
+      }
+      const lat = Number(arr[0].lat);
+      const lng = Number(arr[0].lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        setError('Nieprawidłowe współrzędne z geocodera.');
+        setBusy(false);
+        return;
+      }
+      // Resolve a clean display name (Katowice → "Katowice, PL"),
+      // not the full Nominatim string which is verbose.
+      const city = await reverseGeocode(lat, lng) || q;
+      const rsp = await fetch('/api/profile/location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng, city, radius_km: draftRadius }),
+      });
+      const d = await rsp.json();
+      if (!rsp.ok) throw new Error(d.error || 'failed');
+      setLoc({ lat, lng, city, radius_km: draftRadius });
+      setCityInput('');
+    } catch (e) {
+      setError('Nie udało się ustawić: ' + (e.message || 'error'));
+    }
+    setBusy(false);
+  };
+
   const updateRadius = async () => {
     if (!loc) return;
     setBusy(true);
@@ -142,13 +189,43 @@ function ConcertLocationCard({ userId }) {
 
       {!loc ? (
         // ── State 1: not set ──
-        <button onClick={enable} disabled={busy}
-          style={{ width: '100%', padding: '11px',
-            background: 'linear-gradient(135deg,#dc2626,#991b1b)',
-            border: 'none', borderRadius: 8, color: '#fff', cursor: busy ? 'wait' : 'pointer',
-            ...BEBAS, fontSize: 13, letterSpacing: '0.08em', opacity: busy ? 0.6 : 1 }}>
-          {busy ? 'GETTING LOCATION…' : 'ENABLE NEARBY ALERTS'}
-        </button>
+        // Two paths: (a) GPS prompt for users on the web who don't
+        // mind sharing precise coordinates, (b) manual city entry
+        // for everyone else (works in Capacitor where GPS perm
+        // flow is flaky, and for privacy-conscious users).
+        <>
+          <button onClick={enable} disabled={busy}
+            style={{ width: '100%', padding: '11px',
+              background: 'linear-gradient(135deg,#dc2626,#991b1b)',
+              border: 'none', borderRadius: 8, color: '#fff', cursor: busy ? 'wait' : 'pointer',
+              ...BEBAS, fontSize: 13, letterSpacing: '0.08em', opacity: busy ? 0.6 : 1,
+              marginBottom: 10 }}>
+            {busy ? 'GETTING LOCATION…' : '📍 USE MY GPS LOCATION'}
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+            margin: '10px 0', color: C.dim, ...MONO, fontSize: 10 }}>
+            <div style={{ flex: 1, height: 1, background: C.border }}/>
+            <span>OR</span>
+            <div style={{ flex: 1, height: 1, background: C.border }}/>
+          </div>
+          <form onSubmit={e => { e.preventDefault(); setByCity(); }}
+            style={{ display: 'flex', gap: 6 }}>
+            <input type="text" value={cityInput}
+              onChange={e => setCityInput(e.target.value)}
+              placeholder="Katowice, Berlin, Warszawa..."
+              disabled={busy}
+              style={{ flex: 1, background: C.bg3, border: '1px solid ' + C.border,
+                borderRadius: 8, color: C.text, padding: '11px 12px',
+                fontSize: 14, ...MONO, outline: 'none' }}/>
+            <button type="submit" disabled={busy || !cityInput.trim()}
+              style={{ padding: '0 16px', background: C.accent,
+                border: 'none', borderRadius: 8, color: '#fff',
+                cursor: 'pointer', ...BEBAS, fontSize: 14, letterSpacing: '0.06em',
+                opacity: (busy || !cityInput.trim()) ? 0.5 : 1 }}>
+              SET
+            </button>
+          </form>
+        </>
       ) : (
         // ── State 2: set ──
         <>
