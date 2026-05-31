@@ -324,7 +324,28 @@ export default function MetalVault() {
 
   // Push status + OAuth return params
   useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
+    // Capacitor: read LocalNotifications-enabled flag from LS (no
+    // server subscription to query — the toggle lives in storage).
+    const isCap = typeof window !== 'undefined'
+      && window.Capacitor
+      && window.Capacitor.isNativePlatform
+      && window.Capacitor.isNativePlatform();
+    if (isCap) {
+      try {
+        const enabled = localStorage.getItem('mv_local_notif_enabled') === 'true';
+        setPushEnabled(enabled);
+      } catch {}
+      // Fire one-shot check for new content on app open. Pulls
+      // /api/releases and compares against the last-seen marker —
+      // if there are new releases from followed artists since the
+      // user last opened the app, schedule a native notification.
+      // This is how LocalNotifications mimics "server-pushed":
+      // it can't proactively wake the app, but it surfaces fresh
+      // data immediately when the app comes to foreground.
+      if (localStorage.getItem('mv_local_notif_enabled') === 'true') {
+        setTimeout(() => { checkAndNotifyNewReleases().catch(() => {}); }, 2500);
+      }
+    } else if ('serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.ready
         .then(reg => reg.pushManager.getSubscription())
         .then(sub => setPushEnabled(!!sub)).catch(() => {});
@@ -506,35 +527,141 @@ export default function MetalVault() {
     }
   };
 
+  // Capacitor-only: surface a native notification when followed
+  // artists have releases since the last app open. Runs once per
+  // app-foreground (gated by the useEffect timer above) and dedupes
+  // by remembering the last release IDs we already notified about,
+  // so the user doesn't see the same Anthrax LP every morning.
+  async function checkAndNotifyNewReleases() {
+    try {
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm?.display !== 'granted') return;
+
+      // Pull releases the same way the feed does — Vercel cache
+      // makes this cheap, so it's fine on every app open.
+      const r = await fetch('/api/releases?limit=20', { cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      const all = Array.isArray(d?.releases) ? d.releases : [];
+      if (all.length === 0) return;
+
+      // Followed-artist names (lower-cased) from the collection hook.
+      // If the user follows nobody yet we silently skip — sending a
+      // generic "new releases" notification when the user hasn't
+      // expressed interest in anyone is spam.
+      const followedLower = new Set(
+        (col.followedArtists || [])
+          .map(a => (a.artist_name || '').toLowerCase().trim())
+          .filter(Boolean)
+      );
+      if (followedLower.size === 0) return;
+
+      const upcoming = all.filter(rel => {
+        if (!rel.artist) return false;
+        if (!followedLower.has(rel.artist.toLowerCase().trim())) return false;
+        // Only upcoming / very recent releases — old re-presses are noise.
+        const d = rel.releaseDate ? new Date(rel.releaseDate) : null;
+        if (!d || isNaN(d)) return false;
+        const daysFromNow = (d - Date.now()) / 86400000;
+        return daysFromNow >= -7 && daysFromNow <= 180;
+      });
+      if (upcoming.length === 0) return;
+
+      // Dedup against what we've already notified — store seen IDs
+      // in LS, prune to last 200 to bound size.
+      let seen = [];
+      try { seen = JSON.parse(localStorage.getItem('mv_local_notif_seen') || '[]'); } catch {}
+      const seenSet = new Set(seen);
+      const fresh = upcoming.filter(rel => rel.id && !seenSet.has(String(rel.id)));
+      if (fresh.length === 0) return;
+
+      // Schedule ONE summary notification per check — pinging the
+      // user once per app open with "N new releases" reads better
+      // than spamming N individual notifications. Tap opens the app
+      // to the feed; user picks what to click into.
+      const head = fresh[0];
+      const titleText = fresh.length === 1
+        ? '🔥 ' + head.artist
+        : `🔥 ${fresh.length} ${t('push.newReleases') || 'nowe płyty od śledzonych'}`;
+      const bodyText = fresh.length === 1
+        ? `${head.album}${head.releaseDate ? ' · ' + String(head.releaseDate).slice(0,10) : ''}`
+        : fresh.slice(0, 3).map(r => `${r.artist} – ${r.album}`).join(' · ');
+
+      await LocalNotifications.schedule({
+        notifications: [{
+          // Unique id per check so re-runs don't overwrite the
+          // previous notification (Capacitor uses id as the
+          // dedup key). Stay in 32-bit signed int range.
+          id: Math.floor(Date.now() / 1000) % 2_000_000_000,
+          title: titleText,
+          body:  bodyText,
+          schedule: { at: new Date(Date.now() + 500) },
+        }],
+      });
+
+      const nextSeen = [...seen, ...fresh.map(r => String(r.id))].slice(-200);
+      try { localStorage.setItem('mv_local_notif_seen', JSON.stringify(nextSeen)); } catch {}
+    } catch (e) {
+      // Best-effort — never break the app if the notification flow misbehaves.
+      console.warn('[LocalNotif] check failed:', e?.message);
+    }
+  }
+
   const togglePush = async () => {
     if (!user) { toast.error(t('auth.signInFirst')); return; }
 
-    // Capacitor / Android WebView guard. Android System WebView does
-    // NOT implement the Notification API the way Chrome the browser
-    // does — Notification.requestPermission() resolves to 'denied'
-    // instantly and PushManager.subscribe() silently fails. The
-    // proper fix is the @capacitor/push-notifications plugin backed
-    // by Firebase Cloud Messaging (planned for v1.1). For now,
-    // surface a clear explanation instead of letting the user tap
-    // a dead button. They can still enable push by opening the PWA
-    // in a Chrome / Edge browser (same account, same subscription
-    // table — fully usable).
-    if (typeof window !== 'undefined'
-        && window.Capacitor
-        && window.Capacitor.isNativePlatform
-        && window.Capacitor.isNativePlatform()) {
-      const { confirm } = await import('@/app/components/Toast');
-      const open = await confirm(
-        (t('push.appUnsupported')
-          || 'Powiadomienia w aplikacji mobilnej będą dostępne w wersji 1.1. Tymczasem włącz je w wersji webowej — to ten sam profil, te same powiadomienia.'),
-        {
-          confirmLabel: t('push.openWeb') || 'Otwórz w przeglądarce',
-          cancelLabel:  t('common.cancel') || 'Anuluj',
+    // Capacitor app: use native LocalNotifications instead of Web Push.
+    // Web Push (VAPID + PushManager.subscribe) is fundamentally
+    // unsupported in the Android System WebView. LocalNotifications
+    // schedules native Android notifications from within the app —
+    // they fire on the OS-level shade with the app icon, exactly like
+    // any native app. The trade-off vs FCM: notifications are
+    // generated client-side, so they require the app to have run
+    // recently (we check for fresh releases on app open + every time
+    // the user backgrounds-then-foregrounds). True server-pushed
+    // notifications when the app is fully closed need FCM, planned
+    // for v1.2.
+    const isCap = typeof window !== 'undefined'
+      && window.Capacitor
+      && window.Capacitor.isNativePlatform
+      && window.Capacitor.isNativePlatform();
+    if (isCap) {
+      setPushLoading(true);
+      try {
+        const { LocalNotifications } = await import('@capacitor/local-notifications');
+        if (pushEnabled) {
+          // Disable: just flip the LS flag — there's no server
+          // subscription to revoke for LocalNotifications.
+          try { localStorage.setItem('mv_local_notif_enabled', 'false'); } catch {}
+          setPushEnabled(false);
+          toast.success(t('push.disabled') || 'Powiadomienia wyłączone');
+        } else {
+          const perm = await LocalNotifications.requestPermissions();
+          if (perm?.display !== 'granted') {
+            toast.error(t('push.denied') || 'Brak uprawnień do powiadomień (możesz włączyć w ustawieniach systemu)');
+            setPushLoading(false);
+            return;
+          }
+          try { localStorage.setItem('mv_local_notif_enabled', 'true'); } catch {}
+          setPushEnabled(true);
+          // Confirmation notification so the user sees it works.
+          try {
+            await LocalNotifications.schedule({
+              notifications: [{
+                id: 1,
+                title: t('push.welcomeTitle') || 'Metal Vault',
+                body:  t('push.welcomeBody')  || 'Powiadomienia włączone — będziesz wiedzieć o nowych płytach od śledzonych zespołów.',
+                schedule: { at: new Date(Date.now() + 800) },
+              }],
+            });
+          } catch {}
         }
-      );
-      if (open) {
-        window.open('https://metal-vault-six.vercel.app/?notify=1', '_system');
+      } catch (e) {
+        if (typeof window !== 'undefined' && window.Sentry) window.Sentry.captureException(e);
+        toast.error('Could not update notification settings: ' + (e?.message || ''));
       }
+      setPushLoading(false);
       return;
     }
 
