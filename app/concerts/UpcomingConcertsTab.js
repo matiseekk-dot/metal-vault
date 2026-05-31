@@ -45,16 +45,50 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
   const [expanded,  setExpanded]  = useState(false);
   const [meta,      setMeta]      = useState({ artistsTotal: 0 });
 
-  // Try to get user location (only if a non-worldwide filter is selected)
+  // Resolve user location. Profile-stored city (with geocoded
+  // lat/lng) wins — that's the value the user explicitly set in
+  // Settings ("Katowice") and it works without any device-level
+  // permission prompt. Live geolocation is the fallback for users
+  // who never set a city.
+  //
+  // Previously we ALWAYS asked navigator.geolocation, which on
+  // Capacitor Android either silently denies (no permission flow
+  // wired through the WebView) or throws "User denied geolocation"
+  // even when the user has a perfectly good Katowice in their
+  // profile. Annoying.
   useEffect(() => {
     const opt = RADIUS_OPTIONS.find(o => o.id === radiusId);
     if (!opt?.km) { setCoords(null); return; }
-    if (!('geolocation' in navigator)) return;
-    navigator.geolocation.getCurrentPosition(
-      pos => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setCoords(null),
-      { timeout: 5000, maximumAge: 600_000 }
-    );
+
+    let cancelled = false;
+
+    (async () => {
+      // 1. Profile city → coords (preferred).
+      try {
+        const r = await fetch('/api/profile', { cache: 'no-store' });
+        const d = await r.json();
+        const lat = d?.profile?.location_lat;
+        const lng = d?.profile?.location_lng;
+        if (!cancelled && typeof lat === 'number' && typeof lng === 'number') {
+          setCoords({ lat, lng, source: 'profile', city: d?.profile?.location_city });
+          return;
+        }
+      } catch { /* fall through to geolocation */ }
+
+      if (cancelled) return;
+
+      // 2. Live geolocation as fallback. Quietly leave coords null
+      //    on failure — the radius filter will fall back to
+      //    "worldwide" semantics rather than blowing up the UI.
+      if (!('geolocation' in navigator)) return;
+      navigator.geolocation.getCurrentPosition(
+        pos => { if (!cancelled) setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, source: 'gps' }); },
+        () => {},
+        { timeout: 5000, maximumAge: 600_000 }
+      );
+    })();
+
+    return () => { cancelled = true; };
   }, [radiusId]);
 
   // Fetch events
@@ -148,14 +182,30 @@ export default function UpcomingConcertsTab({ user, followedArtists = [] }) {
         })}
       </div>
 
-      {/* Geolocation hint when filter active but no coords */}
+      {/* Geolocation hint when filter active but no coords. Direct
+          users to set a city in Profile rather than hammering the
+          browser geolocation prompt — the profile path works in
+          Capacitor with no permission flow, and gives a fixed
+          centerpoint instead of drifting with the user's actual
+          phone location. */}
       {radiusId !== 'all' && !coords && !loading && (
         <div style={{
-          margin: '0 16px 8px', padding: '8px 12px',
+          margin: '0 16px 8px', padding: '10px 12px',
           background: '#1a1500', border: '1px solid #5a4a00', borderRadius: 8,
           fontSize: 11, color: '#fbbf24', ...MONO, lineHeight: 1.5,
         }}>
-          Location permission needed to filter by distance — showing worldwide for now.
+          {t('upcoming.noLocation') || 'Aby filtrować po odległości, ustaw miasto w Profilu → Lokalizacja. Bez tego pokazujemy wszystkie wydarzenia.'}
+        </div>
+      )}
+
+      {/* Center-point label when we resolved coords from the user's
+          profile city — makes it obvious that the radius is anchored
+          on "Katowice", not the user's current GPS location. */}
+      {radiusId !== 'all' && coords && coords.source === 'profile' && coords.city && (
+        <div style={{
+          margin: '0 16px 8px', fontSize: 10, color: C.dim, ...MONO,
+        }}>
+          📍 {coords.city}
         </div>
       )}
 
