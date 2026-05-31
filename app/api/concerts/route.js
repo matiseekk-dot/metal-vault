@@ -281,12 +281,22 @@ export async function GET(request) {
   let filtered = allEvents;
   if (lat != null && lng != null && radiusKm != null) {
     const cont = inferContinent(lat, lng);
+    // Continent fallback is only safe for continent-scale searches.
+    // QA caught the bug: 100 km from Katowice was returning Sweden
+    // events because they came from the Last.fm scraper without
+    // coords, and the continent check waved them through as 'still
+    // in EU'. For tighter radii we REQUIRE precise coords — better
+    // to hide unknown-location events than show Stockholm when the
+    // user asked for 100 km around Katowice. Threshold matches the
+    // largest radius chip surfaced in UI (~2000 km would be 'EU-wide').
+    const CONTINENT_FALLBACK_MIN_RADIUS_KM = 2000;
     filtered = allEvents.filter(ev => {
       if (ev.lat != null && ev.lng != null) {
         // Precise — distance check.
         return distanceKm(lat, lng, ev.lat, ev.lng) <= radiusKm;
       }
-      // Coarse — same-continent fallback when coords are missing.
+      // No coords. Only let through for continent-scale searches.
+      if (radiusKm < CONTINENT_FALLBACK_MIN_RADIUS_KM) return false;
       // No continent inferred (poles, ocean) → keep everything.
       if (!cont) return true;
       const c = String(ev.country || '').toUpperCase();
