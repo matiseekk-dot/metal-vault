@@ -107,16 +107,19 @@ export default function LoginPage() {
       && window.Capacitor
       && window.Capacitor.isNativePlatform?.();
     if (isCap) {
+      // Real-error mode: don't run plugin/Supabase errors through
+      // friendlyError() — it maps anything it doesn't recognise to
+      // 'Something went wrong', which masks the actual reason
+      // (missing env var, bad audience, no Play Services, etc.).
+      // Show the raw message so QA can act on it. console.log every
+      // step so the user can paste devtools output if stuck.
       try {
+        console.log('[Sign-In] Capacitor branch');
         const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
-        // Initialize on first use. clientId is the Web client ID
-        // from Google Cloud Console (same one Supabase uses for
-        // its Google provider). The Android OAuth client is
-        // matched automatically by package name + SHA-1, no
-        // separate ID needed in the client code.
         const webClientId = process.env.NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+        console.log('[Sign-In] webClientId present:', !!webClientId);
         if (!webClientId) {
-          setError('Google Sign-In is not configured (missing client id).');
+          setError('Google Sign-In niedostępne: brak NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID w Vercel env. Dodaj zmienną i przeładuj.');
           setLoading(false);
           return;
         }
@@ -126,12 +129,30 @@ export default function LoginPage() {
             scopes: ['email', 'profile', 'openid'],
             grantOfflineAccess: false,
           });
-        } catch { /* second init is a no-op */ }
+          console.log('[Sign-In] GoogleAuth.initialize OK');
+        } catch (initErr) {
+          console.warn('[Sign-In] GoogleAuth.initialize threw:', initErr?.message);
+        }
 
-        const user = await GoogleAuth.signIn();
+        let user;
+        try {
+          user = await GoogleAuth.signIn();
+          console.log('[Sign-In] GoogleAuth.signIn returned, has idToken:',
+            !!user?.authentication?.idToken,
+            'email:', user?.email);
+        } catch (signInErr) {
+          if (/cancel|abort|12501/i.test(signInErr?.message || '')) {
+            setLoading(false);
+            return;
+          }
+          console.error('[Sign-In] GoogleAuth.signIn failed:', signInErr);
+          setError('Google sign-in failed: ' + (signInErr?.message || JSON.stringify(signInErr)));
+          setLoading(false);
+          return;
+        }
         const idToken = user?.authentication?.idToken;
         if (!idToken) {
-          setError('Google did not return an idToken.');
+          setError('Google did not return an idToken. Check the Android OAuth client (Google Cloud → Credentials) has the correct SHA-1: 65:AF:E6:4E:92:A8:97:4E:D3:BA:08:A3:9D:60:62:79:2E:B7:36:DD');
           setLoading(false);
           return;
         }
@@ -141,20 +162,16 @@ export default function LoginPage() {
           token: idToken,
         });
         if (sErr) {
-          setError(friendlyError(sErr.message));
+          console.error('[Sign-In] Supabase signInWithIdToken failed:', sErr);
+          setError('Supabase rejected the Google idToken: ' + sErr.message
+            + '\n\n(Check that the Web Client ID in Vercel matches the one Supabase uses for the Google provider.)');
           setLoading(false);
           return;
         }
-        // Success — auth state listener in the parent will push
-        // the user past the login page.
+        console.log('[Sign-In] Supabase session established');
       } catch (e) {
-        // User cancellation throws — present a benign message rather
-        // than the raw error.
-        if (/cancel|abort/i.test(e?.message || '')) {
-          setLoading(false);
-          return;
-        }
-        setError(friendlyError(e?.message || 'Google sign-in failed'));
+        console.error('[Sign-In] Outer catch:', e);
+        setError('Sign-in error: ' + (e?.message || JSON.stringify(e)));
         setLoading(false);
       }
       return;
