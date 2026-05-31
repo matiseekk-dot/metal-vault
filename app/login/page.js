@@ -169,6 +169,16 @@ export default function LoginPage() {
           return;
         }
         console.log('[Sign-In] Supabase session established');
+        // signInWithIdToken in Capacitor doesn't always trigger the
+        // parent's onAuthStateChange listener (no cookie-change event
+        // because the storage write went through Supabase JS storage,
+        // not the HTTP layer that normally fires the change). User
+        // reported 'login does nothing, but after restart I'm signed
+        // in' — meaning the session DID persist, just the UI didn't
+        // react. Force a hard navigation to the app root to pick up
+        // the new session via the regular SSR/middleware flow.
+        window.location.href = '/';
+        return;
       } catch (e) {
         console.error('[Sign-In] Outer catch:', e);
         setError('Sign-in error: ' + (e?.message || JSON.stringify(e)));
