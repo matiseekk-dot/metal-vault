@@ -66,41 +66,85 @@ function ConcertLocationCard({ userId }) {
     } catch { return null; }
   };
 
+  // Detect Capacitor native shell. In Capacitor, navigator.geolocation
+  // calls don't reach the Android system permission flow — the WebView
+  // either denies silently or hangs. @capacitor/geolocation routes
+  // through native Android LocationManager + the proper system prompt.
+  const isCapacitorApp = () =>
+    typeof window !== 'undefined'
+    && !!window.Capacitor
+    && typeof window.Capacitor.isNativePlatform === 'function'
+    && window.Capacitor.isNativePlatform();
+
   const enable = async () => {
     setError(null);
-    if (!('geolocation' in navigator)) {
-      setError('Geolocation not supported by your browser.');
-      return;
-    }
     setBusy(true);
-    navigator.geolocation.getCurrentPosition(
-      async pos => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const city = await reverseGeocode(lat, lng);
-        try {
-          const r = await fetch('/api/profile/location', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lat, lng, city, radius_km: draftRadius }),
-          });
-          const d = await r.json();
-          if (!r.ok) throw new Error(d.error || 'failed');
-          setLoc({ lat, lng, city, radius_km: draftRadius });
-        } catch (e) {
-          setError(e.message);
+
+    let lat, lng;
+
+    if (isCapacitorApp()) {
+      // Native plugin: requestPermissions fires the Android system
+      // dialog (Allow once / Allow only while using / Deny). On grant,
+      // getCurrentPosition returns coords through native LocationManager.
+      try {
+        const { Geolocation } = await import('@capacitor/geolocation');
+        const perm = await Geolocation.requestPermissions({ permissions: ['location'] });
+        if (perm.location !== 'granted' && perm.location !== 'prompt-with-rationale') {
+          setError('Brak uprawnień do lokalizacji. Włącz w ustawieniach systemu Android.');
+          setBusy(false);
+          return;
         }
+        const pos = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: false,
+          timeout: 10000,
+        });
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch (e) {
+        setError('Nie udało się pobrać lokalizacji: ' + (e?.message || 'error'));
         setBusy(false);
-      },
-      err => {
+        return;
+      }
+    } else {
+      // Web PWA / browser path — standard navigator.geolocation
+      // (browser handles the permission dialog).
+      if (!('geolocation' in navigator)) {
+        setError('Geolocation not supported by your browser.');
         setBusy(false);
-        const msg = err.code === 1
+        return;
+      }
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            timeout: 8000, maximumAge: 600_000,
+          });
+        });
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch (err) {
+        const msg = err?.code === 1
           ? 'Permission denied. Enable location in browser settings.'
-          : 'Could not get your location: ' + err.message;
+          : 'Could not get your location: ' + (err?.message || 'error');
         setError(msg);
-      },
-      { timeout: 8000, maximumAge: 600_000 }
-    );
+        setBusy(false);
+        return;
+      }
+    }
+
+    const city = await reverseGeocode(lat, lng);
+    try {
+      const r = await fetch('/api/profile/location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng, city, radius_km: draftRadius }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'failed');
+      setLoc({ lat, lng, city, radius_km: draftRadius });
+    } catch (e) {
+      setError(e.message);
+    }
+    setBusy(false);
   };
 
   // Forward-geocode a typed city to lat/lng via Nominatim. Lets the
