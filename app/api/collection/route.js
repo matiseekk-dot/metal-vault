@@ -115,9 +115,30 @@ export async function GET() {
   // in totalCurrent — owning a gifted record is real ownership.
   const totalPaid    = held.reduce((s, i) =>
     s + (i.is_gift ? 0 : (Number(i.purchase_price) || 0)), 0);
-  const totalCurrent = held.reduce((s, i) =>
-    s + (Number(i.median_price || i.current_price || (i.is_gift ? 0 : i.purchase_price)) || 0), 0);
+  // totalCurrent helper — picks the most trustworthy number for
+  // each row. Discogs median_price gets reported even when only
+  // ONE seller is listing the item — a €999 outlier on a rare
+  // press would push the portfolio totals into fantasy territory.
+  // Require >= 3 active listings before trusting the median;
+  // otherwise fall back to purchase_price (user's real cost basis,
+  // safer floor than a single-seller outlier).
+  const marketValueOf = (i) => {
+    const offers = Number(i.num_for_sale) || 0;
+    const market = Number(i.median_price || i.current_price) || 0;
+    if (market > 0 && offers >= 3) return market;
+    if (i.is_gift) return 0;
+    return Number(i.purchase_price) || 0;
+  };
+  const totalCurrent = held.reduce((s, i) => s + marketValueOf(i), 0);
   const giftCount   = held.filter(i => i.is_gift).length;
+  // Low-confidence count — how many rows in the portfolio carry
+  // a market price based on <3 listings. Surfaced in summary so
+  // the UI can hint 'X records have unreliable valuations'.
+  const lowConfidenceCount = held.filter(i => {
+    const offers = Number(i.num_for_sale) || 0;
+    const hasMarket = (Number(i.median_price || i.current_price) || 0) > 0;
+    return hasMarket && offers < 3;
+  }).length;
   const realizedPnl  = sold.reduce((s, i) =>
     s + ((Number(i.sold_price) || 0) - (Number(i.purchase_price) || 0)), 0);
   const soldRevenue  = sold.reduce((s, i) => s + (Number(i.sold_price) || 0), 0);
@@ -134,6 +155,7 @@ export async function GET() {
       realizedPnl,                          // from sold rows
       soldRevenue,
       giftCount,                            // gifts within held
+      lowConfidenceCount,                   // rows where market price is based on <3 listings
     },
   });
 }

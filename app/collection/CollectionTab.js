@@ -2055,17 +2055,60 @@ export function CollectionTab({
                               paid×2) — otherwise the comparison is
                               meaningless and we hide ▲/▼ entirely. */}
                           {now > 0 && (() => {
+                            // Sample-size signal. Discogs price is a single
+                            // number per release, but it's only meaningful
+                            // when enough sellers list copies — a release
+                            // with 1 active offer at €999 will report €999
+                            // as 'market value' even though nobody is
+                            // actually paying that. We show a confidence
+                            // tier next to the price:
+                            //   >= 5 listings → reliable (green/gain tint)
+                            //   2–4 listings → soft (muted color, '⚠ N oferty')
+                            //   1 listing   → unreliable (yellow, '⚠ 1 oferta')
+                            const offers = Number(item.num_for_sale) || 0;
+                            const lowConfidence = offers > 0 && offers < 3;
                             const showGain = paid > 0
                               && now >= paid / 2
-                              && now <= paid * 2;
-                            const color = !showGain ? C.muted
+                              && now <= paid * 2
+                              && offers >= 3;   // suppress gain arrow when we can't trust the number
+                            // Prefix '~' (approx) replaces the old 'od'
+                            // (lowest) — we now read median_price first,
+                            // and 'od' was misleading for that semantic.
+                            const color = lowConfidence ? '#f5c842'
+                              : !showGain ? C.muted
                               : gain >= 0 ? '#4ade80' : '#f87171';
                             return (
-                              <span style={{ fontSize: 9, color, ...MONO }}
-                                title="Najniższa aktualna cena na rynku Discogs (różne warianty mogą mieć inne ceny — sprawdź listę wariantów w karcie)">
-                                od {formatPrice(now, cur, fx)}
-                                {showGain && (gain >= 0 ? ' ▲' : ' ▼')}
-                              </span>
+                              <>
+                                <span style={{ fontSize: 9, color, ...MONO }}
+                                  title={lowConfidence
+                                    ? `Tylko ${offers} ${offers === 1 ? 'oferta' : 'oferty'} na Discogs — wycena może być nierepresentatywna. Inne warianty (kolor, kraj, rok) mogą mieć inne ceny.`
+                                    : `Mediana z ${offers || '?'} ofert na Discogs. Różne warianty (kolor, kraj, rok) mogą mieć inne ceny — sprawdź listę wariantów.`
+                                  }>
+                                  ~{formatPrice(now, cur, fx)}
+                                  {showGain && (gain >= 0 ? ' ▲' : ' ▼')}
+                                </span>
+                                {/* Low-confidence chip — explicit count when
+                                    fewer than 3 listings carry the price. */}
+                                {lowConfidence && (
+                                  <span style={{ fontSize: 8, color: '#f5c842',
+                                    ...MONO, padding: '1px 4px',
+                                    background: '#1a1500', borderRadius: 3,
+                                    border: '1px solid #5a4a00',
+                                    fontWeight: 600 }}
+                                    title={`Wycena oparta na ${offers} ${offers === 1 ? 'ofercie' : 'ofertach'} — uważaj`}>
+                                    ⚠ {offers}
+                                  </span>
+                                )}
+                                {/* High-confidence: subtle offer count so
+                                    the user knows the basis is solid. */}
+                                {offers >= 3 && (
+                                  <span style={{ fontSize: 8, color: C.dim,
+                                    ...MONO }}
+                                    title={`${offers} aktualnych ofert na Discogs`}>
+                                    · {offers}
+                                  </span>
+                                )}
+                              </>
                             );
                           })()}
                           {now === 0 && paid > 0 && (
