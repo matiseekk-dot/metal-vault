@@ -19,6 +19,7 @@ import { useCurrency, useFx, formatPrice, formatChange, convertFromUsd } from '@
 import ManualAddForm from '@/app/collection/ManualAddForm';
 import PriceModal from '@/app/collection/PriceModal';
 import ConcertPicker from '@/app/collection/ConcertPicker';
+import VariantPickerModal from '@/app/components/VariantPickerModal';
 import { trackAlertCreated } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics';
 // (Previously had a dynamic-import for BandsTab here — dead code, never
@@ -1198,6 +1199,7 @@ export function CollectionTab({
   // The picker lets the user link the record to a concert from their journal
   // ("kupione na koncercie") — the vinyl × concert bridge.
   const [concertPickerItem, setConcertPickerItem] = useState(null);
+  const [variantPickerItem, setVariantPickerItem] = useState(null);
   // Lazy-cached map of user concerts (id → { band, year, venue_id, ... }) so
   // we can render the LINKED-CONCERT pill inline in the expanded card without
   // a new round-trip per card. Loaded once when any card opens the picker
@@ -2242,6 +2244,41 @@ export function CollectionTab({
                           );
                         })()}
 
+                        {/* Variant picker — let the user assign a specific
+                            Discogs release ID to this row so the median
+                            price reflects their actual press (colour,
+                            country, year) instead of a random variant
+                            captured at add-time. Only show for rows that
+                            already have a discogs_id — manual-add rows
+                            without one have no master to enumerate
+                            variants from. */}
+                        {item.discogs_id && (
+                          <button
+                            onClick={() => setVariantPickerItem(item)}
+                            style={{
+                              width: '100%', marginBottom: 10, padding: '10px 12px',
+                              background: 'rgba(96,165,250,0.06)',
+                              border: '1px dashed ' + C.border,
+                              borderRadius: 8, color: '#93c5fd',
+                              cursor: 'pointer',
+                              ...MONO, fontSize: 11, lineHeight: 1.3,
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              textAlign: 'left',
+                            }}>
+                            <span style={{ fontSize: 14 }}>🎯</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ ...BEBAS, fontSize: 12, letterSpacing: '0.04em',
+                                color: '#93c5fd', lineHeight: 1.1 }}>
+                                {t('vault.pickVariant') || 'Wybierz mój wariant'}
+                              </div>
+                              <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>
+                                {t('vault.pickVariantHint')
+                                  || 'Dopasuj cenę do Twojego pressu (kolor / kraj / rok)'}
+                              </div>
+                            </div>
+                          </button>
+                        )}
+
                         {/* Vinyl × Concert bridge — link this record to
                             the concert it was bought at. Unique feature
                             no other vinyl OR concert app offers. The
@@ -2895,6 +2932,59 @@ export function CollectionTab({
         </div>
 
       {/* ═══ CONCERT PICKER — links a Vault item to a concert journal row ═══ */}
+      {/* Variant picker overlay — reassign collection.discogs_id to the
+          specific Discogs release the user actually owns. Closing
+          callback fires onClose; picking a variant fires onPick which
+          PATCHes the row and the PATCH handler triggers a background
+          price refresh against the new release ID. */}
+      {variantPickerItem && (
+        <VariantPickerModal
+          album={variantPickerItem}
+          currentDiscogsId={variantPickerItem.discogs_id}
+          onClose={() => setVariantPickerItem(null)}
+          onPick={async (variant) => {
+            const itemId = variantPickerItem.id;
+            const newDiscogsId = String(variant.id);
+            // Optimistic — flip the displayed id straight away, clear
+            // the stale market price fields so the row doesn't briefly
+            // show the old variant's number while the server fetches
+            // the new one.
+            const optimistic = collection.map(c =>
+              c.id === itemId
+                ? { ...c, discogs_id: newDiscogsId, median_price: null, current_price: null, num_for_sale: null }
+                : c);
+            onUpdate(optimistic);
+            try {
+              const r = await fetch('/api/collection?id=' + itemId, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ discogs_id: newDiscogsId }),
+              });
+              if (!r.ok) throw new Error('PATCH failed');
+              const body = await r.json().catch(() => ({}));
+              if (body && body.item) {
+                const merged = collection.map(c =>
+                  c.id === itemId ? { ...c, ...body.item } : c);
+                onUpdate(merged);
+              }
+              haptic.success?.();
+              toast.success(t('vault.variantPickedOk') || 'Wariant zapisany — wycena odświeży się za chwilę');
+            } catch {
+              // Revert on failure.
+              const reverted = collection.map(c =>
+                c.id === itemId
+                  ? { ...c, discogs_id: variantPickerItem.discogs_id,
+                      median_price: variantPickerItem.median_price,
+                      current_price: variantPickerItem.current_price,
+                      num_for_sale: variantPickerItem.num_for_sale }
+                  : c);
+              onUpdate(reverted);
+              toast.error(t('vault.variantPickFailed') || 'Save failed');
+            }
+          }}
+        />
+      )}
+
       {concertPickerItem && (
         <ConcertPicker
           currentId={concertPickerItem.bought_at_concert_id || null}

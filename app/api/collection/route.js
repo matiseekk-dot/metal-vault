@@ -206,6 +206,16 @@ export async function PATCH(request) {
     .select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // If discogs_id changed (variant picker), kick off a price refresh
+  // in the background — old median/lowest were for a different release
+  // ID, so leaving them stale would defeat the whole point of picking
+  // the right variant. Non-blocking; client gets the updated row on
+  // the next /api/collection GET.
+  if (body.discogs_id && data && String(data.discogs_id) === String(body.discogs_id)) {
+    fetchAndStorePrices(body.discogs_id, data.id, supabase).catch(() => {});
+  }
+
   await updateSnapshot(supabase, user.id);
   return NextResponse.json({ item: data });
 }
