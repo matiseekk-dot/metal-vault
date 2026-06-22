@@ -15,19 +15,25 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient, supabaseAdmin } from '@/lib/supabase-server';
+import { marketValueOf, sumMarketValue } from '@/lib/portfolio-value';
 
 export async function GET() {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // 1) Get user's collection
-  const { data: collection } = await sb
+  // 1) Get user's collection — include num_for_sale + is_gift + is_sold
+  //    so the confidence guard in lib/portfolio-value can fire.
+  const { data: collectionRaw } = await sb
     .from('collection')
-    .select('id, discogs_id, median_price, current_price, purchase_price, added_at')
+    .select('id, discogs_id, median_price, current_price, purchase_price, num_for_sale, is_gift, is_sold, added_at')
     .eq('user_id', user.id);
 
-  if (!collection || collection.length === 0) {
+  // Drop sold rows — they don't belong in held-portfolio value over
+  // time (the cost basis stays for realized PnL elsewhere).
+  const collection = (collectionRaw || []).filter(i => !i.is_sold);
+
+  if (collection.length === 0) {
     return NextResponse.json({
       current: 0, change30d: 0, change90d: 0,
       percentChange30d: 0, percentChange90d: 0,
@@ -35,19 +41,17 @@ export async function GET() {
     });
   }
 
-  // 2) Current value — sum of median (or current_price fallback)
-  const currentValue = collection.reduce((sum, item) => {
-    const v = Number(item.median_price) || Number(item.current_price) || 0;
-    return sum + v;
-  }, 0);
+  // 2) Current value — use the same marketValueOf logic the live
+  //    summary uses (single source of truth in lib/portfolio-value).
+  //    Items with <3 listings fall back to purchase_price; gifts
+  //    have no cost basis.
+  const currentValue = sumMarketValue(collection);
 
   // Total paid — used as a fallback baseline when there's no
   // historical price_history yet (cron just started running, or this
-  // is a fresh user). "Value vs purchase price" is still informative
-  // even if it's not the exact 30d/90d delta the user asked for.
-  const totalPaid = collection.reduce((sum, item) => {
-    return sum + (Number(item.purchase_price) || 0);
-  }, 0);
+  // is a fresh user). Gifts excluded — user didn't pay for them.
+  const totalPaid = collection.reduce((sum, item) =>
+    sum + (item.is_gift ? 0 : (Number(item.purchase_price) || 0)), 0);
 
   // 3) Historical lookup — admin client because price_history has RLS rules
   const adminSb = supabaseAdmin;
@@ -93,7 +97,12 @@ export async function GET() {
   let value30 = 0, value90 = 0, withHistory30 = 0, withHistory90 = 0;
   for (const item of collection) {
     const idStr = String(item.discogs_id);
-    const currentItemValue = Number(item.median_price) || Number(item.current_price) || 0;
+    // Today's per-item value uses the trusted formula. The
+    // historical lookup (price_history table) is a raw median
+    // from the daily cron and predates the confidence guard,
+    // so for missing-history items we fall back to today's
+    // trusted number rather than today's raw median.
+    const currentItemValue = marketValueOf(item);
 
     const at30 = map30[idStr]?.price;
     const at90 = map90[idStr]?.price;

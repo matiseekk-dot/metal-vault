@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { marketValueOf, sumMarketValue, isLowConfidence } from '@/lib/portfolio-value';
 
 
 export const dynamic = 'force-dynamic';
@@ -72,12 +73,22 @@ async function getUser(sb) {
 }
 
 async function updateSnapshot(supabase, userId) {
+  // Snapshot drives the StatsTab portfolio chart + the 'change'
+  // delta endpoint. Same confidence rules as the live summary:
+  // require >= 3 Discogs listings before trusting median_price;
+  // gifts have no cost basis; everything else falls back to
+  // purchase_price. Without this guard a single €999 listing on
+  // a rare press would permanently appear as a portfolio spike.
   const { data: items } = await supabase
-    .from('collection').select('purchase_price, current_price, median_price')
+    .from('collection')
+    .select('purchase_price, current_price, median_price, num_for_sale, is_gift, is_sold')
     .eq('user_id', userId);
   if (!items) return;
-  const totalValue = items.reduce((s, i) => s + (Number(i.median_price || i.current_price || i.purchase_price) || 0), 0);
-  const totalPaid  = items.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0);
+  // Sold rows shouldn't drag the daily snapshot — we no longer hold them.
+  const held = items.filter(i => !i.is_sold);
+  const totalValue = sumMarketValue(held);
+  const totalPaid  = held.reduce((s, i) =>
+    s + (i.is_gift ? 0 : (Number(i.purchase_price) || 0)), 0);
   await supabase.from('portfolio_snapshots').upsert(
     {
       user_id:       userId,
@@ -115,30 +126,14 @@ export async function GET() {
   // in totalCurrent — owning a gifted record is real ownership.
   const totalPaid    = held.reduce((s, i) =>
     s + (i.is_gift ? 0 : (Number(i.purchase_price) || 0)), 0);
-  // totalCurrent helper — picks the most trustworthy number for
-  // each row. Discogs median_price gets reported even when only
-  // ONE seller is listing the item — a €999 outlier on a rare
-  // press would push the portfolio totals into fantasy territory.
-  // Require >= 3 active listings before trusting the median;
-  // otherwise fall back to purchase_price (user's real cost basis,
-  // safer floor than a single-seller outlier).
-  const marketValueOf = (i) => {
-    const offers = Number(i.num_for_sale) || 0;
-    const market = Number(i.median_price || i.current_price) || 0;
-    if (market > 0 && offers >= 3) return market;
-    if (i.is_gift) return 0;
-    return Number(i.purchase_price) || 0;
-  };
-  const totalCurrent = held.reduce((s, i) => s + marketValueOf(i), 0);
-  const giftCount   = held.filter(i => i.is_gift).length;
-  // Low-confidence count — how many rows in the portfolio carry
-  // a market price based on <3 listings. Surfaced in summary so
-  // the UI can hint 'X records have unreliable valuations'.
-  const lowConfidenceCount = held.filter(i => {
-    const offers = Number(i.num_for_sale) || 0;
-    const hasMarket = (Number(i.median_price || i.current_price) || 0) > 0;
-    return hasMarket && offers < 3;
-  }).length;
+  // Market-value semantics live in lib/portfolio-value.js so every
+  // surface (summary, snapshot, portfolio history, weekly digest)
+  // agrees on the same number. Confidence guard: require >= 3
+  // Discogs listings before trusting median_price, otherwise fall
+  // back to purchase_price.
+  const totalCurrent       = sumMarketValue(held);
+  const giftCount          = held.filter(i => i.is_gift).length;
+  const lowConfidenceCount = held.filter(isLowConfidence).length;
   const realizedPnl  = sold.reduce((s, i) =>
     s + ((Number(i.sold_price) || 0) - (Number(i.purchase_price) || 0)), 0);
   const soldRevenue  = sold.reduce((s, i) => s + (Number(i.sold_price) || 0), 0);

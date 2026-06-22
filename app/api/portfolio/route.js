@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { sumMarketValue, isLowConfidence } from '@/lib/portfolio-value';
 
 
 export const dynamic = 'force-dynamic';
@@ -24,20 +25,27 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Also get collection summary
+  // Live summary — same confidence rules as /api/collection summary.
+  // We need num_for_sale + is_gift + is_sold to apply the marketValueOf
+  // helper that filters low-confidence single-listing prices and
+  // excludes sold rows.
   const { data: collection } = await supabase
-    .from('collection').select('purchase_price, current_price, artist, album')
+    .from('collection')
+    .select('purchase_price, current_price, median_price, num_for_sale, is_gift, is_sold, artist, album')
     .eq('user_id', user.id);
-
-  const totalPurchased = (collection || []).reduce((s, i) => s + (Number(i.purchase_price) || 0), 0);
-  const totalCurrent   = (collection || []).reduce((s, i) => s + (Number(i.current_price || i.purchase_price) || 0), 0);
+  const held = (collection || []).filter(i => !i.is_sold);
+  const totalPurchased = held.reduce((s, i) =>
+    s + (i.is_gift ? 0 : (Number(i.purchase_price) || 0)), 0);
+  const totalCurrent       = sumMarketValue(held);
+  const lowConfidenceCount = held.filter(isLowConfidence).length;
 
   return NextResponse.json({
     snapshots: data || [],
     summary: {
-      itemCount:      (collection || []).length,
+      itemCount:        held.length,
       totalPurchased,
       totalCurrent,
+      lowConfidenceCount,
       gain:           totalCurrent - totalPurchased,
       gainPct:        totalPurchased > 0 ? ((totalCurrent - totalPurchased) / totalPurchased * 100).toFixed(1) : 0,
     },
