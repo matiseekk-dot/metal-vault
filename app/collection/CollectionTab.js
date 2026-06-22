@@ -1598,6 +1598,7 @@ export function CollectionTab({
               ['for_sale',  t('vault.filter.forSale') || '💲 Na sprzedaż'],
               ['preorder',  t('vault.filter.preorder') || '📦 W przedsprzedaży'],
               ['sold',      t('vault.filter.sold') || '💰 Sprzedane'],
+              ['gift',      t('vault.filter.gift') || '🎁 Prezenty'],
               ['vinyl',     t('vault.filter.vinyl')],
               ['cd',        t('vault.filter.cd')],
               ['cassette',  t('vault.filter.cassette')],
@@ -1762,6 +1763,8 @@ export function CollectionTab({
                   // Pre-order filter — items the user committed to but
                   // hasn't received yet (migration 043).
                   if (vaultFilter === 'preorder') return item.is_preordered === true;
+                  // Gift filter — items received as a present (migration 046).
+                  if (vaultFilter === 'gift') return item.is_gift === true;
                   return true;
                 });
                 // Sold filter: sort by sold_date DESC so most-recent sales
@@ -1917,6 +1920,21 @@ export function CollectionTab({
                                 letterSpacing: '0.05em', fontWeight: 600 }}>
                               📦 {t('vault.preorderShort') || 'PRE-ORDER'}
                               {item.year && ' · ' + item.year}
+                            </span>
+                          )}
+                          {/* 🎁 GIFT badge (migration 046). Optional
+                              gift_from is surfaced inline ("🎁 GIFT · Tata")
+                              to preserve the sentimental context that
+                              would otherwise be buried in notes. */}
+                          {item.is_gift && (
+                            <span title={(t('vault.giftTitle') || 'Received as a gift')
+                              + (item.gift_from ? ' — ' + item.gift_from : '')}
+                              style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3,
+                                background: '#2a1505', color: '#fda4af',
+                                border: '1px solid #fda4af66', ...MONO,
+                                letterSpacing: '0.05em', fontWeight: 600 }}>
+                              🎁 {t('vault.giftShort') || 'PREZENT'}
+                              {item.gift_from && ' · ' + item.gift_from}
                             </span>
                           )}
                           {/* 💰 SOLD badge (migration 044). Sold price is
@@ -2272,6 +2290,91 @@ export function CollectionTab({
                           }}>
                             📬 {t('vault.markDelivered') || 'Dostarczono — przenieś do kolekcji'}
                           </button>
+                        )}
+
+                        {/* Gift toggle (migration 046). Two states:
+                            (a) not marked → button "Oznacz jako prezent" +
+                                optional prompt for "od kogo" string
+                            (b) marked → button "Cofnij prezent" (clear flag
+                                + gift_from). Disabled when sold — sold and
+                                gift are mutually nonsensical here. */}
+                        {!item.is_sold && (
+                          item.is_gift ? (
+                            <button onClick={async () => {
+                              const optimistic = collection.map(c =>
+                                c.id === item.id ? { ...c, is_gift: false, gift_from: null } : c);
+                              onUpdate(optimistic);
+                              try {
+                                const r = await fetch('/api/collection?id=' + item.id, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ is_gift: false, gift_from: null }),
+                                });
+                                if (!r.ok) throw new Error('PATCH failed');
+                                const body = await r.json().catch(() => ({}));
+                                if (body && body.item) {
+                                  const merged = collection.map(c =>
+                                    c.id === item.id ? { ...c, ...body.item } : c);
+                                  onUpdate(merged);
+                                }
+                                haptic.success?.();
+                              } catch {
+                                const reverted = collection.map(c =>
+                                  c.id === item.id ? { ...c, is_gift: true, gift_from: item.gift_from } : c);
+                                onUpdate(reverted);
+                                toast.error(t('vault.giftRevertFailed') || 'Save failed');
+                              }
+                            }} style={{
+                              width: '100%', marginBottom: 10, padding: '10px 12px',
+                              background: '#2a1505', border: '1px solid #fda4af66',
+                              borderRadius: 8, color: '#fda4af', cursor: 'pointer',
+                              ...MONO, fontSize: 11, fontWeight: 600,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                            }}>
+                              ↩ {t('vault.unGift') || 'Cofnij prezent'}
+                            </button>
+                          ) : (
+                            <button onClick={async () => {
+                              const fromStr = window.prompt(
+                                t('vault.giftPrompt') || 'Od kogo? (np. "Tata", "Łukasz" — zostaw puste jeśli nie chcesz zapisać)',
+                                ''
+                              );
+                              if (fromStr === null) return;   // user cancelled
+                              const giftFrom = fromStr.trim().slice(0, 80) || null;
+                              const optimistic = collection.map(c =>
+                                c.id === item.id ? { ...c, is_gift: true, gift_from: giftFrom } : c);
+                              onUpdate(optimistic);
+                              try {
+                                const r = await fetch('/api/collection?id=' + item.id, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ is_gift: true, gift_from: giftFrom }),
+                                });
+                                if (!r.ok) throw new Error('PATCH failed');
+                                const body = await r.json().catch(() => ({}));
+                                if (body && body.item) {
+                                  const merged = collection.map(c =>
+                                    c.id === item.id ? { ...c, ...body.item } : c);
+                                  onUpdate(merged);
+                                }
+                                haptic.success?.();
+                                toast.success(t('vault.giftOk') || 'Oznaczono jako prezent');
+                              } catch {
+                                const reverted = collection.map(c =>
+                                  c.id === item.id ? { ...c, is_gift: false, gift_from: null } : c);
+                                onUpdate(reverted);
+                                toast.error(t('vault.giftFailed') || 'Save failed');
+                              }
+                            }} style={{
+                              width: '100%', marginBottom: 10, padding: '10px 12px',
+                              background: '#2a1505', border: '1px solid #fda4af66',
+                              borderRadius: 8, color: '#fda4af', cursor: 'pointer',
+                              ...MONO, fontSize: 11, fontWeight: 600,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                            }}>
+                              🎁 {t('vault.markGift') || 'Otrzymane w prezencie'}
+                            </button>
+                          )
                         )}
 
                         {/* Mark as sold / Unmark sold (migration 044).

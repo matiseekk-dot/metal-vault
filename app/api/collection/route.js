@@ -29,6 +29,11 @@ const COLLECTION_WRITABLE = [
   // excluded from portfolio current-value calculations.
   // PnL = sold_price - purchase_price.
   'is_sold', 'sold_date', 'sold_price',
+  // Gift flag (migration 046). When true, purchase_price counts
+  // as 0 in totalPaid (user didn't spend) but the row stays in
+  // collection and counts toward itemCount. gift_from is free
+  // text — "Tata", "Łukasz", or any sentimental label.
+  'is_gift', 'gift_from',
 ];
 
 function filterWritable(body) {
@@ -105,8 +110,14 @@ export async function GET() {
   // restricted to held rows.
   const held = (data || []).filter(i => !i.is_sold);
   const sold = (data || []).filter(i =>  i.is_sold);
-  const totalPaid    = held.reduce((s, i) => s + (Number(i.purchase_price) || 0), 0);
-  const totalCurrent = held.reduce((s, i) => s + (Number(i.median_price || i.current_price || i.purchase_price) || 0), 0);
+  // Gifts: user didn't pay for these, so they don't contribute to
+  // lifetime spend. They DO still hold market value, so they count
+  // in totalCurrent — owning a gifted record is real ownership.
+  const totalPaid    = held.reduce((s, i) =>
+    s + (i.is_gift ? 0 : (Number(i.purchase_price) || 0)), 0);
+  const totalCurrent = held.reduce((s, i) =>
+    s + (Number(i.median_price || i.current_price || (i.is_gift ? 0 : i.purchase_price)) || 0), 0);
+  const giftCount   = held.filter(i => i.is_gift).length;
   const realizedPnl  = sold.reduce((s, i) =>
     s + ((Number(i.sold_price) || 0) - (Number(i.purchase_price) || 0)), 0);
   const soldRevenue  = sold.reduce((s, i) => s + (Number(i.sold_price) || 0), 0);
@@ -122,6 +133,7 @@ export async function GET() {
       gainPct:        totalPaid > 0 ? ((totalCurrent - totalPaid) / totalPaid * 100).toFixed(1) : '0',
       realizedPnl,                          // from sold rows
       soldRevenue,
+      giftCount,                            // gifts within held
     },
   });
 }

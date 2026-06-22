@@ -48,6 +48,7 @@ export async function GET() {
   const boughtAtConcertId   = await columnExists(admin, 'collection',           'bought_at_concert_id');
   const isPreordered        = await columnExists(admin, 'collection',           'is_preordered');
   const isSold              = await columnExists(admin, 'collection',           'is_sold');
+  const isGift              = await columnExists(admin, 'collection',           'is_gift');
   const concertExcludes     = await columnExists(admin, 'user_concert_excludes', 'exclude_key');
 
   return NextResponse.json({
@@ -57,6 +58,7 @@ export async function GET() {
       'collection.bought_at_concert_id':         boughtAtConcertId,
       'collection.is_preordered':                isPreordered,
       'collection.is_sold':                      isSold,
+      'collection.is_gift':                      isGift,
       'user_concert_excludes.exclude_key':       concertExcludes,
     },
     // Convenience aggregate: any missing column means the UI should
@@ -66,6 +68,7 @@ export async function GET() {
                   || boughtAtConcertId === false
                   || isPreordered === false
                   || isSold === false
+                  || isGift === false
                   || concertExcludes === false,
   });
 }
