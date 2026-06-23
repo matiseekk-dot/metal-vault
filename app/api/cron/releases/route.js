@@ -241,5 +241,23 @@ export async function GET(request) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 
+  // Weekly newsletter fan-out. We're already on a weekly Monday
+  // schedule (vercel.json: 0 10 * * 1) so kicking off the
+  // weekly-report cron here gives us the second weekly email
+  // (collection value snapshot + top gainer/loser + new records)
+  // without burning a separate cron slot — Hobby tier caps total
+  // cron entries, but a single registered cron can fire any number
+  // of internal sub-tasks.
+  try {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://metal-vault-six.vercel.app';
+    fetch(appUrl + '/api/cron/weekly-report', {
+      headers: { authorization: 'Bearer ' + process.env.CRON_SECRET },
+      signal: AbortSignal.timeout(2000),
+    }).catch(() => {});
+    results.weeklyReportKickoff = true;
+  } catch {
+    results.weeklyReportKickoff = false;
+  }
+
   return NextResponse.json(results);
 }

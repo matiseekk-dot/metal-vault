@@ -5,6 +5,8 @@ import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import { loadLS, saveLS } from '@/lib/localStorage';
 import { useCollection } from '@/lib/hooks/useCollection';
 import { AlbumCard, VinylModal, StatsBar, BottomNav, AlbumCover } from '@/app/components/ui';
+import OnboardingWizard from '@/app/components/OnboardingWizard';
+import RecentActivity   from '@/app/components/RecentActivity';
 import { CollectionTab, WatchlistTab } from '@/app/collection/CollectionTab';
 import ErrorBoundary from '@/app/components/ErrorBoundary';
 import OnboardingScreen from '@/app/components/OnboardingScreen';
@@ -895,9 +897,34 @@ export default function MetalVault() {
       <DemoBanner user={user}/>
       <RepressBanner user={user}/>
 
+      {/* Onboarding wizard — fires on first launch after sign-in
+          (profile.onboarding_completed === false). Completing or
+          skipping flips the flag so this never reappears. */}
+      {user && profile && profile.onboarding_completed === false && (
+        <OnboardingWizard
+          user={user}
+          followedArtists={col.followedArtists}
+          onFollow={(name) => col.toggleFollow(name)}
+          onConnectDiscogs={connectDiscogs}
+          onComplete={() => setProfile(p => p ? { ...p, onboarding_completed: true } : p)}
+        />
+      )}
+
       <div style={{ paddingBottom:100 }}>
         {tab==='feed' && (
           <ErrorBoundary name="Feed">
+            {/* Recent activity strip — surfaces 'what's new for you
+                today' so the Feed isn't just a wall of generic
+                releases. Each row taps through to the relevant tab. */}
+            {user && (
+              <RecentActivity
+                collection={col.collection}
+                concerts={col.concerts || []}
+                releases={releases}
+                followedArtists={col.followedArtists}
+                onNavigate={(target) => setTab(target)}
+              />
+            )}
             {!feedLoading && releases.length>0 && <StatsBar releases={releases}/>}
             {/* Following / All tabs — only show Following if user is logged in */}
             <div style={{ display:'flex', borderBottom:'1px solid '+C.border }}>
