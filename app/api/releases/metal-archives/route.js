@@ -390,6 +390,10 @@ export async function GET(request) {
 
     items.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate));
 
+    // Edge cache — same window as /api/releases so the two sources
+    // stay in sync from the browser's perspective. MB per-artist
+    // fetches are the slowest link in the feed (1.1s throttle) so a
+    // CDN hit here is the biggest single retention win.
     return NextResponse.json({
       items,
       count:  items.length,
@@ -407,9 +411,15 @@ export async function GET(request) {
         tagFromCache:      !!tagRes.cached,
         queryWindow:       toISO(past) + ' → ' + toISO(future),
       },
+    }, {
+      headers: {
+        'Cache-Control':     'public, s-maxage=300, stale-while-revalidate=3600',
+        'CDN-Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+      },
     });
   } catch (e) {
     console.error('[MB] error:', e);
+    // Never cache 5xx — client retries next open should hit fresh function.
     return NextResponse.json({ items: [], error: e.message, count: 0 }, { status: 500 });
   }
 }

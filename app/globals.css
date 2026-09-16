@@ -30,3 +30,11 @@ input[type=number] { -moz-appearance: textfield; }
 * { -webkit-font-smoothing: antialiased; }
 img { display: block; }
 button { font-family: inherit; }
+
+/* Skeleton loader pulse — used by feed and other lazy-loaded lists.
+ * Kept subtle (0.55 → 1 opacity) so it reads as "content on the way",
+ * not "flash of empty state". */
+@keyframes mv-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}

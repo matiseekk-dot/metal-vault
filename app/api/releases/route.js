@@ -456,6 +456,13 @@ export async function GET(request) {
       return (b.releaseDate || '').localeCompare(a.releaseDate || '');
     });
 
+    // Edge cache — 5 min fresh, 1 h stale-while-revalidate. Same URL
+    // (including ?artists=...) served from Vercel CDN without touching
+    // the function, so the second user with the same followed list
+    // gets the response in <200 ms instead of eating a full cold start
+    // + Discogs round-trip. First user in the window still pays the
+    // cost, but a mostly-warm CDN is what makes the feed feel instant
+    // on repeat opens.
     return NextResponse.json({
       releases:  valid,
       source:    mbAdded > 0 ? 'discogs+musicbrainz' : 'discogs',
@@ -465,9 +472,15 @@ export async function GET(request) {
       today:     todayStr,
       cached:    globalCached,
       mb_added:  mbAdded,        // how many entries the MB merge contributed
+    }, {
+      headers: {
+        'Cache-Control':     'public, s-maxage=300, stale-while-revalidate=3600',
+        'CDN-Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+      },
     });
 
   } catch (e) {
+    // Never cache error/mock responses — they should retry immediately.
     return NextResponse.json({ releases: MOCK, source: 'mock', notice: e.message });
   }
 }

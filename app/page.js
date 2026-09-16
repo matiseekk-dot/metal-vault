@@ -388,7 +388,23 @@ export default function MetalVault() {
   // call (~1-2s) made the whole feed feel sluggish.
   useEffect(() => {
     let cancelled = false;
-    setFeedLoading(true); setFeedError('');
+
+    // Stale-while-revalidate: warm the UI from localStorage instantly
+    // so the user sees a real feed on tab open (typical wait was 2-4 s
+    // for cold Vercel functions + Discogs + MB round-trips). We still
+    // refetch in the background and update state when fresh data lands,
+    // matching the same Cache-Control pattern the API now uses. Cache
+    // key is intentionally single: followed-artists changes trigger the
+    // effect anyway, and the fresh response overwrites this LS entry
+    // within seconds, so drift is bounded to one open.
+    const cached = loadLS('mv_feed_cache_v1', null);
+    if (cached && Array.isArray(cached.releases) && cached.releases.length > 0) {
+      setReleases(cached.releases);
+      setFeedLoading(false);   // no spinner — user gets an instant view
+    } else {
+      setFeedLoading(true);
+    }
+    setFeedError('');
     // Pass followed artists so Discogs API can include their upcoming releases.
     // SORT ALPHABETICALLY so the MB per-request cache-budget (8 niecached per
     // call) consumes artists in a deterministic order. Across multiple refreshes
@@ -440,11 +456,14 @@ export default function MetalVault() {
       .then(d => {
         if (cancelled) return;
         dRel = d.releases || [];
-        setReleases(dedupe([dRel, maRel]));
+        const merged = dedupe([dRel, maRel]);
+        setReleases(merged);
         setSource(d.source || 'discogs');
         // Hide the loader as soon as Discogs returns — that's the
         // primary source and what the user came here to see.
         setFeedLoading(false);
+        // Persist for the next open — first paint free of API waits.
+        saveLS('mv_feed_cache_v1', { releases: merged, savedAt: Date.now() });
       });
 
     // MB merge also takes followed artists so per-artist queries fire
@@ -475,7 +494,12 @@ export default function MetalVault() {
           type:         i.type,
           discogs_url:  i.albumUrl,
         }));
-        setReleases(dedupe([dRel, maRel]));
+        const merged = dedupe([dRel, maRel]);
+        setReleases(merged);
+        // Update cache with the enriched (Discogs + MB) view so next
+        // open surfaces MB releases without waiting for the throttled
+        // per-artist query.
+        saveLS('mv_feed_cache_v1', { releases: merged, savedAt: Date.now() });
       });
 
     // Safety net: if BOTH end up rejecting at the network layer (offline,
@@ -978,7 +1002,35 @@ export default function MetalVault() {
                 </div>
               </div>
             )}
-            {feedLoading && <div style={{ textAlign:'center', padding:'80px 24px', color:C.dim, ...MONO }}><div style={{ fontSize:32, marginBottom:12 }}>⟳</div>Loading…</div>}
+            {feedLoading && (
+              // Skeleton cards — 6 grey placeholders sized like real
+              // AlbumCards so the layout doesn't jump when the real
+              // data lands. Perceived-speed research: filled skeleton
+              // reads ~30% faster than a centered spinner even when
+              // the actual wait is identical. Uses `pulse` animation
+              // defined once in globals.css.
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, padding:'10px 16px 16px' }}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} style={{
+                    background: C.bg2,
+                    borderRadius: 10,
+                    overflow: 'hidden',
+                    animation: 'mv-pulse 1.4s ease-in-out infinite',
+                    animationDelay: (i * 80) + 'ms',
+                  }}>
+                    <div style={{
+                      width: '100%',
+                      aspectRatio: '1 / 1',
+                      background: C.bg3,
+                    }}/>
+                    <div style={{ padding: '10px 12px' }}>
+                      <div style={{ height: 10, background: C.bg3, borderRadius: 4, marginBottom: 6, width: '70%' }}/>
+                      <div style={{ height: 8,  background: C.bg3, borderRadius: 4, width: '45%' }}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {feedError   && (
               <div style={{ margin:'16px', background:'#1a0000', border:'1px solid '+C.accent+'44', borderRadius:10, padding:'16px' }}>
                 <div style={{ color:'#f87171', fontSize:12, ...MONO, marginBottom:10 }}>
