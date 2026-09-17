@@ -86,7 +86,15 @@ export default function MetalVault() {
   // client immediately tries to render Calendar content because
   // localStorage said so). The tab-restore from URL/localStorage runs
   // in a useEffect on mount instead.
-  const [tab, setTab] = useState('vault');
+  const [tab, setTab] = useState(() => {
+    // URL-driven tab selection for deep links + headless capture
+    // (?tab=feed|vault|calendar|whens-on|profile). Falls back to
+    // 'vault' — the visited-yesterday tab of the median session.
+    if (typeof window === 'undefined') return 'vault';
+    const p = new URLSearchParams(window.location.search).get('tab');
+    const valid = ['feed','vault','calendar','profile','whens-on'];
+    return valid.includes(p) ? p : 'vault';
+  });
   // SSR vs CSR render parity is too costly to maintain across this app's
   // ~30 stateful client components, so we mount-guard the entire root
   // (see render path below). `mounted` flips on first useEffect tick,
