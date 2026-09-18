@@ -20,6 +20,7 @@ import ManualAddForm from '@/app/collection/ManualAddForm';
 import PriceModal from '@/app/collection/PriceModal';
 import ConcertPicker from '@/app/collection/ConcertPicker';
 import VariantPickerModal from '@/app/components/VariantPickerModal';
+import VinylRoulette from '@/app/components/VinylRoulette';
 import { trackAlertCreated } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics';
 // (Previously had a dynamic-import for BandsTab here — dead code, never
@@ -1164,6 +1165,7 @@ export function CollectionTab({
   const [vaultSearch,    setVaultSearch]   = useState('');
   const [vaultFilter,    setVaultFilter]   = useState('all');
   const [showAddManual,  setShowAddManual] = useState(false);
+  const [showRoulette,   setShowRoulette]  = useState(false);
   const [priceHistories, setPriceHistories] = useState({});  // discogs_id → values[]
   const [refreshing,     setRefreshing]    = useState(false);
   const [refreshResult,  setRefreshResult] = useState(null);
@@ -1593,6 +1595,32 @@ export function CollectionTab({
               {'+ ' + t('common.add').toUpperCase()}
             </button>
           </div>
+          {/* Vinyl roulette — daily "what should I spin?" engagement
+              hook. Own row so it reads as a distinct action, not a
+              filter. Hidden below 3 records — pointless to randomize
+              a near-empty shelf, and it would otherwise be the first
+              thing a brand-new user sees before they've added anything. */}
+          {collection.length >= 3 && (
+            <button onClick={() => setShowRoulette(true)}
+              style={{
+                width: '100%', marginBottom: 12, padding: '10px 12px',
+                background: 'rgba(245,200,66,0.06)', border: '1px dashed ' + C.border,
+                borderRadius: 8, color: C.gold, cursor: 'pointer',
+                ...MONO, fontSize: 12, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: 8,
+              }}>
+              🎲 {t('vault.roulette.button') || 'Co dziś posłuchać?'}
+            </button>
+          )}
+          {showRoulette && (
+            <VinylRoulette
+              collection={collection}
+              onUpdate={onUpdate}
+              premium={premium}
+              onUpgrade={onUpgrade}
+              onClose={() => setShowRoulette(false)}
+            />
+          )}
           {/* Filter pills — pan-x so Android doesn't trap vertical scrolls. */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', touchAction: 'pan-x' }}>
             {[
