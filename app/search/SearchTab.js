@@ -419,6 +419,12 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
   const [searched, setSearched] = useState(false);
   const [photoMap,   setPhotoMap]   = useState({});      // name → Spotify thumb URL
   const timer = useRef(null);
+  // Bumped on every search() call; a response only gets applied if it's
+  // still the most recent request in flight. Without this, fast retyping
+  // ("Metallica" → "Slayer") could let the slower "Metallica" response
+  // land AFTER the "Slayer" one and silently overwrite it — query box
+  // says one thing, results show another.
+  const reqId = useRef(0);
   // ArtistInfoModal is mounted globally in app/page.js — components here
   // dispatch mv:open-artist events; the global modal handles the rest.
 
@@ -427,12 +433,16 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
       setAlbums([]); setArtists([]); setMembers([]); setSearched(false);
       return;
     }
+    const myReqId = ++reqId.current;
     setLoading(true); setError(''); setSearched(true);
     try {
       // Server-side aggregator. type=auto → albums + artists + members in one call.
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=auto`);
       if (!res.ok) throw new Error(t('search.failed'));
       const d = await res.json();
+      // A newer search superseded this one while it was in flight — drop
+      // the stale response instead of overwriting fresher results.
+      if (myReqId !== reqId.current) return;
       setAlbums(d.albums || []);
       setArtists(d.artists || []);
       setMembers(d.members || []);
@@ -456,9 +466,9 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
           .catch(() => {});
       }
     } catch (e) {
-      setError(e.message);
+      if (myReqId === reqId.current) setError(e.message);
     }
-    setLoading(false);
+    if (myReqId === reqId.current) setLoading(false);
   }, [t]);
 
   const handleInput = (v) => {
@@ -506,7 +516,15 @@ export default function SearchTab({ onWatch, onAddCollection, watchlist, collect
               color:C.dim, fontSize:14 }}>⟳</div>
           )}
           {query && !loading && (
-            <button onClick={() => { setQuery(''); setAlbums([]); setArtists([]); setMembers([]); setSearched(false); }}
+            <button onClick={() => {
+              // Cancel any pending debounced search — without this, the
+              // × tap cleared the screen but a search scheduled just
+              // before the tap still fired ~700ms later and silently
+              // repopulated results the user had just dismissed.
+              clearTimeout(timer.current);
+              reqId.current++;   // also invalidate any in-flight request
+              setQuery(''); setAlbums([]); setArtists([]); setMembers([]); setSearched(false);
+            }}
               style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)',
                 background:'none', border:'none', color:C.dim, cursor:'pointer', fontSize:18 }}>
               ×
