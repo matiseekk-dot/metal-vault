@@ -1913,16 +1913,56 @@ export function CollectionTab({
                               when user clicks 📦 button on a feed card.
                               Date counter relies on item.year (or
                               future enhancement: a separate
-                              release_date column). */}
+                              release_date column).
+
+                              Tappable — flips is_preordered straight to
+                              false right from the collapsed row. Before
+                              this the only un-click path was: expand row
+                              → scroll past variant picker + concert link
+                              → find "📬 Dostarczono" button. Users
+                              reported no way to undo a pre-order once
+                              the record actually arrived. stopPropagation
+                              keeps the tap from also toggling row
+                              expand/collapse. */}
                           {item.is_preordered && (
-                            <span title={(t('vault.preorderTitle') || 'Pre-ordered — waiting for delivery') + (item.year ? ' · ' + item.year : '')}
+                            <button
+                              onClick={async e => {
+                                e.stopPropagation();
+                                const optimistic = collection.map(c =>
+                                  c.id === item.id ? { ...c, is_preordered: false } : c);
+                                onUpdate(optimistic);
+                                try {
+                                  const r = await fetch('/api/collection?id=' + item.id, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ is_preordered: false }),
+                                  });
+                                  if (!r.ok) throw new Error('PATCH failed');
+                                  const body = await r.json().catch(() => ({}));
+                                  if (body && body.item) {
+                                    const merged = collection.map(c =>
+                                      c.id === item.id ? { ...c, ...body.item } : c);
+                                    onUpdate(merged);
+                                  }
+                                  haptic.success?.();
+                                  toast.success(t('vault.preorderDelivered') || 'Marked as delivered ✓');
+                                } catch {
+                                  const reverted = collection.map(c =>
+                                    c.id === item.id ? { ...c, is_preordered: true } : c);
+                                  onUpdate(reverted);
+                                  toast.error(t('vault.preorderFlipFailed') || 'Save failed');
+                                }
+                              }}
+                              title={(t('vault.preorderTapToDeliver') || 'Tap to mark delivered') + (item.year ? ' · ' + item.year : '')}
                               style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3,
                                 background: '#2a1a05', color: '#f5c842',
                                 border: '1px solid #f5c84266', ...MONO,
-                                letterSpacing: '0.05em', fontWeight: 600 }}>
+                                letterSpacing: '0.05em', fontWeight: 600,
+                                cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
                               📦 {t('vault.preorderShort') || 'PRE-ORDER'}
                               {item.year && ' · ' + item.year}
-                            </span>
+                              {' ✕'}
+                            </button>
                           )}
                           {/* 🎁 GIFT badge (migration 046). Optional
                               gift_from is surfaced inline ("🎁 GIFT · Tata")

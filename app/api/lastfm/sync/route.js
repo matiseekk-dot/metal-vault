@@ -112,11 +112,25 @@ export async function POST() {
   // We ALSO call getTopAlbums as a backstop: it surfaces albums the
   // server has aggregated from sources getRecentTracks may not include
   // (e.g. older purged tracks, MBID-resolved entries). The two get
-  // merged later, summing playcounts where they overlap.
+  // merged later, summing playcounts where they overlap. Backstop
+  // entries carry NO per-scrobble date (lastPlayedMs stays 0 → epoch
+  // fallback below), so they only ever show up in the "all time"
+  // listening view, never in a dated 30d/90d/365d filter.
   //
-  // 500 pages × 200 tracks = 100k scrobble cap. Most users top out
-  // well below this; the cap exists for the most extreme histories.
-  // Vercel maxDuration=300s headroom: 500 × 220ms = 110s, plenty.
+  // oldestAllowedSec caps how far back pagination needs to go: nothing
+  // past 366 days can ever match our widest ranged filter (365d), so
+  // once a page's oldest track crosses that boundary we stop early —
+  // freeing up budget instead of blindly paginating a light user's
+  // entire decade-old history. maxPages is the ceiling for heavy
+  // multi-scrobbler users (Spotify + Apple Music + Tidal all writing
+  // to one Last.fm account can rack up 500+ scrobbles/day); at 240ms
+  // pacing, 500 pages = 100k scrobbles = ~120s, still under the 200s
+  // deadline. Before this fix maxPages was capped at 250 (50k
+  // scrobbles) — for a heavy multi-source listener that can run out
+  // well short of even 90 days back, so every album whose last play
+  // fell outside that shallow window got the epoch-fallback date and
+  // silently vanished from the 90d/365d listening-tab filters even
+  // though 30d (always covering the freshest scrobbles) kept working.
   // Serialize the two API calls — running them in parallel doubles
   // the effective rate against Last.fm's 5 req/sec ceiling and we were
   // hitting silent throttle errors mid-pagination (causing only ~190
@@ -126,9 +140,10 @@ export async function POST() {
   try {
     tracks = await lastfmRecentTracksAll({
       user:      tokenRow.username,
-      maxPages:  250,        // 250 × 200 = 50k scrobble cap (most users)
+      maxPages:  500,        // 500 × 200 = 100k scrobble ceiling
       pacingMs:  240,        // ~4 req/sec, comfortably under 5/sec limit
       deadlineMs: 200_000,   // 200s soft cap → leaves headroom for inserts
+      oldestAllowedSec: Math.floor(Date.now() / 1000) - 366 * 86400,
     });
   } catch (e) {
     return NextResponse.json({ error: 'Last.fm getRecentTracks failed: ' + e.message }, { status: 502 });

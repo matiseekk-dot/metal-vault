@@ -665,42 +665,61 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
   // useMemo keys on `collection` so the work runs only when items
   // actually change — which is rare (add/remove, price refresh).
   const stats = useMemo(() => {
-    const totalPaid  = collection.reduce((s,i)=>s+(Number(i.purchase_price)||0),0);
-    const marketVal  = collection.reduce((s,i)=>s+(Number(i.median_price||i.current_price)||0),0);
-    const totalValue = collection.reduce((s,i)=>{
+    // Sold records must never feed the "what do I currently own" stats —
+    // their purchase_price and market value aren't representative of
+    // what's actually on the shelf, and mixing them in silently skewed
+    // totalPaid/totalValue/gain plus topGainer/topLoser/mostValuable
+    // (a sold record's current Discogs price has nothing to do with
+    // what the user actually received for it). Realized profit from
+    // sales gets its own card below, sourced from collectionSummary.
+    const held = collection.filter(i => !i.is_sold);
+
+    const totalPaid  = held.reduce((s,i)=>s+(Number(i.purchase_price)||0),0);
+    const marketVal  = held.reduce((s,i)=>s+(Number(i.median_price||i.current_price)||0),0);
+    const totalValue = held.reduce((s,i)=>{
       const m = Number(i.median_price||i.current_price);
       return s+(m>0?m:(Number(i.purchase_price)||0));
     },0);
-    const priceCount = collection.filter(i=>Number(i.median_price||i.current_price)>0).length;
+    const priceCount = held.filter(i=>Number(i.median_price||i.current_price)>0).length;
     const gain       = totalValue-totalPaid;
     const gainPct    = totalPaid>0 ? Math.max(-999,Math.min(999,(gain/totalPaid)*100)) : 0;
 
-    const withGain  = collection.filter(i=>Number(i.purchase_price)>0&&Number(i.median_price||i.current_price)>0)
+    const withGain  = held.filter(i=>Number(i.purchase_price)>0&&Number(i.median_price||i.current_price)>0)
       .map(i=>{const paid=Number(i.purchase_price),now=Number(i.median_price||i.current_price);return{...i,gainAbs:now-paid,gainPct:(now-paid)/paid*100};});
     const topGainer = withGain.length ? [...withGain].sort((a,b)=>b.gainPct-a.gainPct)[0] : null;
     const topLoser  = withGain.length>1 ? [...withGain].sort((a,b)=>a.gainPct-b.gainPct)[0] : null;
 
-    const mostValuable  = [...collection].sort((a,b)=>(Number(b.median_price||b.current_price)||0)-(Number(a.median_price||a.current_price)||0))[0];
-    const recentlyAdded = [...collection].sort((a,b)=>new Date(b.added_at||0)-new Date(a.added_at||0))[0];
+    const mostValuable  = [...held].sort((a,b)=>(Number(b.median_price||b.current_price)||0)-(Number(a.median_price||a.current_price)||0))[0];
+    const recentlyAdded = [...held].sort((a,b)=>new Date(b.added_at||0)-new Date(a.added_at||0))[0];
 
     const artistMap = {};
-    collection.forEach(c=>{ artistMap[c.artist] = (artistMap[c.artist]||0)+1; });
+    held.forEach(c=>{ artistMap[c.artist] = (artistMap[c.artist]||0)+1; });
     const topArtist = Object.entries(artistMap).sort((a,b)=>b[1]-a[1])[0];
 
     const genreMap  = {};
-    collection.forEach(c=>{ const g=realGenre(c); genreMap[g] = (genreMap[g]||0)+1; });
+    held.forEach(c=>{ const g=realGenre(c); genreMap[g] = (genreMap[g]||0)+1; });
     const genreData = Object.entries(genreMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([label,value])=>({label,value}));
 
-    const topByValue = [...collection].filter(i=>Number(i.median_price||i.current_price)>0)
+    const topByValue = [...held].filter(i=>Number(i.median_price||i.current_price)>0)
       .sort((a,b)=>(Number(b.median_price||b.current_price)||0)-(Number(a.median_price||a.current_price)||0)).slice(0,5);
 
-    return { totalPaid, marketVal, totalValue, priceCount, gain, gainPct,
+    return { held, totalPaid, marketVal, totalValue, priceCount, gain, gainPct,
              topGainer, topLoser, mostValuable, recentlyAdded, topArtist,
              genreData, topByValue };
   }, [collection]);
-  const { totalPaid, totalValue, priceCount, gain, gainPct,
+  const { held, totalPaid, totalValue, priceCount, gain, gainPct,
           topGainer, topLoser, mostValuable, recentlyAdded, topArtist,
           genreData, topByValue } = stats;
+
+  // Realized profit from sales — computed server-side in /api/collection
+  // (sum of sold_price - purchase_price over is_sold rows) and handed
+  // down as collectionSummary. The data has been flowing into this
+  // component for months; nothing ever rendered it. Falls back to null
+  // fields gracefully (card hides itself) if the summary hasn't loaded
+  // yet or the user has never sold anything.
+  const soldCount   = collectionSummary?.soldCount   ?? 0;
+  const realizedPnl = collectionSummary?.realizedPnl ?? 0;
+  const soldRevenue = collectionSummary?.soldRevenue ?? 0;
 
   const COLORS = ['#dc2626','#f5c842','#4ade80','#60a5fa','#a78bfa','#f97316'];
 
@@ -738,23 +757,54 @@ export default function StatsTab({collection,watchlist,collectionSummary,premium
           {totalPaid>0&&!loading&&<span style={{fontSize:10,color:C.dim,...MONO}}>{t('stats.vsPaid', { n: formatPrice(totalPaid, cur, fx) })}</span>}
         </div>
         <div style={{fontSize:9,color:priceCount>0?C.dim:'#f5c84299',...MONO,marginTop:6}}>
-          {priceCount>0 ? t('stats.basedOnDiscogs', { n: priceCount, total: collection.length }) : t('stats.tracking')}
+          {priceCount>0 ? t('stats.basedOnDiscogs', { n: priceCount, total: held.length }) : t('stats.tracking')}
         </div>
       </div>
 
       {/* Secondary stats */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
-        <StatCard iconName="pkg" value={collection.length} label={t('stats.recordsLabel')} color={C.accent}/>
+        <StatCard iconName="pkg" value={held.length} label={t('stats.recordsLabel')} color={C.accent}/>
         <StatCard iconName="star" value={watchlist.length} label={t('stats.watching')} color={C.gold}/>
         <StatCard iconName="wallet" value={totalPaid>0 ? formatPrice(totalPaid, cur, fx) : '—'} label={t('stats.totalPaid')} color={C.muted} loading={loading}/>
-        <StatCard iconName="barChart" value={collection.length>0 ? formatPrice(totalPaid/collection.length, cur, fx) : '—'} label={t('stats.avgRecord')} color={C.blue}/>
+        <StatCard iconName="barChart" value={held.length>0 ? formatPrice(totalPaid/held.length, cur, fx) : '—'} label={t('stats.avgRecord')} color={C.blue}/>
       </div>
 
-      {/* Badges */}
-      <BadgesSection collection={collection} watchlist={watchlist}/>
+      {/* Realized profit from sales — separate from the unrealized
+          gain/loss above (that card only ever reflects records you
+          still own). This one answers "how much have I actually made
+          selling records", pulled from collectionSummary.realizedPnl
+          (server-computed in /api/collection: sum of sold_price -
+          purchase_price over every is_sold row). Hidden entirely for
+          users who've never sold anything — an empty "$0 profit" card
+          reads as broken, not as "nothing to show yet". */}
+      {!loading && soldCount>0 && (
+        <div style={{background:'linear-gradient(135deg,#001a0a,#002a12,#001a0a)',
+          border:'1px solid '+C.green,borderRadius:16,padding:'20px',marginBottom:16,
+          position:'relative',overflow:'hidden'}}>
+          <div style={{position:'absolute',right:-10,top:-10,fontSize:80,opacity:0.04,...BEBAS,userSelect:'none'}}>$</div>
+          <div style={{fontSize:10,color:C.green,...MONO,letterSpacing:'0.2em',textTransform:'uppercase',marginBottom:8, display:'flex', alignItems:'center', gap:6}}>
+            <Icon name="wallet" size={12} color="inherit"/> {t('stats.realizedProfit') || 'Zrealizowany zysk'}
+          </div>
+          <div style={{...BEBAS,fontSize:44,lineHeight:1,marginBottom:6,
+            color: realizedPnl>=0 ? C.green : C.red}}>
+            {realizedPnl>=0?'+':''}{formatPrice(realizedPnl, cur, fx)}
+          </div>
+          <div style={{fontSize:10,color:C.dim,...MONO}}>
+            {t('stats.soldCountRevenue', { count: soldCount, revenue: formatPrice(soldRevenue, cur, fx) })
+              || `${soldCount} sprzedanych · przychód ${formatPrice(soldRevenue, cur, fx)}`}
+          </div>
+        </div>
+      )}
 
-      {/* Sell suggestions */}
-      <SellSuggestions collection={collection}/>
+      {/* Badges */}
+      <BadgesSection collection={held} watchlist={watchlist}/>
+
+      {/* Sell suggestions — must exclude sold rows. Without the filter
+          a record the user already sold for 50%+ gain kept re-appearing
+          here forever (its purchase_price/median_price never change
+          after the sale), suggesting they "consider selling" something
+          they no longer own. */}
+      <SellSuggestions collection={held}/>
 
       {/* Market movers */}
       {(topGainer||topLoser)&&(
