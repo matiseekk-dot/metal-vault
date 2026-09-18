@@ -33,7 +33,8 @@ function authHeader() {
 }
 
 async function sendPushToUser(userId, payload) {
-  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
+  // No VAPID guard here: notifyUser checks each delivery channel (Web Push
+  // and FCM) itself, and gating on VAPID alone would silently kill FCM.
   try {
     const { notifyUser } = await import('@/app/api/push/notify/route');
     await notifyUser(userId, payload);

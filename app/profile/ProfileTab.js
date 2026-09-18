@@ -10,7 +10,55 @@ import { useCurrency, setCurrency, SUPPORTED_CURRENCIES } from '@/lib/currency';
 import { FREE_TRIAL_DAYS } from '@/lib/pricing';
 import SpotifySyncCard from '@/app/components/SpotifySyncCard';
 import LastfmSyncCard  from '@/app/components/LastfmSyncCard';
+import { isNativePushAvailable, enableNativePush } from '@/lib/native-push';
 
+
+// ── TestPushButton ──
+// Native app only. Registers this install (covers a toggle that was
+// already on before server push shipped), then asks the server to push
+// to every device on the account and reports what actually happened —
+// so a Firebase misconfiguration shows up as a specific message here
+// instead of as notifications that silently never arrive.
+function TestPushButton() {
+  const t = useT();
+  const [native, setNative] = useState(false);
+  const [busy,   setBusy]   = useState(false);
+  useEffect(() => { setNative(isNativePushAvailable()); }, []);
+  if (!native) return null;
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const reg = await enableNativePush({ prompt: true });
+      if (!reg.ok) {
+        const key = reg.reason === 'denied' ? 'profile.push.denied'
+                  : reg.reason === 'unavailable' ? 'profile.push.unavailable'
+                  : 'profile.push.failed';
+        toast.error(t(key));
+        return;
+      }
+      const r = await fetch('/api/push/notify', { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok)                 toast.error(t('common.error'));
+      else if (!d.fcmConfigured) toast.error(t('profile.push.testNoFcm'));
+      else if (!d.fcm)           toast.error(t('profile.push.testNoDevice'));
+      else                       toast.success(t('profile.push.testSent'));
+    } catch {
+      toast.error(t('common.error'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button onClick={run} disabled={busy}
+      style={{ marginTop: 10, padding: '8px 12px', background: 'none',
+        border: '1px solid ' + C.border, borderRadius: 8, color: C.muted,
+        cursor: busy ? 'wait' : 'pointer', ...MONO, fontSize: 11, opacity: busy ? 0.6 : 1 }}>
+      {busy ? '…' : '🔔 ' + t('profile.push.test')}
+    </button>
+  );
+}
 
 // ── ConcertLocationCard ──
 // Manages user's location preference for concert proximity push alerts.
@@ -741,6 +789,7 @@ export default function ProfileTab({
           </button>
         </div>
         {pushEnabled && <div style={{ fontSize: 10, color: '#4ade80', ...MONO, marginTop: 6 }}>✓ Enabled — price alerts + pre-orders from followed artists</div>}
+        {pushEnabled && <TestPushButton />}
       </div>
 
       {/* Concert Location — for proximity push alerts */}

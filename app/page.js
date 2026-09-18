@@ -22,6 +22,7 @@ import ThisDayModal from '@/app/components/ThisDayModal';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { toast, confirm } from '@/app/components/Toast';
 import { useT } from '@/lib/i18n';
+import { enableNativePush, disableNativePush, initNativePush, getStoredToken } from '@/lib/native-push';
 import {
   identify as analyticsIdentify,
   reset    as analyticsReset,
@@ -308,6 +309,22 @@ export default function MetalVault() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pushEnabled]);
 
+  // Native push (FCM): on app start for a signed-in user, silently
+  // refresh this install's token if they already opted in, and arm
+  // tap-to-open routing. Also mirror opt-ins that happen outside the
+  // Profile toggle (onboarding wizard) into the toggle's state.
+  useEffect(() => {
+    if (!user) return;
+    initNativePush().catch(() => {});
+  }, [user]);
+  useEffect(() => {
+    const onChanged = () => {
+      try { setPushEnabled(localStorage.getItem('mv_local_notif_enabled') === 'true'); } catch {}
+    };
+    window.addEventListener('mv:native-push-changed', onChanged);
+    return () => window.removeEventListener('mv:native-push-changed', onChanged);
+  }, []);
+
   // Daily streak — ping server once per session (idempotent), display current count
   useEffect(() => {
     if (!user) { setStreak(0); return; }
@@ -352,7 +369,10 @@ export default function MetalVault() {
       // This is how LocalNotifications mimics "server-pushed":
       // it can't proactively wake the app, but it surfaces fresh
       // data immediately when the app comes to foreground.
-      if (localStorage.getItem('mv_local_notif_enabled') === 'true') {
+      // Skipped once this install has an FCM token: the server then
+      // delivers release/alert pushes itself, and running the local
+      // check too would notify about the same releases twice.
+      if (localStorage.getItem('mv_local_notif_enabled') === 'true' && !getStoredToken()) {
         setTimeout(() => { checkAndNotifyNewReleases().catch(() => {}); }, 2500);
       }
     } else if ('serviceWorker' in navigator && 'PushManager' in window) {
@@ -668,6 +688,9 @@ export default function MetalVault() {
           // Disable: just flip the LS flag — there's no server
           // subscription to revoke for LocalNotifications.
           try { localStorage.setItem('mv_local_notif_enabled', 'false'); } catch {}
+          // Also drop the FCM token (server row + Firebase registration)
+          // so a switched-off user stops receiving server pushes too.
+          await disableNativePush();
           setPushEnabled(false);
           toast.success(t('push.disabled') || 'Powiadomienia wyłączone');
         } else {
@@ -679,6 +702,9 @@ export default function MetalVault() {
           }
           try { localStorage.setItem('mv_local_notif_enabled', 'true'); } catch {}
           setPushEnabled(true);
+          // Server-pushed notifications (arrive with the app closed).
+          // No-op on app builds that predate the native FCM plugin.
+          enableNativePush({ prompt: false }).catch(() => {});
           // Confirmation notification so the user sees it works.
           try {
             await LocalNotifications.schedule({

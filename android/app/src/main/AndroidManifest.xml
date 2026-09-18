@@ -24,6 +24,16 @@
             </intent-filter>
         </activity>
 
+        <!-- FCM defaults. Without these, a notification the OS draws for a
+             backgrounded app uses the launcher icon (grey square on
+             Android 5+) and a generic fallback channel. -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_metalvault" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/mv_notification_accent" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="metalvault_default" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

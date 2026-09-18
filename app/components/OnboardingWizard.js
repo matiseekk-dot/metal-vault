@@ -53,6 +53,16 @@ async function scheduleD1Notification(topArtist) {
     const { LocalNotifications } = await import('@capacitor/local-notifications');
     const perm = await LocalNotifications.requestPermissions();
     if (perm.display !== 'granted') return;
+    // Permission granted == consent to notifications in general (it's
+    // the one OS-level POST_NOTIFICATIONS prompt). Opt in to server
+    // push as well so pre-order/alert pushes reach them with the app
+    // closed, and mirror it into the Profile toggle. Best-effort: no-op
+    // on builds without the native FCM plugin.
+    try { localStorage.setItem('mv_local_notif_enabled', 'true'); } catch {}
+    import('@/lib/native-push')
+      .then(m => m.enableNativePush({ prompt: false }))
+      .catch(() => {})
+      .finally(() => { try { window.dispatchEvent(new Event('mv:native-push-changed')); } catch {} });
     const at = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await LocalNotifications.schedule({
       notifications: [{
@@ -62,7 +72,7 @@ async function scheduleD1Notification(topArtist) {
           ? `Sprawdź co nowego u ${topArtist} i innych śledzonych zespołów`
           : 'Sprawdź co nowego u śledzonych zespołów w tym tygodniu',
         schedule:  { at, allowWhileIdle: true },
-        smallIcon: 'ic_stat_icon_config_sample',
+        smallIcon: 'ic_stat_metalvault',
       }],
     });
     track('d1_notification_scheduled', { top_artist: topArtist || null });

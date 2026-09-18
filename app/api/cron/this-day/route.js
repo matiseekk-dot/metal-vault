@@ -40,8 +40,9 @@ export async function GET(request) {
     return NextResponse.json({ skipped: true, reason: 'no entry for today' });
   }
 
-  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
-    return NextResponse.json({ error: 'VAPID keys not configured' }, { status: 503 });
+  const { isFcmConfigured } = await import('@/lib/fcm');
+  if (!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) && !isFcmConfigured()) {
+    return NextResponse.json({ error: 'No push channel configured (VAPID / FCM)' }, { status: 503 });
   }
 
   const sb = getAdminClient();
@@ -59,7 +60,18 @@ export async function GET(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const userIds = [...new Set((subs || []).map(s => s.user_id))];
+  // Android app installs register FCM tokens instead of Web Push
+  // subscriptions — include them, or every Capacitor user is skipped.
+  // Table may not exist before migration 048; treat that as no devices.
+  const { data: devs } = await sb
+    .from('device_tokens')
+    .select('user_id')
+    .limit(50_000);
+
+  const userIds = [...new Set([
+    ...(subs || []).map(s => s.user_id),
+    ...(devs || []).map(d => d.user_id),
+  ])];
 
   let { notifyUser } = await import('@/app/api/push/notify/route');
   // notifyUser fans out to all of a user's subscriptions internally.
