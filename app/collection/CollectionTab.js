@@ -2772,10 +2772,32 @@ export function CollectionTab({
                             //       trust the PATCH response (authoritative)
                             //       and merge that single row into local state.
                             const submitPrice = async (rawValue) => {
-                              const n = parseFloat(String(rawValue ?? '').trim().replace(',','.'));
-                              if (isNaN(n) || n < 0) {
+                              const local = parseFloat(String(rawValue ?? '').trim().replace(',','.'));
+                              if (isNaN(local) || local < 0) {
                                 setShowAlertForm(null); setPriceInputVal('');
                                 return;
+                              }
+                              // Block until rates are loaded for non-USD users
+                              // — otherwise we'd save the raw local number as
+                              // USD, then have the rate arrive a moment later
+                              // and multiply it on display (the garbled-price
+                              // bug this whole fix addresses).
+                              if (cur !== 'USD' && !fx?.ready) {
+                                toast.error(t('common.error') || 'Loading exchange rates, try again in a moment');
+                                return;
+                              }
+                              // Same currency-convention fix as the sold-price
+                              // editor above: purchase_price is stored as USD
+                              // everywhere, but this field displayed a
+                              // hardcoded "$" regardless of the user's actual
+                              // currency and saved whatever they typed as raw
+                              // USD — a PLN user entering "200" got a row that
+                              // formatPrice then multiplied by the USD→PLN
+                              // rate on display (727 zł for a 200 zł purchase).
+                              let n = local;
+                              if (cur && cur !== 'USD') {
+                                const rate = fx?.rates?.[cur];
+                                n = (rate && Number.isFinite(rate)) ? local / rate : local;
                               }
                               const prevPrice = item.purchase_price;
                               // Optimistic + close form immediately. If PATCH
@@ -2831,7 +2853,7 @@ export function CollectionTab({
                                   submitPrice(inp ? inp.value : priceInputVal);
                                 }}
                                 style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-                                <span style={{ ...BEBAS, fontSize: 18, color: C.muted }}>$</span>
+                                <span style={{ ...BEBAS, fontSize: 12, color: C.muted, ...MONO, letterSpacing: '0.04em' }}>{cur || 'USD'}</span>
                                 <input type="number" inputMode="decimal" step="0.01"
                                   defaultValue={priceInputVal}
                                   onChange={e => setPriceInputVal(e.target.value)}
@@ -2861,7 +2883,15 @@ export function CollectionTab({
                           })()
                         ) : (
                           <button onClick={() => {
-                            setPriceInputVal(item.purchase_price ? String(item.purchase_price) : '');
+                            // Pre-fill in the user's active currency (not the
+                            // raw USD-stored value) so re-opening the editor
+                            // shows the number they actually typed, not a
+                            // USD figure mislabeled with no unit.
+                            const paidUsd = Number(item.purchase_price) || 0;
+                            const paidLocal = paidUsd > 0
+                              ? (cur && cur !== 'USD' ? convertFromUsd(paidUsd, cur, fx) : paidUsd)
+                              : null;
+                            setPriceInputVal(paidLocal != null ? String(Number(paidLocal.toFixed(2))) : '');
                             setShowAlertForm(item.id + '_price');
                           }}
                             style={{ background: 'none', border: '1px solid ' + C.border, borderRadius: 6,

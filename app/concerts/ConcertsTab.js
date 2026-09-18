@@ -99,12 +99,21 @@ function AttendancePrompts({ onAttendConfirm }) {
   const respond = async (eventId, status, prompt) => {
     setPrompts(p => p.filter(x => x.event_id !== eventId));
     try {
-      await fetch('/api/concerts/attendance', {
+      const r = await fetch('/api/concerts/attendance', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ event_id: eventId, status }),
       });
-    } catch {}
+      if (!r.ok) throw new Error('save failed');
+    } catch {
+      // Put the prompt back — it silently disappearing while the save
+      // failed server-side meant the user tapped "Yes I went" and had
+      // no way to know it may not have actually been recorded, with no
+      // retry path (the banner was just gone).
+      setPrompts(p => (p.some(x => x.event_id === eventId) ? p : [...p, prompt]));
+      toast.error(t('concerts.attendResponseFailed') || 'Could not save — try again');
+      return;
+    }
     if (status === 'attended' && onAttendConfirm) onAttendConfirm(prompt);
   };
 

@@ -126,6 +126,13 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
   const [error,      setError]      = useState('');
   const [scanCount,  setScanCount]  = useState(0);
   const [lastScan,   setLastScan]   = useState('');
+  // ZXing's decodeFromStream callback fires continuously while the
+  // camera is open — without a lock, any barcode in frame AFTER a
+  // match (a price sticker, the record behind it, a misread) fires
+  // lookup() again and silently swaps the result card the user is
+  // still reading. Locked on a successful match; "🔄 Scan next"
+  // (or Add/Watchlist, which implies "done with this one") re-arms it.
+  const scanLocked  = useRef(false);
 
   // Stop camera
   const stopCamera = useCallback(() => {
@@ -176,6 +183,7 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
         setScanCount(n => n + 1);
         trackBarcodeScan(true);
         haptic.success();
+        scanLocked.current = true;
         setLoading(false);
         return;
       }
@@ -209,6 +217,7 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
         setScanCount(n => n + 1);
         trackBarcodeScan(true);
         haptic.success();
+        scanLocked.current = true;
       }
     } catch (e) {
       // Total fail = network error AND no SW cache. Queue.
@@ -222,6 +231,7 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
   // Start camera scanner
   const startCamera = useCallback(async () => {
     setError(''); setResult(null); setLastScan('');
+    scanLocked.current = false;
     setStatus('Starting camera…');
 
     try {
@@ -243,9 +253,10 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
       setScanning(true);
       setStatus('Point camera at barcode…');
 
-      // Start continuous decoding
+      // Start continuous decoding. Locked out while a result is being
+      // shown — see scanLocked comment above.
       reader.decodeFromStream(stream, videoRef.current, (result, error) => {
-        if (result) {
+        if (result && !scanLocked.current) {
           const code = result.getText();
           setStatus(`Scanned: ${code}`);
           lookup(code);
@@ -435,6 +446,27 @@ export default function ScannerTab({ onAddToCollection, onAddToWatchlist, collec
       {/* Results */}
       {result && !loading && (
         <div style={{ padding: '0 16px' }}>
+          {/* Camera stays open but locked out of decoding (scanLocked)
+              until the user explicitly says they're done with this
+              result — otherwise a price sticker or the next record in
+              frame would silently swap this card out from under them. */}
+          {scanning && (
+            <button
+              onClick={() => {
+                scanLocked.current = false;
+                setResult(null);
+                setLastScan('');
+                setStatus('Point camera at barcode…');
+              }}
+              style={{
+                width: '100%', padding: '10px', marginBottom: 10,
+                background: 'none', border: `1px dashed ${C.border}`,
+                borderRadius: 8, color: C.muted, cursor: 'pointer',
+                ...MONO, fontSize: 12,
+              }}>
+              🔄 {t('scanner.scanNext') || 'Scan next barcode'}
+            </button>
+          )}
           {result.source === 'local' && (
             <div style={{
               background: '#0d1f0d', border: '1px solid #1a4d1a',

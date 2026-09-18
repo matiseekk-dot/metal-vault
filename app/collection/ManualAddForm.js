@@ -8,10 +8,13 @@ import { C, MONO, BEBAS, inputSt } from '@/lib/theme';
 import Icon from '@/app/components/Icon';
 import { useBackButton } from '@/lib/hooks/useBackButton';
 import { useT } from '@/lib/i18n';
+import { useCurrency, useFx } from '@/lib/currency';
 
 export default function ManualAddForm({ onAdd, onClose }) {
   useBackButton(true, onClose);
   const t = useT();
+  const cur = useCurrency();
+  const fx  = useFx();
   const [form, setForm] = useState({ artist: '', album: '', format: 'Vinyl', label: '', year: '', purchase_price: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -19,12 +22,31 @@ export default function ManualAddForm({ onAdd, onClose }) {
 
   const handleSubmit = async () => {
     if (!form.artist.trim() || !form.album.trim()) { setError(t('vault.manualAdd.required')); return; }
+    // purchase_price is stored as USD everywhere (formatPrice converts
+    // to the user's display currency on the way out) — this field had
+    // no currency label at all, so a PLN user typing "150" had no way
+    // to know it would be saved and later displayed as $150. Same
+    // local→USD conversion already used for sold_price/purchase_price
+    // edits elsewhere in Vault.
+    let priceUsd = null;
+    if (form.purchase_price) {
+      const local = parseFloat(form.purchase_price);
+      if (!isNaN(local) && local >= 0) {
+        if (cur && cur !== 'USD') {
+          if (!fx?.ready) { setError(t('common.error') || 'Loading exchange rates, try again in a moment'); return; }
+          const rate = fx?.rates?.[cur];
+          priceUsd = (rate && Number.isFinite(rate)) ? local / rate : local;
+        } else {
+          priceUsd = local;
+        }
+      }
+    }
     setSaving(true);
     await onAdd({
       artist: form.artist.trim(), album: form.album.trim(),
       format: form.format || 'Vinyl', label: form.label.trim() || null,
       year:   form.year ? parseInt(form.year) : null,
-      purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null,
+      purchase_price: priceUsd,
       cover: null, discogs_id: null,
     });
     setSaving(false);
@@ -68,8 +90,8 @@ export default function ManualAddForm({ onAdd, onClose }) {
         </div>
         <label style={lbl}>{t('vault.manualAdd.label')}</label>
         <input value={form.label} onChange={e => set('label', e.target.value)} placeholder={t('vault.manualAdd.placeholderLabel')} style={fld} />
-        <label style={lbl}>{t('vault.manualAdd.price')}</label>
-        <input type="number" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)} placeholder="0.00" style={fld} />
+        <label style={lbl}>{t('vault.manualAdd.price')} ({cur || 'USD'})</label>
+        <input type="number" inputMode="decimal" step="0.01" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)} placeholder="0.00" style={fld} />
         {error && <div style={{ color: '#f87171', fontSize: 11, ...MONO, marginBottom: 8 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '12px', background: 'none', border: '1px solid ' + C.border, borderRadius: 10, color: C.dim, cursor: 'pointer', ...MONO, fontSize: 12 }}>{t('common.cancel')}</button>

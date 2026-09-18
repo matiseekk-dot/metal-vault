@@ -19,6 +19,7 @@ import LastfmSyncCard  from '@/app/components/LastfmSyncCard';
 //   2. Set → shows current location + radius slider + "Update" + "Disable"
 //   3. Loading/error states
 function ConcertLocationCard({ userId }) {
+  const t = useT();
   const [loc,    setLoc]    = useState(null);   // { lat, lng, city, radius_km }
   const [busy,   setBusy]   = useState(false);
   const [error,  setError]  = useState(null);
@@ -202,8 +203,19 @@ function ConcertLocationCard({ userId }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ radius_km: draftRadius }),
       });
-      if (r.ok) setLoc({ ...loc, radius_km: draftRadius });
-    } catch {}
+      // Previously silent on failure — the "Update radius" button would
+      // just sit there with no explanation if the PATCH failed, and the
+      // user had no way to tell whether it worked, was still loading,
+      // or was broken.
+      if (r.ok) {
+        setLoc({ ...loc, radius_km: draftRadius });
+        toast.success(t('profile.location.radiusUpdated') || 'Radius updated');
+      } else {
+        toast.error(t('profile.location.radiusFailed') || 'Could not update radius — try again');
+      }
+    } catch {
+      toast.error(t('profile.location.radiusFailed') || 'Could not update radius — try again');
+    }
     setBusy(false);
   };
 
@@ -211,9 +223,19 @@ function ConcertLocationCard({ userId }) {
     if (!(await mvConfirm('Stop receiving nearby concert alerts?'))) return;
     setBusy(true);
     try {
-      await fetch('/api/profile/location', { method: 'DELETE' });
+      // fetch only rejects on a network failure — a 4xx/5xx response
+      // still resolves normally, so without checking .ok a failed
+      // server-side delete still cleared the location locally and told
+      // the user alerts were off, while the row could still exist on
+      // the server and keep sending them notifications they'd just
+      // explicitly turned off.
+      const r = await fetch('/api/profile/location', { method: 'DELETE' });
+      if (!r.ok) throw new Error('delete failed');
       setLoc(null);
-    } catch {}
+      toast.success(t('profile.location.disabled') || 'Nearby alerts disabled');
+    } catch {
+      toast.error(t('profile.location.disableFailed') || 'Could not disable — try again');
+    }
     setBusy(false);
   };
 
